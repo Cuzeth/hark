@@ -1,0 +1,110 @@
+name: Production Update
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: Reason for this website update
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hark-production-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    name: Verify and update website
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    env:
+      DEPLOY_HOST: raven-cobra.exe.xyz
+      DEPLOY_PATH: /home/exedev/hark
+      SSH_PRIVATE_KEY: ${{ secrets.EXE_DEV_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.EXE_DEV_KNOWN_HOSTS }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify monorepo
+        run: |
+          pnpm typecheck
+          pnpm test
+          pnpm lint
+          pnpm build
+
+      - name: Configure SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/hark_deploy
+          chmod 600 ~/.ssh/hark_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Sync deployment source
+        run: |
+          rsync -az --delete \
+            -e "ssh -i ~/.ssh/hark_deploy -o IdentitiesOnly=yes" \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude .git \
+            --exclude '.env*' \
+            --exclude data \
+            --exclude apps/expo/ios \
+            --exclude apps/expo/android \
+            ./ "$DEPLOY_HOST:$DEPLOY_PATH/"
+
+      - name: Build, back up, and restart production
+        run: |
+          ssh -i ~/.ssh/hark_deploy -o IdentitiesOnly=yes "$DEPLOY_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/exedev/hark
+
+          # Build while the current container remains available.
+          docker compose build
+
+          docker compose stop
+          trap 'docker compose up -d' EXIT
+
+          docker run --rm -v hark_hark-data:/data busybox sh -c '
+            if [ -f /data/hark.sqlite ]; then
+              cp /data/hark.sqlite "/data/hark.sqlite.backup-$(date +%Y%m%d-%H%M%S)"
+            fi
+          '
+
+          docker compose up -d
+          trap - EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/api/health >/dev/null; then
+              docker compose ps
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose logs --tail=100
+          exit 1
+          REMOTE
+
+      - name: Verify public deployment
+        run: curl --fail --show-error --silent --retry 12 --retry-all-errors https://hark.ryan.ceo/api/health

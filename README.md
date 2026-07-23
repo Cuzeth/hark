@@ -24,7 +24,7 @@ hark/
 └── compose.yaml          Container + named volume for /data
 ```
 
-- **Dev:** Vite (`:5173`) proxies `/api` and `/hooks` to the Hono server (`:8787`).
+- **Dev:** Vite (`:8787`) proxies `/api` and `/hooks` to the Hono server (`:8788`).
 - **Prod:** one Hono process serves the API, the built SPA (history fallback),
   and runs Drizzle migrations on startup. SQLite lives at `DATABASE_URL`
   (`/data/hark.sqlite` in Docker).
@@ -54,7 +54,7 @@ Requires Node ≥ 22 and pnpm 11.
 ```sh
 pnpm install
 cp .env.example .env       # fill in what you have; dev works without secrets
-pnpm dev                   # Hono API :8787 + Vite :5173 (open http://localhost:5173)
+pnpm dev                   # Hono API :8788 + Vite :8787 (open http://localhost:8787)
 ```
 
 Other root scripts: `pnpm build`, `pnpm typecheck`, `pnpm test`, `pnpm lint`,
@@ -148,6 +148,30 @@ serves static assets with history fallback, and persists SQLite in the
 The base is `node:22-trixie-slim` (a node:22 slim variant): better-sqlite3's
 prebuilt binaries require glibc ≥ 2.38, which bookworm-based `node:22-slim`
 does not provide.
+
+## Manual production workflows
+
+The GitHub Actions workflows are intentionally manual-only and do not run on
+push:
+
+- **Production Update** verifies the monorepo, syncs the website to exe.dev,
+  builds before downtime, snapshots SQLite, restarts Docker, and checks both
+  local and public health endpoints.
+- **Production Deployment** verifies the monorepo and Expo project, queues an
+  iOS App Store build, and automatically submits it through EAS Submit.
+
+Configure a GitHub `production` environment (optionally with required
+reviewers) and these repository secrets:
+
+| Secret | Used by | Description |
+| --- | --- | --- |
+| `EXE_DEV_SSH_PRIVATE_KEY` | Production Update | Private key registered with the `raven-cobra` exe.dev VM. |
+| `EXE_DEV_KNOWN_HOSTS` | Production Update | Trusted `ssh-keyscan -H raven-cobra.exe.xyz` output. |
+| `EXPO_TOKEN` | Production Deployment | Expo personal access token for `@ryanvogel/hark`. |
+
+Run either workflow from the GitHub Actions tab or with GitHub CLI after the
+repository has a remote and the workflow files are present on the default
+branch.
 
 ## What cannot work without credentials
 
