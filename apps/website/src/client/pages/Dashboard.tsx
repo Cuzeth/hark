@@ -1,6 +1,7 @@
 import type { EventDto, ServiceCreatedResponse, ServiceDto } from "@hark/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { AppDownloadBanner } from "../components/AppDownloadBanner";
 import { CopyField } from "../components/CopyField";
 import { api } from "../lib/api";
 import { signOut, useSession } from "../lib/auth";
@@ -153,6 +154,8 @@ export function Dashboard() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
+        <AppDownloadBanner />
+
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Services</h1>
