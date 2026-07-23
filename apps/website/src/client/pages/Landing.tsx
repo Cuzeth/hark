@@ -63,8 +63,16 @@ export function Landing() {
         </div>
       </main>
 
-      <footer className="mx-auto w-full max-w-3xl px-6 py-6 text-xs text-neutral-400">
-        Hark · webhook → iPhone, nothing else in between.
+      <footer className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-6 text-xs text-neutral-400">
+        <span>Hark · webhook → iPhone, nothing else in between.</span>
+        <nav className="flex items-center gap-3" aria-label="Legal">
+          <Link className="transition hover:text-neutral-700" to="/privacy">
+            Privacy
+          </Link>
+          <Link className="transition hover:text-neutral-700" to="/terms">
+            Terms
+          </Link>
+        </nav>
       </footer>
     </div>
   );

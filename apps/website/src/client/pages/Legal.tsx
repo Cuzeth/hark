@@ -1,0 +1,214 @@
+import { Link } from "react-router";
+
+const updated = "July 23, 2026";
+
+function LegalLayout({
+  eyebrow,
+  title,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="min-h-dvh">
+      <header>
+        <div className="mx-auto flex h-20 w-full max-w-3xl items-center justify-between px-6">
+          <Link to="/" className="text-lg font-semibold">
+            Hark
+          </Link>
+          <nav className="flex items-center gap-4 text-sm text-neutral-500" aria-label="Primary">
+            <Link className="transition hover:text-neutral-900" to="/docs">
+              Docs
+            </Link>
+            <Link className="transition hover:text-neutral-900" to="/">
+              Home
+            </Link>
+          </nav>
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-3xl px-6 py-10">
+        <p className="text-accent mb-3 text-xs font-medium uppercase">{eyebrow}</p>
+        <h1 className="text-3xl font-semibold">{title}</h1>
+        <p className="mt-3 text-sm text-neutral-400">Last updated {updated}</p>
+        <div className="legal-copy mt-10 max-w-2xl space-y-8 text-sm leading-relaxed text-neutral-600">
+          {children}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-2 text-base font-semibold text-neutral-900">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export function Privacy() {
+  return (
+    <LegalLayout eyebrow="Legal" title="Privacy Policy">
+      <Section title="Overview">
+        <p>
+          Hark is operated by Ryan Vogel. This policy explains the information Hark processes to
+          deliver webhook notifications through the website and iOS app. Hark does not sell personal
+          information or use it for targeted advertising.
+        </p>
+      </Section>
+
+      <Section title="Information we process">
+        <ul className="list-disc space-y-2 pl-5">
+          <li>Your Google account name, email address, and profile image when you sign in.</li>
+          <li>
+            Service settings you create, including titles, image URLs, destination URLs, and secret
+            webhook-token hashes.
+          </li>
+          <li>
+            Webhook content such as notification titles, bodies, images, destinations, idempotency
+            keys, timestamps, and delivery results.
+          </li>
+          <li>
+            Device information needed for delivery, including Expo and APNs push tokens, device
+            name, platform, and last registration time.
+          </li>
+          <li>Limited technical logs used to secure, operate, and troubleshoot the service.</li>
+        </ul>
+      </Section>
+
+      <Section title="How we use information">
+        <p>
+          We use this information to authenticate your account, create and secure webhook endpoints,
+          deliver notifications, show delivery activity, prevent duplicate or abusive requests,
+          provide support, and maintain the reliability and security of Hark.
+        </p>
+      </Section>
+
+      <Section title="Service providers">
+        <p>
+          Hark relies on Google for authentication, Expo and Apple for push delivery and app
+          distribution, and hosting infrastructure for the website, API, and database. These
+          providers process information only as needed to provide their services and under their own
+          privacy terms.
+        </p>
+      </Section>
+
+      <Section title="Retention and deletion">
+        <p>
+          We retain account and service data while your account is active and retain recent webhook
+          activity for product operation and troubleshooting. You can permanently delete your
+          account inside the Hark app. Deletion removes your services, devices, and activity from
+          the active database; limited backup copies may remain temporarily until rotated.
+        </p>
+      </Section>
+
+      <Section title="Security and your choices">
+        <p>
+          Webhook URLs contain secret tokens and should be treated like passwords. You can rotate a
+          token from the dashboard if it is exposed. Hark uses access controls and encrypted network
+          connections, but no online service can guarantee absolute security.
+        </p>
+      </Section>
+
+      <Section title="Children">
+        <p>
+          Hark is not directed to children under 13, and we do not knowingly collect personal
+          information from children under 13.
+        </p>
+      </Section>
+
+      <Section title="Contact">
+        <p>
+          Questions or privacy requests can be sent to{" "}
+          <a className="text-accent underline underline-offset-2" href="mailto:raavtube@icloud.com">
+            raavtube@icloud.com
+          </a>
+          .
+        </p>
+      </Section>
+    </LegalLayout>
+  );
+}
+
+export function Terms() {
+  return (
+    <LegalLayout eyebrow="Legal" title="Terms of Service">
+      <Section title="Agreement">
+        <p>
+          By using Hark, you agree to these terms. If you do not agree, do not use the service. You
+          must be legally able to form a binding agreement and provide accurate account information.
+        </p>
+      </Section>
+
+      <Section title="The service">
+        <p>
+          Hark provides private webhook endpoints that convert submitted data into push
+          notifications on registered devices. Features may change as the service develops, and beta
+          or preview features may be modified or removed without notice.
+        </p>
+      </Section>
+
+      <Section title="Your account and webhook secrets">
+        <p>
+          You are responsible for activity under your account and for keeping webhook URLs and
+          account access secure. Notify us and rotate affected webhook tokens if you believe they
+          have been exposed.
+        </p>
+      </Section>
+
+      <Section title="Acceptable use">
+        <p>
+          Do not use Hark to violate law, infringe rights, distribute malware, harass others,
+          attempt unauthorized access, overload the service, evade rate limits, or send content you
+          do not have permission to process. We may suspend abusive or harmful activity.
+        </p>
+      </Section>
+
+      <Section title="Your content">
+        <p>
+          You retain ownership of content you submit. You grant Hark permission to process that
+          content only as needed to operate the service. You are responsible for ensuring your
+          webhook content, images, and destination links are lawful and appropriately licensed.
+        </p>
+      </Section>
+
+      <Section title="Third-party services">
+        <p>
+          Hark depends on services provided by Google, Expo, Apple, and hosting providers. Their
+          availability and terms are outside Hark's control, and integrations may stop working if
+          those services change.
+        </p>
+      </Section>
+
+      <Section title="Availability and warranties">
+        <p>
+          Hark is provided “as is” and “as available.” Push delivery is not guaranteed, may be
+          delayed or duplicated, and can be affected by device settings and third-party services. To
+          the extent permitted by law, Hark disclaims implied warranties and is not liable for
+          indirect, incidental, special, or consequential damages.
+        </p>
+      </Section>
+
+      <Section title="Termination and changes">
+        <p>
+          You may stop using Hark or delete your account at any time. We may suspend access for
+          violations, security risks, or service discontinuation. We may update these terms and will
+          post the updated date on this page.
+        </p>
+      </Section>
+
+      <Section title="Contact">
+        <p>
+          Questions about these terms can be sent to{" "}
+          <a className="text-accent underline underline-offset-2" href="mailto:raavtube@icloud.com">
+            raavtube@icloud.com
+          </a>
+          .
+        </p>
+      </Section>
+    </LegalLayout>
+  );
+}
