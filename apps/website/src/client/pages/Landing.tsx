@@ -27,9 +27,6 @@ export function Landing() {
       </header>
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-start justify-center px-6 pb-24 text-left">
-        <p className="border-accent/20 bg-accent-soft text-accent mb-4 rounded-full border px-3 py-1 text-xs font-medium">
-          iOS notifications for anything with a webhook
-        </p>
         <h1 className="max-w-2xl text-4xl font-semibold text-balance sm:text-5xl">
           POST a webhook. Get a beautiful iOS notification.
         </h1>
@@ -37,7 +34,22 @@ export function Landing() {
           Create a service, copy its secret webhook URL, and every POST becomes a source-branded
           communication notification on your iPhone — with your service's name and avatar.
         </p>
-        <div className="mt-10">
+        <div className="mt-8 w-full overflow-hidden rounded-2xl border border-neutral-200 bg-black">
+          <video
+            aria-label="A demonstration of Hark delivering project notifications to an iPhone"
+            autoPlay
+            className="pointer-events-none aspect-video w-full"
+            disablePictureInPicture
+            loop
+            muted
+            playsInline
+            poster="/notifications-demo-poster.jpg"
+            preload="metadata"
+          >
+            <source src="/notifications-demo.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <div className="mt-8">
           {session ? (
             <Link
               to="/dashboard"
@@ -49,11 +61,6 @@ export function Landing() {
             <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
           )}
         </div>
-        <pre className="mt-14 w-full max-w-xl overflow-x-auto rounded-2xl border border-neutral-200 bg-white p-5 text-left font-mono text-[13px] leading-relaxed text-neutral-700 shadow-xs">
-          {`curl -X POST https://hark.ryan.ceo/hooks/whk_… \\
-  -H 'Content-Type: application/json' \\
-  -d '{ "body": "Deploy finished ✅" }'`}
-        </pre>
       </main>
 
       <footer className="mx-auto w-full max-w-3xl px-6 py-6 text-xs text-neutral-400">
