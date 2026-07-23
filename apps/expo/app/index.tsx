@@ -1,0 +1,162 @@
+import { Redirect } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { authClient, useSession } from "../src/lib/auth";
+import { colors, fonts, tightTracking } from "../src/lib/theme";
+
+export default function SignInScreen() {
+  const { data: session, isPending } = useSession();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (session) return <Redirect href="/home" />;
+
+  const signIn = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
+      <View style={styles.header}>
+        <View style={styles.brandMark} />
+        <Text style={styles.brand}>Hark</Text>
+      </View>
+
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>Webhooks to iPhone</Text>
+        <Text style={styles.title}>Let the important things find you.</Text>
+        <Text style={styles.subtitle}>
+          Sign in to receive source-branded notifications from every service you connect.
+        </Text>
+      </View>
+
+      <View style={styles.footer}>
+        {isPending ? (
+          <ActivityIndicator color={colors.accent} />
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            onPress={signIn}
+            disabled={busy}
+            style={({ pressed }) => [
+              styles.googleButton,
+              (pressed || busy) && styles.googleButtonPressed,
+            ]}
+          >
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <Text style={styles.googleGlyph}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </>
+            )}
+          </Pressable>
+        )}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    backgroundColor: colors.paper,
+  },
+  header: {
+    minHeight: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+  },
+  brandMark: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.accent,
+  },
+  brand: {
+    color: colors.ink,
+    fontFamily: fonts.semibold,
+    fontSize: 18,
+    letterSpacing: tightTracking(18),
+  },
+  hero: {
+    flex: 1,
+    alignItems: "flex-start",
+    justifyContent: "center",
+  },
+  eyebrow: {
+    marginBottom: 14,
+    color: colors.accent,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    letterSpacing: tightTracking(12),
+    textTransform: "uppercase",
+  },
+  title: {
+    maxWidth: 330,
+    color: colors.ink,
+    fontFamily: fonts.semibold,
+    fontSize: 40,
+    lineHeight: 42,
+    letterSpacing: tightTracking(40),
+  },
+  subtitle: {
+    maxWidth: 330,
+    marginTop: 20,
+    color: colors.muted,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    lineHeight: 24,
+    letterSpacing: tightTracking(16),
+  },
+  footer: {
+    paddingBottom: 16,
+    gap: 10,
+  },
+  googleButton: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderRadius: 26,
+    backgroundColor: colors.accent,
+  },
+  googleButtonPressed: {
+    backgroundColor: colors.accentPressed,
+    transform: [{ scale: 0.98 }],
+  },
+  googleGlyph: {
+    color: "#FFFFFF",
+    fontFamily: fonts.semibold,
+    fontSize: 15,
+    letterSpacing: tightTracking(15),
+  },
+  googleButtonText: {
+    color: "#FFFFFF",
+    fontFamily: fonts.medium,
+    fontSize: 16,
+    letterSpacing: tightTracking(16),
+  },
+  error: {
+    color: colors.danger,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    letterSpacing: tightTracking(13),
+  },
+});

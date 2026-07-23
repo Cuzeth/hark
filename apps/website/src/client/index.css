@@ -1,0 +1,172 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --color-ink: oklch(0.21 0.02 260);
+  --color-paper: oklch(0.985 0.002 100);
+  --color-accent: #035b49;
+  --color-accent-hover: #02493b;
+  --color-accent-soft: #e7f0ed;
+}
+
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  -webkit-font-smoothing: antialiased;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  position: relative;
+  @apply bg-paper text-ink font-sans;
+  font-style: normal;
+  letter-spacing: -0.02em;
+}
+
+body::before,
+body::after {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: "";
+}
+
+body::before {
+  background:
+    linear-gradient(90deg, rgb(3 91 73 / 14%), transparent) left / 10vw 100% no-repeat,
+    linear-gradient(270deg, rgb(3 91 73 / 14%), transparent) right / 10vw 100% no-repeat;
+}
+
+body::after {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.9'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.1;
+  mix-blend-mode: multiply;
+  mask-image: linear-gradient(
+    90deg,
+    black 0%,
+    black 1%,
+    transparent 10%,
+    transparent 90%,
+    black 99%,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    black 0%,
+    black 1%,
+    transparent 10%,
+    transparent 90%,
+    black 99%,
+    black 100%
+  );
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+button,
+input,
+textarea,
+select,
+em,
+i,
+cite,
+address {
+  font-style: normal;
+  letter-spacing: inherit;
+}
+
+.hark-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgb(23 23 23 / 20%);
+  backdrop-filter: blur(3px);
+  animation: hark-backdrop-in 120ms ease-out both;
+}
+
+.hark-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 30rem);
+  padding: 1.5rem;
+  border: 1px solid rgb(229 229 229);
+  border-radius: 1rem;
+  background: white;
+  box-shadow: 0 24px 70px rgb(23 23 23 / 15%);
+  animation: hark-panel-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.hark-modal-dismiss {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.hark-modal-backdrop.is-closing {
+  animation: hark-backdrop-out 120ms ease-in both;
+}
+
+.hark-modal-backdrop.is-closing .hark-modal-panel {
+  animation: hark-panel-out 120ms ease-in both;
+}
+
+@keyframes hark-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes hark-backdrop-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes hark-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes hark-panel-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(5px) scale(0.985);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hark-modal-backdrop,
+  .hark-modal-panel,
+  .hark-modal-backdrop.is-closing,
+  .hark-modal-backdrop.is-closing .hark-modal-panel {
+    animation-duration: 0.01ms;
+  }
+}

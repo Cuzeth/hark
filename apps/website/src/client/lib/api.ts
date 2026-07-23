@@ -1,0 +1,45 @@
+import type {
+  ApiError,
+  DeviceDto,
+  EventDto,
+  ServiceCreatedResponse,
+  ServiceCreateInput,
+  ServiceDto,
+} from "@hark/contracts";
+
+export class ApiRequestError extends Error {
+  status: number;
+  issues?: unknown;
+
+  constructor(status: number, body: ApiError) {
+    super(body.error);
+    this.status = status;
+    this.issues = body.issues;
+  }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    headers: { "content-type": "application/json", ...init?.headers },
+    ...init,
+  });
+  const body = (await response.json().catch(() => ({ error: "Request failed" }))) as T & ApiError;
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, body);
+  }
+  return body;
+}
+
+export const api = {
+  listServices: () => request<{ services: ServiceDto[] }>("/api/services"),
+  createService: (input: ServiceCreateInput) =>
+    request<ServiceCreatedResponse>("/api/services", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  rotateServiceToken: (id: string) =>
+    request<ServiceCreatedResponse>(`/api/services/${id}/rotate`, { method: "POST" }),
+  deleteService: (id: string) => request<{ ok: true }>(`/api/services/${id}`, { method: "DELETE" }),
+  listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
+  listEvents: (limit = 50) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
+};

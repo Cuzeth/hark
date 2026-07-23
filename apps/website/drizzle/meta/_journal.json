@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1784838061460,
+      "tag": "0000_broad_paladin",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1784844109833,
+      "tag": "0001_glossy_leader",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784844695392,
+      "tag": "0002_normalize-event-status",
+      "breakpoints": true
+    }
+  ]
+}

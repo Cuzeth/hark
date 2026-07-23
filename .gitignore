@@ -1,0 +1,17 @@
+node_modules/
+dist/
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.env
+.env.local
+.env.production
+.DS_Store
+
+# Expo
+.expo/
+apps/expo/ios/
+apps/expo/android/
+expo-env.d.ts

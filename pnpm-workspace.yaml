@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  "@biomejs/biome": true
+
+minimumReleaseAge: 0
+
+patchedDependencies:
+  '@better-auth/core@1.6.25': patches/@better-auth__core@1.6.25.patch

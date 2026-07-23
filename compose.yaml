@@ -1,0 +1,23 @@
+services:
+  hark:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      NODE_ENV: production
+      PORT: "8787"
+      DATABASE_URL: /data/hark.sqlite
+      # Public origin of this deployment (used for OAuth redirects + webhook URLs).
+      APP_URL: ${APP_URL:-http://localhost:8787}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET in .env}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      SERVICE_RATE_LIMIT_PER_MINUTE: ${SERVICE_RATE_LIMIT_PER_MINUTE:-60}
+      ACCOUNT_RATE_LIMIT_PER_MINUTE: ${ACCOUNT_RATE_LIMIT_PER_MINUTE:-300}
+    volumes:
+      - hark-data:/data
+    restart: unless-stopped
+
+volumes:
+  hark-data:
