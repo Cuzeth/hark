@@ -3,7 +3,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
 export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   name: "Hark",
   slug: "hark",
-  version: "0.1.0",
+  version: "1.0.0",
   icon: "./assets/icon.png",
   scheme: "hark",
   orientation: "portrait",
@@ -11,6 +11,7 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   platforms: ["ios"],
   ios: {
     bundleIdentifier: "ceo.ryan.hark",
+    icon: "./assets/icon.png",
     supportsTablet: false,
     // Communication Notifications + SiriKit. `aps-environment` is managed by
     // EAS capability sync but included so bare prebuilds get push entitlements.
@@ -29,6 +30,12 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     "expo-secure-store",
     "expo-notifications",
     "expo-web-browser",
+    [
+      "expo-splash-screen",
+      {
+        backgroundColor: "#035B49",
+      },
+    ],
     [
       "expo-build-properties",
       {

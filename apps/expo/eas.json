@@ -23,12 +23,24 @@
     },
     "production": {
       "autoIncrement": true,
+      "distribution": "store",
+      "ios": {
+        "buildConfiguration": "Release"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleTeamId": "9G68SMNHEU",
+        "appName": "Hark",
+        "bundleIdentifier": "ceo.ryan.hark",
+        "language": "en-US",
+        "sku": "hark-ios"
+      }
+    }
   }
 }

@@ -13,6 +13,11 @@ export const auth = betterAuth({
     provider: "sqlite",
     schema,
   }),
+  user: {
+    deleteUser: {
+      enabled: true,
+    },
+  },
   socialProviders: {
     google: {
       clientId: env.GOOGLE_CLIENT_ID ?? "",
