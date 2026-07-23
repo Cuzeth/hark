@@ -37,6 +37,7 @@
       "ios": {
         "appleTeamId": "9G68SMNHEU",
         "appName": "Hark",
+        "ascAppId": "6794121509",
         "bundleIdentifier": "ceo.ryan.hark",
         "language": "en-US",
         "sku": "hark-ios"
