@@ -17,12 +17,13 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY patches ./patches
 COPY apps/website/package.json apps/website/
 COPY packages/contracts/package.json packages/contracts/
-RUN pnpm install --frozen-lockfile --filter hark --filter @hark/website --filter @hark/contracts
+COPY packages/website-runtime/package.json packages/website-runtime/
+RUN pnpm install --frozen-lockfile --filter hark --filter @hark/website --filter @hark/contracts --filter @hark/website-runtime
+# Cache the small external dependency set independently from application source.
+RUN pnpm --filter @hark/website-runtime deploy --prod --legacy /out
 COPY packages ./packages
 COPY apps/website ./apps/website
 RUN pnpm --filter @hark/website build
-# Produce a standalone production folder (prod node_modules + built output).
-RUN pnpm --filter @hark/website deploy --prod --legacy /out
 
 # ---------------------------------------------------------------------------
 # Runtime: single process serving the API and the static SPA.
@@ -33,11 +34,11 @@ ENV NODE_ENV=production
 ENV PORT=8787
 ENV DATABASE_URL=/data/hark.sqlite
 WORKDIR /app
-COPY --from=build /out/node_modules ./node_modules
-COPY --from=build /out/dist ./dist
-COPY --from=build /out/drizzle ./drizzle
-COPY --from=build /out/package.json ./package.json
-RUN mkdir -p /data && chown -R node:node /data /app
+COPY --from=build --chown=node:node /out/node_modules ./node_modules
+COPY --from=build --chown=node:node /repo/apps/website/dist ./dist
+COPY --from=build --chown=node:node /repo/apps/website/drizzle ./drizzle
+COPY --from=build --chown=node:node /out/package.json ./package.json
+RUN mkdir -p /data && chown node:node /data
 USER node
 VOLUME /data
 EXPOSE 8787
