@@ -1,7 +1,4 @@
 import type {
-  ApiTokenCreatedResponse,
-  ApiTokenDto,
-  ApiTokenScope,
   BillingDto,
   DeviceDto,
   EventDto,
@@ -9,7 +6,6 @@ import type {
   ServiceCreatedResponse,
   ServiceDto,
 } from "@hark/contracts";
-import { API_TOKEN_SCOPES } from "@hark/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
@@ -107,12 +103,10 @@ export function Dashboard() {
   const [liveActivities, setLiveActivities] = useState<LiveActivityDto[] | null>(null);
   const [devices, setDevices] = useState<DeviceDto[] | null>(null);
   const [billing, setBilling] = useState<BillingDto | null>(null);
-  const [apiTokens, setApiTokens] = useState<ApiTokenDto[] | null>(null);
   const [billingActivating, setBillingActivating] = useState(
     () => new URLSearchParams(window.location.search).get("billing") === "success",
   );
   const [planOpen, setPlanOpen] = useState(false);
-  const [agentAccessOpen, setAgentAccessOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ServiceDto | null>(null);
   const [reveal, setReveal] = useState<
@@ -122,24 +116,20 @@ export function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [svc, dev, activity, liveActivityState, billingState, tokenState] = await Promise.all([
+      const [svc, dev, activity, liveActivityState, billingState] = await Promise.all([
         api.listServices(),
         api.listDevices(),
         api.listEvents(),
         api.listLiveActivities(),
         api.getBilling(),
-        api.listApiTokens(),
       ]);
       setServices(svc.services);
       setDevices(dev.devices);
       setEvents(activity.events);
       setLiveActivities(liveActivityState.activities);
       setBilling(billingState);
-      setApiTokens(tokenState.tokens);
     } catch {
-      setError(
-        "Could not load your dashboard data, including API tokens. Please refresh and try again.",
-      );
+      setError("Could not load your dashboard data. Please refresh and try again.");
     }
   }, []);
 
@@ -319,14 +309,6 @@ export function Dashboard() {
           />
         ) : null}
 
-        {agentAccessOpen ? (
-          <AgentAccessModal
-            tokens={apiTokens}
-            onChanged={() => void refresh()}
-            onClose={() => setAgentAccessOpen(false)}
-          />
-        ) : null}
-
         <ServiceList
           services={services}
           onEdit={setEditing}
@@ -339,304 +321,10 @@ export function Dashboard() {
 
         <Devices devices={devices} billing={billing} onRemoved={() => void refresh()} />
 
-        <AgentAccessSummary tokens={apiTokens} onOpen={() => setAgentAccessOpen(true)} />
-
         <LiveActivities activities={liveActivities} />
 
         <ActivityLog events={events} onRefresh={refreshActivity} />
       </main>
-    </div>
-  );
-}
-
-function AgentAccessSummary({
-  tokens,
-  onOpen,
-}: {
-  tokens: ApiTokenDto[] | null;
-  onOpen: () => void;
-}) {
-  const activeCount = tokens?.filter((token) => !token.revokedAt).length ?? null;
-  return (
-    <section
-      className="mt-16 flex items-center justify-between gap-4 border-y border-neutral-200 py-4"
-      aria-labelledby="agent-access-heading"
-    >
-      <div>
-        <h2 id="agent-access-heading" className="text-sm font-semibold">
-          Agent access
-        </h2>
-        <p className="mt-0.5 text-xs text-neutral-500">
-          {activeCount === null
-            ? "Loading access…"
-            : activeCount === 0
-              ? "Connect harkctl and other agents."
-              : `${activeCount} active ${activeCount === 1 ? "token" : "tokens"}`}
-        </p>
-      </div>
-      <button
-        className="min-h-10 rounded-full border border-neutral-200 px-4 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
-        onClick={onOpen}
-        type="button"
-      >
-        Manage
-      </button>
-    </section>
-  );
-}
-
-function AgentAccessModal({
-  tokens,
-  onChanged,
-  onClose,
-}: {
-  tokens: ApiTokenDto[] | null;
-  onChanged: () => void;
-  onClose: () => void;
-}) {
-  const [closing, setClosing] = useState(false);
-
-  const close = useCallback(() => {
-    if (closing) return;
-    setClosing(true);
-    window.setTimeout(onClose, 120);
-  }, [closing, onClose]);
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [close]);
-
-  return (
-    <div className={`hark-modal-backdrop ${closing ? "is-closing" : ""}`}>
-      <button
-        aria-label="Close agent access dialog"
-        className="hark-modal-dismiss"
-        onClick={close}
-        type="button"
-      />
-      <section
-        aria-labelledby="agent-access-dialog-title"
-        aria-modal="true"
-        className="hark-modal-panel hark-plan-panel"
-        role="dialog"
-      >
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <p className="text-accent text-xs font-medium uppercase">harkctl</p>
-            <h2 id="agent-access-dialog-title" className="mt-1 text-xl font-semibold">
-              Agent access
-            </h2>
-            <p className="mt-1 max-w-xl text-sm text-neutral-500">
-              Create and revoke scoped credentials. New agents can also connect with{" "}
-              <code className="font-mono text-xs">harkctl auth login</code>.
-            </p>
-          </div>
-          <button
-            aria-label="Close"
-            className="grid size-10 shrink-0 place-items-center rounded-full text-xl leading-none text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 active:scale-[0.96]"
-            onClick={close}
-            type="button"
-          >
-            ×
-          </button>
-        </div>
-        <AgentAccessManager tokens={tokens} onChanged={onChanged} />
-      </section>
-    </div>
-  );
-}
-
-function AgentAccessManager({
-  tokens,
-  onChanged,
-}: {
-  tokens: ApiTokenDto[] | null;
-  onChanged: () => void;
-}) {
-  const [name, setName] = useState("");
-  const [expiry, setExpiry] = useState("90");
-  const [scopes, setScopes] = useState<ApiTokenScope[]>([
-    "notifications:send",
-    "interactions:create",
-    "interactions:read",
-    "activities:read",
-    "activities:write",
-    "devices:read",
-    "services:read",
-  ]);
-  const [created, setCreated] = useState<ApiTokenCreatedResponse | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const toggleScope = (scope: ApiTokenScope) => {
-    setScopes((current) =>
-      current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
-    );
-  };
-
-  const create = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const response = await api.createApiToken({
-        name: name.trim(),
-        scopes,
-        expiresAt:
-          expiry === "never"
-            ? null
-            : new Date(Date.now() + Number.parseInt(expiry, 10) * 86_400_000).toISOString(),
-      });
-      setCreated(response);
-      setName("");
-      onChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create token");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const revoke = async (token: ApiTokenDto) => {
-    if (!window.confirm(`Revoke “${token.name}”? Agents using it will lose access immediately.`)) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await api.revokeApiToken(token.id);
-      onChanged();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not revoke token");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="mt-6">
-      {created ? (
-        <div className="bg-accent-soft mt-5 rounded-xl p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-accent text-sm font-semibold">Copy this token now</p>
-              <p className="text-accent mt-1 text-xs">Hark stores only its hash.</p>
-            </div>
-            <button
-              className="text-accent text-xs font-medium hover:underline"
-              onClick={() => setCreated(null)}
-              type="button"
-            >
-              Dismiss
-            </button>
-          </div>
-          <div className="mt-3">
-            <CopyField label="HARK_TOKEN" value={created.secret} />
-          </div>
-        </div>
-      ) : null}
-
-      <form className="mt-5 rounded-xl border border-neutral-200 p-4" onSubmit={create}>
-        <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-neutral-500">Token name</span>
-            <input
-              className="focus:border-accent w-full rounded-lg border border-neutral-300 px-3 py-2 text-base focus:outline-none sm:text-sm"
-              maxLength={80}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Local agent"
-              required
-              value={name}
-            />
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-neutral-500">Expires</span>
-            <select
-              className="focus:border-accent w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm focus:outline-none"
-              onChange={(event) => setExpiry(event.target.value)}
-              value={expiry}
-            >
-              <option value="30">30 days</option>
-              <option value="90">90 days</option>
-              <option value="365">1 year</option>
-              <option value="never">Never</option>
-            </select>
-          </label>
-        </div>
-        <fieldset className="mt-4">
-          <legend className="text-xs font-medium text-neutral-500">Scopes</legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {API_TOKEN_SCOPES.map((scope) => (
-              <label className="flex items-center gap-2 text-xs text-neutral-600" key={scope}>
-                <input
-                  checked={scopes.includes(scope)}
-                  onChange={() => toggleScope(scope)}
-                  type="checkbox"
-                />
-                <code>{scope}</code>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        <div className="mt-4 flex items-center justify-between gap-3">
-          <p className="text-xs text-red-600">{error}</p>
-          <button
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            disabled={busy || !name.trim() || scopes.length === 0}
-            type="submit"
-          >
-            {busy ? "Creating…" : "Create token"}
-          </button>
-        </div>
-      </form>
-
-      {tokens === null ? <p className="py-6 text-sm text-neutral-400">Loading tokens…</p> : null}
-      {tokens && tokens.length > 0 ? (
-        <ul className="mt-5 divide-y divide-neutral-200 border-y border-neutral-200">
-          {tokens.map((token) => (
-            <li className="flex items-center justify-between gap-4 py-3" key={token.id}>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {token.name}
-                  {token.revokedAt ? (
-                    <span className="ml-2 text-xs text-neutral-400">Revoked</span>
-                  ) : null}
-                </p>
-                <p className="truncate font-mono text-[11px] text-neutral-400">
-                  {token.prefix}… · {token.scopes.join(", ")}
-                </p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
-                  {token.expiresAt
-                    ? `Expires ${new Date(token.expiresAt).toLocaleDateString()}`
-                    : "No expiry"}
-                  {token.lastUsedAt
-                    ? ` · Last used ${new Date(token.lastUsedAt).toLocaleString()}`
-                    : ""}
-                </p>
-              </div>
-              {!token.revokedAt ? (
-                <button
-                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-                  disabled={busy}
-                  onClick={() => void revoke(token)}
-                  type="button"
-                >
-                  Revoke
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
     </div>
   );
 }
