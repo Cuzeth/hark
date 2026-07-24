@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildInteractionPushMessages,
   buildPushMessages,
-  buildWelcomePushMessage,
+  buildWelcomePushMessages,
   resolveNotification,
 } from "./push";
 
@@ -12,9 +12,11 @@ const service = {
   url: "https://example.com/app",
 };
 
-describe("buildWelcomePushMessage", () => {
-  it("uses Ryan's communication identity and profile link", () => {
-    expect(buildWelcomePushMessage("ExponentPushToken[a]")).toMatchObject({
+describe("buildWelcomePushMessages", () => {
+  it("builds Ryan's three-message onboarding sequence", () => {
+    const messages = buildWelcomePushMessages("ExponentPushToken[a]");
+    expect(messages).toHaveLength(3);
+    expect(messages[0]).toMatchObject({
       to: "ExponentPushToken[a]",
       title: "Ryan",
       body: "hey! my name is ryan and I made hark!",
@@ -31,6 +33,14 @@ describe("buildWelcomePushMessage", () => {
         url: "https://x.com/ryanvogel",
         conversationId: "hark-welcome-ryan",
       },
+    });
+    expect(messages[1]).toMatchObject({
+      body: "easily send notifications via a webhook",
+      data: { url: "https://hark.ryan.ceo" },
+    });
+    expect(messages[2]).toMatchObject({
+      body: "get started here (click me)",
+      data: { url: "https://hark.ryan.ceo" },
     });
   });
 });

@@ -12,7 +12,7 @@ import { db } from "../db";
 import { device, liveActivity, liveActivityDelivery, user as userTable } from "../db/schema";
 import { getBilling } from "../lib/billing";
 import { newId } from "../lib/id";
-import { buildWelcomePushMessage, sendPushMessages } from "../lib/push";
+import { buildWelcomePushMessages, sendPushMessages } from "../lib/push";
 import { encryptLiveActivityToken } from "../lib/token";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
@@ -33,6 +33,9 @@ function toDto(row: typeof device.$inferSelect): DeviceDto {
     lastSeenAt: row.lastSeenAt.toISOString(),
   };
 }
+
+const wait = (milliseconds: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
 export const devicesRoute = new Hono<AuthedEnv>()
   .use("*", requireAuth)
@@ -276,13 +279,18 @@ export const devicesRoute = new Hono<AuthedEnv>()
     }
     let responseRow = row;
     if (shouldSendWelcome) {
-      const result = await sendPushMessages([buildWelcomePushMessage(parsed.data.expoPushToken)]);
-      if (result.staleTokens.length > 0) {
-        await db
-          .update(device)
-          .set({ active: false, lastSeenAt: now })
-          .where(eq(device.id, row.id));
-        responseRow = { ...row, active: false };
+      const messages = buildWelcomePushMessages(parsed.data.expoPushToken);
+      for (const [index, message] of messages.entries()) {
+        if (index > 0) await wait(2_000);
+        const result = await sendPushMessages([message]);
+        if (result.staleTokens.length > 0) {
+          await db
+            .update(device)
+            .set({ active: false, lastSeenAt: now })
+            .where(eq(device.id, row.id));
+          responseRow = { ...row, active: false };
+          break;
+        }
       }
     }
     return c.json({ device: toDto(responseRow) }, 201);

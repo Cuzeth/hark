@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
@@ -81,12 +81,17 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  vi.useFakeTimers();
   sent.length = 0;
   await db.delete(schema.device);
   await db
     .update(schema.user)
     .set({ welcomeNotificationSentAt: null })
     .where(eq(schema.user.id, "welcome_user"));
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 async function register(expoPushToken: string) {
@@ -99,9 +104,11 @@ async function register(expoPushToken: string) {
 
 describe("POST /api/devices onboarding", () => {
   it("sends the welcome once for the account's first registered phone", async () => {
-    const first = await register("ExponentPushToken[welcome-a]");
+    const firstRequest = register("ExponentPushToken[welcome-a]");
+    await vi.advanceTimersByTimeAsync(4_000);
+    const first = await firstRequest;
     expect(first.status).toBe(201);
-    expect(sent).toHaveLength(1);
+    expect(sent).toHaveLength(3);
     expect(sent[0]).toMatchObject({
       to: "ExponentPushToken[welcome-a]",
       title: "Ryan",
@@ -111,12 +118,20 @@ describe("POST /api/devices onboarding", () => {
         url: "https://x.com/ryanvogel",
       },
     });
+    expect(sent[1]).toMatchObject({
+      body: "easily send notifications via a webhook",
+      data: { url: "https://hark.ryan.ceo" },
+    });
+    expect(sent[2]).toMatchObject({
+      body: "get started here (click me)",
+      data: { url: "https://hark.ryan.ceo" },
+    });
 
     const refresh = await register("ExponentPushToken[welcome-a]");
     const secondPhone = await register("ExponentPushToken[welcome-b]");
     expect(refresh.status).toBe(201);
     expect(secondPhone.status).toBe(201);
-    expect(sent).toHaveLength(1);
+    expect(sent).toHaveLength(3);
 
     const [account] = await db.select().from(schema.user);
     expect(account?.welcomeNotificationSentAt).toBeInstanceOf(Date);

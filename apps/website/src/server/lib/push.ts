@@ -45,28 +45,43 @@ export interface BuildPushInput {
 
 const WELCOME_AVATAR_URL =
   "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg";
-const WELCOME_PROFILE_URL = "https://x.com/ryanvogel";
-
-export function buildWelcomePushMessage(to: string): ExpoPushMessage {
-  const data: PushData = {
-    v: PUSH_SCHEMA_VERSION,
-    eventId: "hark-welcome",
-    serviceId: "hark-welcome",
-    sourceId: "ryan",
-    sourceName: "Ryan",
-    avatarUrl: WELCOME_AVATAR_URL,
-    url: WELCOME_PROFILE_URL,
-    conversationId: "hark-welcome-ryan",
-  };
-  return {
-    to,
-    title: "Ryan",
+const WELCOME_MESSAGES = [
+  {
     body: "hey! my name is ryan and I made hark!",
-    priority: "high",
-    mutableContent: true,
-    richContent: { image: WELCOME_AVATAR_URL },
-    data,
-  };
+    url: "https://x.com/ryanvogel",
+  },
+  {
+    body: "easily send notifications via a webhook",
+    url: "https://hark.ryan.ceo",
+  },
+  {
+    body: "get started here (click me)",
+    url: "https://hark.ryan.ceo",
+  },
+] as const;
+
+export function buildWelcomePushMessages(to: string): ExpoPushMessage[] {
+  return WELCOME_MESSAGES.map((message, index) => {
+    const data: PushData = {
+      v: PUSH_SCHEMA_VERSION,
+      eventId: `hark-welcome-${index + 1}`,
+      serviceId: "hark-welcome",
+      sourceId: "ryan",
+      sourceName: "Ryan",
+      avatarUrl: WELCOME_AVATAR_URL,
+      url: message.url,
+      conversationId: "hark-welcome-ryan",
+    };
+    return {
+      to,
+      title: "Ryan",
+      body: message.body,
+      priority: "high",
+      mutableContent: true,
+      richContent: { image: WELCOME_AVATAR_URL },
+      data,
+    };
+  });
 }
 
 export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
