@@ -85,11 +85,36 @@ jobs:
           docker compose stop
           trap 'docker compose up -d' EXIT
 
+          # SQLite runs in WAL mode, so the main file is incomplete until the log is
+          # checkpointed into it. Copying it without this yields an empty backup.
+          docker compose run --rm --no-deps -T hark node -e "
+            const Database = require('better-sqlite3');
+            const db = new Database('/data/hark.sqlite');
+            db.pragma('wal_checkpoint(TRUNCATE)');
+            db.close();
+          "
+
           docker run --rm -v hark_hark-data:/data busybox sh -c '
             if [ -f /data/hark.sqlite ]; then
               cp /data/hark.sqlite "/data/hark.sqlite.backup-$(date +%Y%m%d-%H%M%S)"
             fi
           '
+
+          # A backup that cannot be opened, or that lost the schema, must fail the deploy.
+          docker compose run --rm --no-deps -T hark node -e "
+            const fs = require('node:fs');
+            const Database = require('better-sqlite3');
+            const backups = fs.readdirSync('/data').filter((f) => f.startsWith('hark.sqlite.backup-')).sort();
+            const latest = backups[backups.length - 1];
+            if (!latest) throw new Error('No backup was written');
+            const db = new Database('/data/' + latest, { readonly: true });
+            const integrity = db.pragma('integrity_check', { simple: true });
+            if (integrity !== 'ok') throw new Error('Backup failed integrity_check: ' + integrity);
+            const { c } = db.prepare(\"select count(*) c from sqlite_master where type='table'\").get();
+            db.close();
+            if (c < 5) throw new Error('Backup only contains ' + c + ' tables');
+            console.log('Backup verified:', latest, c, 'tables');
+          "
 
           docker compose up -d
           trap - EXIT

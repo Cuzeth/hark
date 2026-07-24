@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { app } from "./app";
+import { sqlite } from "./db";
 import { runMigrations } from "./db/migrate";
 import { assertRuntimeEnv, env } from "./env";
 import { pruneAnalytics } from "./lib/analytics";
@@ -19,9 +20,32 @@ if (existsSync(clientDir)) {
   app.get("*", serveStatic({ path: "./dist/client/index.html" }));
 }
 
-serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {
   console.log(`Hark API listening on http://localhost:${info.port} (${env.NODE_ENV})`);
   if (!existsSync(clientDir)) {
     console.log("No dist/client build found — expecting the Vite dev server to proxy /api.");
   }
 });
+
+/**
+ * WAL data only lands in the main database file on a clean close. Without this,
+ * `hark.sqlite` stays stale and any file-level backup of it is effectively empty.
+ */
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}, checkpointing SQLite and shutting down.`);
+  server.close(() => {
+    try {
+      sqlite.pragma("wal_checkpoint(TRUNCATE)");
+      sqlite.close();
+    } catch (error) {
+      console.error("Failed to checkpoint SQLite on shutdown", error);
+    }
+    process.exit(0);
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
