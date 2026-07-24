@@ -70,6 +70,8 @@ export const service = sqliteTable(
     url: text("url"),
     /** SHA-256 hex digest of the webhook token. The plaintext token is never stored. */
     tokenHash: text("token_hash").notNull().unique(),
+    /** AES-GCM encrypted token, used to let the owner copy the URL again. */
+    tokenCiphertext: text("token_ciphertext"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },

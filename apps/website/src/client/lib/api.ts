@@ -7,6 +7,7 @@ import type {
   ServiceCreatedResponse,
   ServiceCreateInput,
   ServiceDto,
+  ServiceUpdateInput,
 } from "@hark/contracts";
 
 export class ApiRequestError extends Error {
@@ -41,6 +42,11 @@ export const api = {
     }),
   rotateServiceToken: (id: string) =>
     request<ServiceCreatedResponse>(`/api/services/${id}/rotate`, { method: "POST" }),
+  updateService: (id: string, input: ServiceUpdateInput) =>
+    request<{ service: ServiceDto }>(`/api/services/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   deleteService: (id: string) => request<{ ok: true }>(`/api/services/${id}`, { method: "DELETE" }),
   listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
   removeDevice: (id: string) => request<{ ok: true }>(`/api/devices/${id}`, { method: "DELETE" }),

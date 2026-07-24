@@ -22,6 +22,13 @@
       "when": 1784844695392,
       "tag": "0002_normalize-event-status",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784857552207,
+      "tag": "0003_rainy_abomination",
+      "breakpoints": true
     }
   ]
 }

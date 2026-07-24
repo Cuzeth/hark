@@ -68,19 +68,26 @@ export const serviceCreateSchema = z.object({
 });
 export type ServiceCreateInput = z.infer<typeof serviceCreateSchema>;
 
+export const serviceUpdateSchema = serviceCreateSchema
+  .partial()
+  .refine((input) => Object.keys(input).length > 0, "At least one field is required");
+export type ServiceUpdateInput = z.infer<typeof serviceUpdateSchema>;
+
 export interface ServiceDto {
   id: string;
   title: string;
   imageUrl: string | null;
   url: string | null;
+  /** Available for tokens generated after encrypted token storage was enabled. */
+  webhookUrl: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-/** Returned exactly once, when a service is created or its token is rotated. */
+/** Returned when a service is created or its token is rotated. */
 export interface ServiceCreatedResponse {
   service: ServiceDto;
-  /** Full webhook URL containing the plaintext token. Shown once, never stored. */
+  /** Full webhook URL containing the plaintext token. */
   webhookUrl: string;
 }
 

@@ -106,6 +106,7 @@ export function Dashboard() {
   );
   const [planOpen, setPlanOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<ServiceDto | null>(null);
   const [reveal, setReveal] = useState<
     (ServiceCreatedResponse & { kind: "created" | "rotated" }) | null
   >(null);
@@ -203,18 +204,6 @@ export function Dashboard() {
             <Link className="text-sm text-neutral-500 transition hover:text-neutral-900" to="/docs">
               Docs
             </Link>
-            <button
-              type="button"
-              disabled={billing === null}
-              onClick={() => setPlanOpen(true)}
-              className={`min-h-10 rounded-full px-3.5 text-xs font-semibold transition-transform active:scale-[0.96] disabled:opacity-50 ${
-                billing?.plan === "pro"
-                  ? "bg-accent-soft text-accent"
-                  : "bg-accent hover:bg-accent-hover text-white"
-              }`}
-            >
-              {billingActivating ? "Activating…" : billing?.plan === "pro" ? "Pro" : "Upgrade"}
-            </button>
             {session.user.image ? (
               <img
                 src={session.user.image}
@@ -224,13 +213,23 @@ export function Dashboard() {
               />
             ) : null}
             <span className="hidden text-sm text-neutral-500 sm:block">{session.user.email}</span>
-            <button
-              type="button"
-              onClick={() => void signOut().then(() => navigate("/"))}
-              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50"
-            >
-              Sign out
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => void signOut().then(() => navigate("/"))}
+                className="min-h-10 rounded-full border border-neutral-200 bg-white pr-3.5 pl-[5.75rem] text-xs font-medium text-neutral-600 shadow-xs transition-colors hover:bg-neutral-50"
+              >
+                Sign out
+              </button>
+              <button
+                type="button"
+                disabled={billing === null}
+                onClick={() => setPlanOpen(true)}
+                className="bg-accent hover:bg-accent-hover absolute inset-y-0 left-0 z-10 min-h-10 rounded-full px-4 text-xs font-semibold text-white shadow-md transition-transform active:scale-[0.96] disabled:opacity-50"
+              >
+                {billingActivating ? "Activating…" : billing?.plan === "pro" ? "Pro" : "Upgrade"}
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -273,11 +272,22 @@ export function Dashboard() {
         ) : null}
 
         {creating ? (
-          <CreateServiceModal
+          <ServiceModal
             onCancel={() => setCreating(false)}
             onCreated={(response) => {
               setCreating(false);
               setReveal({ ...response, kind: "created" });
+              void refresh();
+            }}
+          />
+        ) : null}
+
+        {editing ? (
+          <ServiceModal
+            service={editing}
+            onCancel={() => setEditing(null)}
+            onUpdated={() => {
+              setEditing(null);
               void refresh();
             }}
           />
@@ -293,7 +303,11 @@ export function Dashboard() {
 
         <ServiceList
           services={services}
-          onRotated={(response) => setReveal({ ...response, kind: "rotated" })}
+          onEdit={setEditing}
+          onRotated={(response) => {
+            setReveal({ ...response, kind: "rotated" });
+            void refresh();
+          }}
           onDeleted={() => void refresh()}
         />
 
@@ -348,7 +362,7 @@ function WebhookReveal({
         </button>
       </div>
       <p className="text-accent mb-4 text-xs">
-        This URL is shown once — Hark stores only a hash of the token. Copy it now.
+        This URL is encrypted at rest and remains available from your service's copy button.
       </p>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0 flex-1">
@@ -648,16 +662,20 @@ function Devices({
   );
 }
 
-function CreateServiceModal({
+function ServiceModal({
+  service,
   onCancel,
   onCreated,
+  onUpdated,
 }: {
+  service?: ServiceDto;
   onCancel: () => void;
-  onCreated: (response: ServiceCreatedResponse) => void;
+  onCreated?: (response: ServiceCreatedResponse) => void;
+  onUpdated?: (service: ServiceDto) => void;
 }) {
-  const [title, setTitle] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [url, setUrl] = useState("");
+  const [title, setTitle] = useState(service?.title ?? "");
+  const [imageUrl, setImageUrl] = useState(service?.imageUrl ?? "");
+  const [url, setUrl] = useState(service?.url ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
@@ -692,14 +710,22 @@ function CreateServiceModal({
     setBusy(true);
     setError(null);
     try {
-      const response = await api.createService({
+      const input = {
         title: title.trim(),
         imageUrl: imageUrl.trim() || null,
         url: url.trim() || null,
-      });
-      close(() => onCreated(response));
+      };
+      if (service) {
+        const response = await api.updateService(service.id, input);
+        close(() => onUpdated?.(response.service));
+      } else {
+        const response = await api.createService(input);
+        close(() => onCreated?.(response));
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create service");
+      setError(
+        err instanceof Error ? err.message : `Could not ${service ? "update" : "create"} service`,
+      );
     } finally {
       setBusy(false);
     }
@@ -711,14 +737,14 @@ function CreateServiceModal({
   return (
     <div className={`hark-modal-backdrop ${closing ? "is-closing" : ""}`}>
       <button
-        aria-label="Close new service dialog"
+        aria-label={`Close ${service ? "edit" : "new"} service dialog`}
         className="hark-modal-dismiss"
         disabled={busy}
         onClick={() => close()}
         type="button"
       />
       <form
-        aria-labelledby="create-service-title"
+        aria-labelledby="service-form-title"
         aria-modal="true"
         className="hark-modal-panel"
         onSubmit={submit}
@@ -726,10 +752,12 @@ function CreateServiceModal({
       >
         <div className="mb-6 flex items-start justify-between gap-6">
           <div>
-            <h2 id="create-service-title" className="text-lg font-semibold">
-              New service
+            <h2 id="service-form-title" className="text-lg font-semibold">
+              {service ? "Edit service" : "New service"}
             </h2>
-            <p className="mt-1 text-sm text-neutral-500">Set the defaults for this webhook.</p>
+            <p className="mt-1 text-sm text-neutral-500">
+              {service ? "Update this webhook's defaults." : "Set the defaults for this webhook."}
+            </p>
           </div>
           <button
             aria-label="Close"
@@ -796,7 +824,13 @@ function CreateServiceModal({
             disabled={busy || title.trim().length === 0}
             className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
           >
-            {busy ? "Creating…" : "Create service"}
+            {busy
+              ? service
+                ? "Saving…"
+                : "Creating…"
+              : service
+                ? "Save changes"
+                : "Create service"}
           </button>
         </div>
       </form>
@@ -921,14 +955,17 @@ function activityLabel(activityEvent: EventDto): string {
 
 function ServiceList({
   services,
+  onEdit,
   onRotated,
   onDeleted,
 }: {
   services: ServiceDto[] | null;
+  onEdit: (service: ServiceDto) => void;
   onRotated: (response: ServiceCreatedResponse) => void;
   onDeleted: () => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (services === null) {
     return <div className="py-12 text-center text-sm text-neutral-400">Loading…</div>;
@@ -974,12 +1011,26 @@ function ServiceList({
     }
   };
 
+  const copy = async (svc: ServiceDto) => {
+    if (!svc.webhookUrl) return;
+    try {
+      await navigator.clipboard.writeText(svc.webhookUrl);
+      setCopiedId(svc.id);
+      window.setTimeout(
+        () => setCopiedId((current) => (current === svc.id ? null : current)),
+        1600,
+      );
+    } catch {
+      // Clipboard access can be unavailable outside a secure context.
+    }
+  };
+
   return (
     <ul className="space-y-3">
       {services.map((svc) => (
         <li
           key={svc.id}
-          className="flex items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-xs"
+          className="flex flex-col gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center"
         >
           {svc.imageUrl ? (
             <img
@@ -999,7 +1050,28 @@ function ServiceList({
               {new Date(svc.createdAt).toLocaleDateString()}
             </p>
           </div>
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              disabled={!svc.webhookUrl}
+              title={
+                svc.webhookUrl
+                  ? "Copy webhook URL"
+                  : "Rotate this legacy token once to make its URL copyable"
+              }
+              onClick={() => void copy(svc)}
+              className="bg-accent hover:bg-accent-hover rounded-full px-3 py-1.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+            >
+              {copiedId === svc.id ? "Copied" : "Copy webhook"}
+            </button>
+            <button
+              type="button"
+              disabled={busyId === svc.id}
+              onClick={() => onEdit(svc)}
+              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
+            >
+              Edit
+            </button>
             <button
               type="button"
               disabled={busyId === svc.id}

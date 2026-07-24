@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { generateWebhookToken, hashWebhookToken } from "./token";
+import {
+  decryptWebhookToken,
+  encryptWebhookToken,
+  generateWebhookToken,
+  hashWebhookToken,
+} from "./token";
 
 describe("generateWebhookToken", () => {
   it("uses the whk_ prefix and base64url alphabet", () => {
@@ -28,5 +33,19 @@ describe("hashWebhookToken", () => {
 
   it("differs for different tokens", () => {
     expect(hashWebhookToken("whk_a")).not.toBe(hashWebhookToken("whk_b"));
+  });
+});
+
+describe("webhook token encryption", () => {
+  it("round-trips without storing the plaintext", () => {
+    const token = generateWebhookToken();
+    const encrypted = encryptWebhookToken(token);
+    expect(encrypted).not.toContain(token);
+    expect(decryptWebhookToken(encrypted)).toBe(token);
+  });
+
+  it("rejects modified ciphertext", () => {
+    const encrypted = encryptWebhookToken(generateWebhookToken());
+    expect(() => decryptWebhookToken(`${encrypted.slice(0, -1)}x`)).toThrow();
   });
 });

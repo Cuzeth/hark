@@ -1,0 +1,1 @@
+ALTER TABLE `service` ADD `token_ciphertext` text;

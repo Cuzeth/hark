@@ -35,9 +35,9 @@ hark/
 
 1. `POST /hooks/:token` with
    `{ "body": "...", "title"?, "imageUrl"?, "url"?, "deviceIds"? }`.
-2. The token is hashed (SHA-256) and matched against the stored hash — the
-   plaintext token is never persisted and is shown exactly once at creation
-   or rotation.
+2. The token is hashed (SHA-256) for webhook lookup and encrypted with AES-GCM
+   for owner-only recovery from the dashboard. Plaintext tokens are never
+   persisted.
 3. Overrides win over service defaults for title/image/url.
 4. A push is sent through the Expo Push Service to every active iOS device of
    the owning user by default. Pro requests can include `deviceIds` to target

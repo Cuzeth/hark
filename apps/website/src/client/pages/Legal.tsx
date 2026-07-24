@@ -64,8 +64,8 @@ export function Privacy() {
         <ul className="list-disc space-y-2 pl-5">
           <li>Your Google account name, email address, and profile image when you sign in.</li>
           <li>
-            Service settings you create, including titles, image URLs, destination URLs, and secret
-            webhook-token hashes.
+            Service settings you create, including titles, image URLs, destination URLs, secret
+            webhook-token hashes, and encrypted webhook tokens.
           </li>
           <li>
             Webhook content such as notification titles, bodies, images, destinations, idempotency
