@@ -88,6 +88,10 @@ export const device = sqliteTable("device", {
   platform: text("platform").notNull().default("ios"),
   deviceName: text("device_name"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  liveActivityPushToStartTokenCiphertext: text("live_activity_push_to_start_token_ciphertext"),
+  liveActivityTokenEnvironment: text("live_activity_token_environment"),
+  liveActivitySchemaVersion: integer("live_activity_schema_version"),
+  liveActivityTokenUpdatedAt: integer("live_activity_token_updated_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -114,5 +118,226 @@ export const event = sqliteTable(
   (table) => [
     uniqueIndex("event_service_idempotency_key_unique").on(table.serviceId, table.idempotencyKey),
     index("event_service_created_at_idx").on(table.serviceId, table.createdAt),
+  ],
+);
+
+export const apiToken = sqliteTable(
+  "api_token",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** SHA-256 digest of a high-entropy token. Plaintext is returned only at creation. */
+    tokenHash: text("token_hash").notNull().unique(),
+    prefix: text("prefix").notNull(),
+    scopes: text("scopes", { mode: "json" }).$type<string[]>().notNull(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    index("api_token_user_created_at_idx").on(table.userId, table.createdAt),
+    index("api_token_prefix_idx").on(table.prefix),
+  ],
+);
+
+export const deviceAuthorizationRequest = sqliteTable(
+  "device_authorization_request",
+  {
+    id: text("id").primaryKey(),
+    /** Domain-separated SHA-256 digest. The plaintext device code is never persisted. */
+    deviceCodeHash: text("device_code_hash").notNull(),
+    userCode: text("user_code").notNull(),
+    clientName: text("client_name").notNull(),
+    requestedScopes: text("requested_scopes", { mode: "json" }).$type<string[]>().notNull(),
+    status: text("status").notNull().default("pending"),
+    approvedUserId: text("approved_user_id").references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    tokenExpiresAt: integer("token_expires_at", { mode: "timestamp_ms" }).notNull(),
+    pollIntervalSeconds: integer("poll_interval_seconds").notNull(),
+    lastPollAt: integer("last_poll_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    resolvedAt: integer("resolved_at", { mode: "timestamp_ms" }),
+    consumedAt: integer("consumed_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("device_authorization_device_code_hash_unique").on(table.deviceCodeHash),
+    uniqueIndex("device_authorization_user_code_unique").on(table.userCode),
+    index("device_authorization_status_expiry_idx").on(table.status, table.expiresAt),
+    index("device_authorization_approved_user_idx").on(table.approvedUserId),
+  ],
+);
+
+export const interaction = sqliteTable(
+  "interaction",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id")
+      .notNull()
+      .references(() => apiToken.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    prompt: text("prompt").notNull(),
+    kind: text("kind").notNull(),
+    status: text("status").notNull().default("pending"),
+    choices: text("choices", { mode: "json" }).$type<string[]>().notNull(),
+    response: text("response"),
+    url: text("url"),
+    /** Digest echoed by the notification action to bind responses to the exact interaction. */
+    actionDigest: text("action_digest").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
+    acceptedCount: integer("accepted_count").notNull().default(0),
+    respondingDeviceId: text("responding_device_id").references(() => device.id, {
+      onDelete: "set null",
+    }),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    respondedAt: integer("responded_at", { mode: "timestamp_ms" }),
+    canceledAt: integer("canceled_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("interaction_token_idempotency_unique").on(
+      table.requesterTokenId,
+      table.idempotencyKey,
+    ),
+    index("interaction_token_created_at_idx").on(table.requesterTokenId, table.createdAt),
+    index("interaction_user_status_expiry_idx").on(table.userId, table.status, table.expiresAt),
+  ],
+);
+
+export const liveActivity = sqliteTable(
+  "live_activity",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id")
+      .notNull()
+      .references(() => apiToken.id, { onDelete: "cascade" }),
+    key: text("key"),
+    schemaVersion: integer("schema_version").notNull(),
+    props: text("props", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    status: text("status").notNull().default("starting"),
+    sequence: integer("sequence").notNull().default(0),
+    apnsTimestamp: integer("apns_timestamp").notNull().default(0),
+    acceptedCount: integer("accepted_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    staleAt: integer("stale_at", { mode: "timestamp_ms" }),
+    dismissalAt: integer("dismissal_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("live_activity_token_idempotency_unique").on(
+      table.requesterTokenId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("live_activity_token_key_unique").on(table.requesterTokenId, table.key),
+    index("live_activity_user_status_updated_idx").on(table.userId, table.status, table.updatedAt),
+    index("live_activity_token_created_idx").on(table.requesterTokenId, table.createdAt),
+  ],
+);
+
+export const liveActivityDelivery = sqliteTable(
+  "live_activity_delivery",
+  {
+    id: text("id").primaryKey(),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => liveActivity.id, { onDelete: "cascade" }),
+    deviceId: text("device_id")
+      .notNull()
+      .references(() => device.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("pending"),
+    environment: text("environment").notNull(),
+    schemaVersion: integer("schema_version").notNull(),
+    nativeActivityId: text("native_activity_id"),
+    updateTokenCiphertext: text("update_token_ciphertext"),
+    updateTokenUpdatedAt: integer("update_token_updated_at", { mode: "timestamp_ms" }),
+    lastEvent: text("last_event"),
+    lastSequence: integer("last_sequence").notNull().default(-1),
+    lastApnsStatus: integer("last_apns_status"),
+    lastApnsReason: text("last_apns_reason"),
+    lastApnsId: text("last_apns_id"),
+    lastAttemptAt: integer("last_attempt_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+  },
+  (table) => [
+    uniqueIndex("live_activity_delivery_activity_device_unique").on(
+      table.activityId,
+      table.deviceId,
+    ),
+    index("live_activity_delivery_device_status_idx").on(table.deviceId, table.status),
+    index("live_activity_delivery_native_id_idx").on(table.nativeActivityId),
+  ],
+);
+
+export const liveActivityOperation = sqliteTable(
+  "live_activity_operation",
+  {
+    id: text("id").primaryKey(),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => liveActivity.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id")
+      .notNull()
+      .references(() => apiToken.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    sequence: integer("sequence").notNull(),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
+    acceptedCount: integer("accepted_count").notNull().default(0),
+    failedCount: integer("failed_count").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("live_activity_operation_token_idempotency_unique").on(
+      table.requesterTokenId,
+      table.idempotencyKey,
+    ),
+    index("live_activity_operation_token_created_idx").on(table.requesterTokenId, table.createdAt),
+    index("live_activity_operation_activity_created_idx").on(table.activityId, table.createdAt),
+  ],
+);
+
+export const liveActivityDeliveryAttempt = sqliteTable(
+  "live_activity_delivery_attempt",
+  {
+    id: text("id").primaryKey(),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => liveActivity.id, { onDelete: "cascade" }),
+    deliveryId: text("delivery_id")
+      .notNull()
+      .references(() => liveActivityDelivery.id, { onDelete: "cascade" }),
+    operationId: text("operation_id")
+      .notNull()
+      .references(() => liveActivityOperation.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id")
+      .notNull()
+      .references(() => apiToken.id, { onDelete: "cascade" }),
+    event: text("event").notNull(),
+    sequence: integer("sequence").notNull(),
+    apnsStatus: integer("apns_status"),
+    apnsReason: text("apns_reason"),
+    apnsId: text("apns_id"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("live_activity_attempt_token_created_idx").on(table.requesterTokenId, table.createdAt),
+    index("live_activity_attempt_activity_created_idx").on(table.activityId, table.createdAt),
   ],
 );

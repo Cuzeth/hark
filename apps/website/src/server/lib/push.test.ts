@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPushMessages, resolveNotification } from "./push";
+import { buildInteractionPushMessages, buildPushMessages, resolveNotification } from "./push";
 
 const service = {
   title: "Acme CRM",
@@ -40,6 +40,40 @@ describe("resolveNotification", () => {
     );
     expect(resolved.imageUrl).toBeUndefined();
     expect(resolved.url).toBeUndefined();
+  });
+});
+
+describe("buildInteractionPushMessages", () => {
+  it("preserves fixed actionable categories and interaction metadata", () => {
+    const [approval] = buildInteractionPushMessages({
+      to: ["ExponentPushToken[a]"],
+      interactionId: "int_1",
+      kind: "approval",
+      title: "Release",
+      prompt: "Deploy production?",
+      actionDigest: "a".repeat(64),
+    });
+    expect(approval).toMatchObject({
+      categoryId: "HARK_APPROVAL_V1",
+      title: "Release",
+      body: "Deploy production?",
+      data: {
+        interactionId: "int_1",
+        interactionKind: "approval",
+        categoryId: "HARK_APPROVAL_V1",
+        actionDigest: "a".repeat(64),
+      },
+    });
+
+    const [reply] = buildInteractionPushMessages({
+      to: ["ExponentPushToken[a]"],
+      interactionId: "int_2",
+      kind: "reply",
+      title: "Release",
+      prompt: "Release note?",
+      actionDigest: "b".repeat(64),
+    });
+    expect(reply?.categoryId).toBe("HARK_REPLY_V1");
   });
 });
 

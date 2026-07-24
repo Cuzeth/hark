@@ -10,6 +10,12 @@ import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "rea
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/lib/api";
 import { authClient, useSession } from "../src/lib/auth";
+import {
+  clearInteractionResponses,
+  DEVICE_ID_KEY,
+  flushInteractionResponses,
+} from "../src/lib/interactions";
+import { refreshLiveActivityTokenSync } from "../src/lib/live-activities";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
 
 type PermissionState = "unknown" | "undetermined" | "granted" | "denied";
@@ -79,7 +85,7 @@ export default function HomeScreen() {
         // APNs token is optional; delivery uses the Expo push token.
       }
 
-      await api.registerDevice({
+      const registered = await api.registerDevice({
         expoPushToken: expoToken,
         ...(apns ? { apnsToken: apns } : {}),
         platform: "ios",
@@ -87,6 +93,7 @@ export default function HomeScreen() {
       });
 
       await SecureStore.setItemAsync(EXPO_TOKEN_KEY, expoToken);
+      await SecureStore.setItemAsync(DEVICE_ID_KEY, registered.device.id);
       if (apns) {
         await SecureStore.setItemAsync(APNS_TOKEN_KEY, apns);
       } else {
@@ -95,6 +102,8 @@ export default function HomeScreen() {
 
       setExpoPushToken(expoToken);
       setRegistration("registered");
+      void flushInteractionResponses();
+      refreshLiveActivityTokenSync(registered.device.id);
     } catch (err) {
       if (!preserveReadyState) {
         setRegistration("error");
@@ -156,6 +165,8 @@ export default function HomeScreen() {
             await Promise.all([
               SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
               SecureStore.deleteItemAsync(APNS_TOKEN_KEY),
+              SecureStore.deleteItemAsync(DEVICE_ID_KEY),
+              clearInteractionResponses(),
             ]);
             await authClient.signOut();
             router.replace("/");
@@ -182,6 +193,8 @@ export default function HomeScreen() {
                 await Promise.all([
                   SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
                   SecureStore.deleteItemAsync(APNS_TOKEN_KEY),
+                  SecureStore.deleteItemAsync(DEVICE_ID_KEY),
+                  clearInteractionResponses(),
                 ]);
                 router.replace("/");
               } catch (error) {

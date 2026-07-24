@@ -3,7 +3,15 @@ import { type WebhookResponse, webhookRequestSchema } from "@hark/contracts";
 import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
-import { device, event, service as serviceTable, user as userTable } from "../db/schema";
+import {
+  device,
+  event,
+  interaction,
+  liveActivity,
+  liveActivityOperation,
+  service as serviceTable,
+  user as userTable,
+} from "../db/schema";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildPushMessages, resolveNotification, sendPushMessages } from "../lib/push";
@@ -125,17 +133,29 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
   }
 
   const since = new Date(Date.now() - 60_000);
-  const [[serviceUsage], [accountUsage]] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(event)
-      .where(and(eq(event.serviceId, svc.id), gte(event.createdAt, since))),
-    db
-      .select({ value: count() })
-      .from(event)
-      .innerJoin(serviceTable, eq(event.serviceId, serviceTable.id))
-      .where(and(eq(serviceTable.userId, svc.userId), gte(event.createdAt, since))),
-  ]);
+  const [[serviceUsage], [accountEventUsage], [accountInteractionUsage], [accountActivityUsage]] =
+    await Promise.all([
+      db
+        .select({ value: count() })
+        .from(event)
+        .where(and(eq(event.serviceId, svc.id), gte(event.createdAt, since))),
+      db
+        .select({ value: count() })
+        .from(event)
+        .innerJoin(serviceTable, eq(event.serviceId, serviceTable.id))
+        .where(and(eq(serviceTable.userId, svc.userId), gte(event.createdAt, since))),
+      db
+        .select({ value: count() })
+        .from(interaction)
+        .where(and(eq(interaction.userId, svc.userId), gte(interaction.createdAt, since))),
+      db
+        .select({ value: count() })
+        .from(liveActivityOperation)
+        .innerJoin(liveActivity, eq(liveActivity.id, liveActivityOperation.activityId))
+        .where(
+          and(eq(liveActivity.userId, svc.userId), gte(liveActivityOperation.createdAt, since)),
+        ),
+    ]);
 
   if ((serviceUsage?.value ?? 0) >= billing.limits.servicePerMinute) {
     c.header("Retry-After", "60");
@@ -144,7 +164,12 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
       429,
     );
   }
-  if ((accountUsage?.value ?? 0) >= billing.limits.accountPerMinute) {
+  if (
+    (accountEventUsage?.value ?? 0) +
+      (accountInteractionUsage?.value ?? 0) +
+      (accountActivityUsage?.value ?? 0) >=
+    billing.limits.accountPerMinute
+  ) {
     c.header("Retry-After", "60");
     return c.json<WebhookResponse>(
       { ok: false, error: "Account rate limit exceeded", retryAfterSeconds: 60 },
@@ -233,15 +258,15 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
   }
 
   const status =
-    result.delivered === messages.length ? "accepted" : result.delivered > 0 ? "partial" : "failed";
+    result.accepted === messages.length ? "accepted" : result.accepted > 0 ? "partial" : "failed";
   const pushError = result.errors.length > 0 ? result.errors.join("; ").slice(0, 1000) : null;
 
   await db
     .update(event)
-    .set({ status, deliveredCount: result.delivered, error: pushError })
+    .set({ status, deliveredCount: result.accepted, error: pushError })
     .where(eq(event.id, eventId));
 
-  if (result.delivered === 0) {
+  if (result.accepted === 0) {
     return c.json<WebhookResponse>(
       { ok: false, error: "Push delivery failed", issues: result.errors },
       502,
@@ -250,5 +275,5 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
 
   await trackNotification(svc.userId, eventId);
 
-  return c.json<WebhookResponse>({ ok: true, eventId, delivered: result.delivered });
+  return c.json<WebhookResponse>({ ok: true, eventId, delivered: result.accepted });
 });

@@ -1,5 +1,22 @@
-import type { DeviceRegisterInput, DeviceUnregisterInput, EventDto } from "@hark/contracts";
+import type {
+  DeviceRegisterInput,
+  DeviceUnregisterInput,
+  EventDto,
+  InteractionDto,
+  InteractionResponseInput,
+  LiveActivityPushToStartTokenInput,
+  LiveActivityUpdateTokenInput,
+} from "@hark/contracts";
 import { API_URL, getCookie } from "./auth";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const cookie = getCookie();
@@ -13,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const body = (await response.json().catch(() => null)) as (T & { error?: string }) | null;
   if (!response.ok || body === null) {
-    throw new Error(body?.error ?? `Request failed (${response.status})`);
+    throw new ApiError(body?.error ?? `Request failed (${response.status})`, response.status);
   }
   return body;
 }
@@ -29,5 +46,20 @@ export const api = {
       method: "DELETE",
       body: JSON.stringify(input),
     }),
+  registerLiveActivityPushToStartToken: (input: LiveActivityPushToStartTokenInput) =>
+    request<{ deviceId: string; updatedAt?: string }>("/api/devices/live-activity/push-to-start", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  registerLiveActivityUpdateToken: (input: LiveActivityUpdateTokenInput) =>
+    request<{ activityId: string; deviceId: string }>("/api/devices/live-activity/update-token", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   listEvents: (limit = 20) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
+  respondToInteraction: (id: string, input: InteractionResponseInput) =>
+    request<{ interaction: InteractionDto }>(`/api/interactions/${id}/respond`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };

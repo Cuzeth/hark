@@ -1,0 +1,40 @@
+{
+  "name": "harkctl",
+  "version": "0.1.0",
+  "description": "CLI for Hark agent approvals and replies",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/R44VC0RP/hark.git",
+    "directory": "packages/harkctl"
+  },
+  "homepage": "https://github.com/R44VC0RP/hark#readme",
+  "keywords": [
+    "hark",
+    "approval",
+    "notifications",
+    "agents",
+    "cli"
+  ],
+  "type": "module",
+  "bin": {
+    "harkctl": "./bin/harkctl.mjs"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node --check src/cli.mjs && node --check bin/harkctl.mjs",
+    "typecheck": "node --check src/cli.mjs && node --check bin/harkctl.mjs",
+    "test": "node --test",
+    "prepublishOnly": "pnpm test && pnpm build"
+  },
+  "license": "MIT"
+}

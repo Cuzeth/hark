@@ -45,6 +45,15 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
       },
     ],
     [
+      "expo-widgets",
+      {
+        bundleIdentifier: "ceo.ryan.hark.widgets",
+        groupIdentifier: "group.ceo.ryan.hark",
+        enablePushNotifications: true,
+        frequentUpdates: true,
+      },
+    ],
+    [
       "@bacons/apple-targets",
       {
         appleTeamId: process.env.APPLE_TEAM_ID ?? "9G68SMNHEU",

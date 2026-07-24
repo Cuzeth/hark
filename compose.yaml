@@ -2,6 +2,7 @@ services:
   hark:
     build: .
     ports:
+      # Bind publicly only behind a trusted proxy; auth rate limits use its client-IP headers.
       - "8787:8787"
     environment:
       NODE_ENV: production
@@ -13,6 +14,11 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       EXPO_ACCESS_TOKEN: ${EXPO_ACCESS_TOKEN:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APPLE_TEAM_ID: ${APPLE_TEAM_ID:-}
+      APNS_PRIVATE_KEY: ${APNS_PRIVATE_KEY:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-ceo.ryan.hark}
+      APNS_ENVIRONMENT: ${APNS_ENVIRONMENT:-sandbox}
       AUTUMN_API_KEY: ${AUTUMN_API_KEY:-}
       SERVICE_RATE_LIMIT_PER_MINUTE: ${SERVICE_RATE_LIMIT_PER_MINUTE:-60}
       ACCOUNT_RATE_LIMIT_PER_MINUTE: ${ACCOUNT_RATE_LIMIT_PER_MINUTE:-300}

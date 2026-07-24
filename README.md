@@ -18,10 +18,11 @@ hark/
 │   ├── website/          One deployable app:
 │   │   ├── src/client/     Vite 8 + React 19 SPA (React Router, Tailwind v4)
 │   │   └── src/server/     Hono API on Node 22 (Better Auth, Drizzle, SQLite)
-│   └── expo/             Expo SDK 57 iOS app (Expo Router, expo-notifications)
+│   └── expo/             Expo SDK 57 iOS app (Expo Router, notifications, Live Activities)
 │       └── targets/notification-service/   Swift Notification Service Extension
 ├── packages/
-│   └── contracts/        Shared Zod schemas + inferred types
+│   ├── contracts/        Shared Zod schemas + inferred types
+│   └── harkctl/          Publishable unscoped Node 22 CLI package
 ├── Dockerfile            Multi-stage production image (node:22-trixie-slim)
 └── compose.yaml          Container + named volume for /data
 ```
@@ -107,6 +108,71 @@ Responses: `200 { ok, eventId, delivered }`,
 Authenticated users can inspect the latest 50 attempts in the dashboard activity
 log. Public integration documentation is available at `/docs`.
 
+## Agent approvals and replies
+
+Hark can ask for an approval or a short text reply from a registered iPhone. The CLI uses a
+device-style browser flow: the signed-in human reviews the client name, exact scopes, and expiry
+before approving. Hark stores only hashes of the device code and resulting API token, and returns the
+token to the polling CLI once. Dashboard token creation remains available as an advanced fallback.
+
+Use the workspace CLI on Node 22 or newer:
+
+```sh
+pnpm --filter harkctl exec harkctl auth login
+pnpm --filter harkctl exec harkctl auth status
+pnpm --filter harkctl exec harkctl devices list
+pnpm --filter harkctl exec harkctl ask "Deploy production?" --approval --wait --timeout 15m --json
+pnpm --filter harkctl exec harkctl ask "What should the release note say?" --reply --wait --json
+pnpm --filter harkctl exec harkctl auth logout
+```
+
+Login writes a mode-`0600` `config.json` in the OS application config directory. `HARK_TOKEN` is an
+advanced alternative for ephemeral environments. The CLI never accepts a token on argv. `--device`
+and login's `--scope` are repeatable, `--idempotency-key` suppresses duplicate asks, and durations
+accept seconds or `s`/`m`/`h`/`d` suffixes. Successful stdout is one JSON object; diagnostics use
+stderr.
+
+The API records the requesting token identity and the first responding registered device. The first
+valid response received before expiry wins atomically across devices. Later, canceled, or expired
+responses receive a terminal conflict. Expo's successful response means the push request was
+accepted for processing, not that it reached or was seen on a device.
+
+## Agent task Live Activities
+
+`harkctl` can start, update, inspect, and end a finite agent task on the Lock Screen and Dynamic
+Island. The app ships one fixed `HarkAgentActivity` template built with `expo-widgets@57.0.6` and
+`@expo/ui`; activity props are bounded text/progress values with no remote images or agent-defined
+layout. Browser login requests `activities:read` and `activities:write` explicitly alongside the
+existing default scopes.
+
+```sh
+harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 \
+  --stale-after 20m --idempotency-key release-start
+harkctl activity update release-main --status "Testing" --progress 0.7 --if-sequence 0
+harkctl activity get release-main
+harkctl activity list
+harkctl activity end release-main --status "Complete" --progress 1 --if-sequence 1 \
+  --dismiss-after 30s
+```
+
+The server sends ActivityKit notifications directly to APNs with token-based ES256 authentication.
+Set `APNS_KEY_ID`, `APPLE_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_ID`, and `APNS_ENVIRONMENT` only
+on the website server. ActivityKit tokens are AES-GCM encrypted at rest and never returned by API
+responses or logs. Missing APNs credentials produce a startup warning and failed activity delivery
+results without affecting ordinary Expo notifications.
+
+Ending an activity intentionally bypasses the monthly notification allowance so an authorized agent
+can always remove stale task UI from the Lock Screen. End requests remain rate-limited, and accepted
+end deliveries still count toward usage tracking.
+
+SDK 57's official `expo-widgets` API does not expose IDs or props from `getInstances()`. Its 57.0.6
+wrapper does retain the native activity as a normal runtime property, so Hark uses one guarded,
+version-pinned helper to read that object's ActivityKit ID. Existing ID associations rotate safely;
+a new association is made only when exactly one delivery for that device is waiting. Ambiguous
+concurrent remote starts remain unassociated rather than risking an update to the wrong activity.
+Push-to-start/update-token rotation and the `input-push-token` iOS 18 path still require verification
+on a signed physical device.
+
 ## Billing
 
 The pricing catalog is defined in `autumn.config.ts` and synced to Autumn with
@@ -159,6 +225,20 @@ client is needed for this MVP.
 - iOS deployment target is 16.4; the extension lives in
   `apps/expo/targets/notification-service/` and is wired into the Xcode
   project by `expo prebuild -p ios`.
+- `expo-widgets` adds its required widget extension and App Group, enables Live Activities and
+  frequent updates, and requests ActivityKit push tokens without asking for normal notification
+  permission. Direct APNs credentials remain server-only.
+- Approval and reply actions open the authenticated app in the foreground so responses received
+  after a terminated launch can be submitted reliably. Retryable network failures are kept in a
+  small SecureStore queue and retried on launch; the server still enforces first-response-wins.
+- Users must expand or long-press an interaction notification to choose Approve, Deny, or Reply.
+  Tapping the notification body only opens its configured deep link and does not submit a response.
+- App Store review notes should describe Hark as a user-configured notification utility. Approval
+  and reply text is user-initiated, sent only to the signed-in account's interaction API, and is not
+  used for advertising or tracking.
+- Review notes should also explain that an explicitly authorized `harkctl` agent starts finite task
+  progress Live Activities on the Lock Screen/Dynamic Island. The fixed template has a private mode
+  that shows generic text; users should avoid exposing sensitive task details on their Lock Screen.
 - Optionally set `EXPO_ACCESS_TOKEN` on the server so push requests to Expo
   are authenticated.
 
@@ -184,6 +264,9 @@ serves static assets with history fallback, and persists SQLite in the
 The base is `node:22-trixie-slim` (a node:22 slim variant): better-sqlite3's
 prebuilt binaries require glibc ≥ 2.38, which bookworm-based `node:22-slim`
 does not provide.
+
+Expose the container port publicly only behind a trusted reverse proxy that overwrites
+`X-Real-IP`/`X-Forwarded-For`; device-authorization rate limits use the first forwarded client value.
 
 ## Manual production workflows
 
@@ -221,3 +304,6 @@ Everything builds, typechecks, and tests offline. These need real credentials:
 - **Communication-notification rendering** — requires the app (with the
   extension) installed via a development/TestFlight build; the iOS Simulator
   does not receive Expo push notifications.
+- **Remote Live Activity delivery** — requires the direct APNs environment variables, the Live
+  Activities/push capabilities on the signed app and widget extension, iOS 17.2+ for push-to-start,
+  and a physical device. iOS 18+ is needed for the `input-push-token` start flow.

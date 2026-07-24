@@ -4,7 +4,10 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
 
 const sent: Array<Record<string, unknown>> = [];
-const billingTestState = vi.hoisted(() => ({ pro: false }));
+const billingTestState = vi.hoisted(() => ({
+  pro: false,
+  accountPerMinute: null as number | null,
+}));
 
 vi.mock("../lib/billing", () => ({
   getBilling: async () => ({
@@ -16,7 +19,7 @@ vi.mock("../lib/billing", () => ({
       devices: billingTestState.pro ? null : 1,
       notificationsPerMonth: billingTestState.pro ? 100_000 : 10_000,
       servicePerMinute: billingTestState.pro ? 300 : 60,
-      accountPerMinute: billingTestState.pro ? 1500 : 300,
+      accountPerMinute: billingTestState.accountPerMinute ?? (billingTestState.pro ? 1500 : 300),
     },
     usage: { notificationsRemaining: 10_000 },
   }),
@@ -332,5 +335,54 @@ describe("POST /hooks/:token", () => {
       error: "Service rate limit exceeded",
       retryAfterSeconds: 60,
     });
+  });
+
+  it("counts recent interactions toward the webhook account rate limit", async () => {
+    const now = new Date();
+    await db.insert(schema.user).values({
+      id: "user_hook_combined_rate",
+      name: "Combined Rate",
+      email: "combined-rate@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const combinedToken = "whk_combined-rate-abcdefghijklmnopqr";
+    await db.insert(schema.service).values({
+      id: "svc_hook_combined_rate",
+      userId: "user_hook_combined_rate",
+      title: "Combined",
+      tokenHash: hashWebhookToken(combinedToken),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.apiToken).values({
+      id: "tok_hook_combined_rate",
+      userId: "user_hook_combined_rate",
+      name: "Combined",
+      tokenHash: "hook_combined_hash",
+      prefix: "hark_combine",
+      scopes: ["interactions:create"],
+      createdAt: now,
+    });
+    await db.insert(schema.interaction).values({
+      id: "int_hook_combined_rate",
+      userId: "user_hook_combined_rate",
+      requesterTokenId: "tok_hook_combined_rate",
+      title: "Recent",
+      prompt: "Count this",
+      kind: "approval",
+      status: "pending",
+      choices: ["approve", "deny"],
+      actionDigest: "combined-rate-digest",
+      expiresAt: new Date(now.getTime() + 60_000),
+      createdAt: now,
+    });
+
+    billingTestState.accountPerMinute = 1;
+    const response = await post(combinedToken, { body: "one too many" });
+    billingTestState.accountPerMinute = null;
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: "Account rate limit exceeded" });
   });
 });

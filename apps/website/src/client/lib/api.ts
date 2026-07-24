@@ -1,9 +1,14 @@
 import type {
   ApiError,
+  ApiTokenCreatedResponse,
+  ApiTokenCreateInput,
+  ApiTokenDto,
   BillingDto,
   BillingRedirectResponse,
+  DeviceAuthorizationRequestDto,
   DeviceDto,
   EventDto,
+  LiveActivityDto,
   ServiceCreatedResponse,
   ServiceCreateInput,
   ServiceDto,
@@ -34,6 +39,28 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listApiTokens: () => request<{ tokens: ApiTokenDto[] }>("/api/api-tokens"),
+  getDeviceAuthorization: (code: string) =>
+    request<{ request: DeviceAuthorizationRequestDto }>(
+      `/api/device-authorization/requests/${encodeURIComponent(code)}`,
+    ),
+  approveDeviceAuthorization: (code: string) =>
+    request<{ request: DeviceAuthorizationRequestDto }>(
+      `/api/device-authorization/requests/${encodeURIComponent(code)}/approve`,
+      { method: "POST" },
+    ),
+  denyDeviceAuthorization: (code: string) =>
+    request<{ request: DeviceAuthorizationRequestDto }>(
+      `/api/device-authorization/requests/${encodeURIComponent(code)}/deny`,
+      { method: "POST" },
+    ),
+  createApiToken: (input: ApiTokenCreateInput) =>
+    request<ApiTokenCreatedResponse>("/api/api-tokens", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  revokeApiToken: (id: string) =>
+    request<{ ok: true }>(`/api/api-tokens/${id}`, { method: "DELETE" }),
   listServices: () => request<{ services: ServiceDto[] }>("/api/services"),
   createService: (input: ServiceCreateInput) =>
     request<ServiceCreatedResponse>("/api/services", {
@@ -56,4 +83,5 @@ export const api = {
   openBillingPortal: () =>
     request<BillingRedirectResponse>("/api/billing/portal", { method: "POST" }),
   listEvents: (limit = 50) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
+  listLiveActivities: () => request<{ activities: LiveActivityDto[] }>("/api/activities"),
 };

@@ -1,0 +1,839 @@
+import { createHash } from "node:crypto";
+import {
+  LIVE_ACTIVITY_SCHEMA_VERSION,
+  type LiveActivityDto,
+  type LiveActivityMutationResponse,
+  type LiveActivityProps,
+  type LiveActivityStatus,
+  liveActivityEndSchema,
+  liveActivityPropsSchema,
+  liveActivityStartSchema,
+  liveActivityUpdateSchema,
+} from "@hark/contracts";
+import { and, count, desc, eq, gte, inArray, lte, or } from "drizzle-orm";
+import { Hono } from "hono";
+import { db } from "../db";
+import {
+  device,
+  event,
+  interaction,
+  liveActivity,
+  liveActivityDelivery,
+  liveActivityDeliveryAttempt,
+  liveActivityOperation,
+  service,
+  user as userTable,
+} from "../db/schema";
+import {
+  isInvalidApnsTokenReason,
+  type LiveActivityApnsEvent,
+  sendLiveActivityPush,
+} from "../lib/apns";
+import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
+import { newId } from "../lib/id";
+import { decryptLiveActivityToken } from "../lib/token";
+import {
+  type AgentEnv,
+  type AuthedEnv,
+  requireApiToken,
+  requireAuth,
+  requireScopes,
+} from "../middleware";
+
+type ActivityRow = typeof liveActivity.$inferSelect;
+type DeliveryRow = typeof liveActivityDelivery.$inferSelect;
+
+function hash(value: unknown): string {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function idempotencyKey(value: string | undefined): string | undefined | null {
+  if (value === undefined) return undefined;
+  const normalized = value.trim();
+  return normalized && normalized.length <= 200 ? normalized : null;
+}
+
+function toDto(row: ActivityRow): LiveActivityDto {
+  return {
+    id: row.id,
+    key: row.key,
+    props: liveActivityPropsSchema.parse(row.props),
+    status: row.status as LiveActivityStatus,
+    sequence: row.sequence,
+    accepted: row.acceptedCount,
+    failed: row.failedCount,
+    expiresAt: row.expiresAt.toISOString(),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    endedAt: row.endedAt?.toISOString() ?? null,
+  };
+}
+
+async function expire(row: ActivityRow): Promise<ActivityRow> {
+  if (!["starting", "active", "partial"].includes(row.status) || row.expiresAt > new Date()) {
+    return row;
+  }
+  const now = new Date();
+  const [updated] = await db
+    .update(liveActivity)
+    .set({ status: "expired", endedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(liveActivity.id, row.id),
+        inArray(liveActivity.status, ["starting", "active", "partial"]),
+        lte(liveActivity.expiresAt, now),
+      ),
+    )
+    .returning();
+  return updated ?? row;
+}
+
+async function ownedActivity(
+  tokenId: string,
+  identifier: string,
+): Promise<ActivityRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(liveActivity)
+    .where(
+      and(
+        eq(liveActivity.requesterTokenId, tokenId),
+        or(eq(liveActivity.id, identifier), eq(liveActivity.key, identifier)),
+      ),
+    )
+    .limit(1);
+  return row ? expire(row) : undefined;
+}
+
+async function enforceActivityRateLimit(
+  token: AgentEnv["Variables"]["apiToken"],
+  owner: AuthedEnv["Variables"]["user"],
+): Promise<{ error: string; retryAfterSeconds: 60 } | null> {
+  const billing = await getBilling(owner, true);
+  const since = new Date(Date.now() - 60_000);
+  const [
+    [tokenActivity],
+    [tokenInteractions],
+    [accountActivity],
+    [accountInteractions],
+    [webhooks],
+  ] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(liveActivityOperation)
+      .where(
+        and(
+          eq(liveActivityOperation.requesterTokenId, token.id),
+          gte(liveActivityOperation.createdAt, since),
+        ),
+      ),
+    db
+      .select({ value: count() })
+      .from(interaction)
+      .where(and(eq(interaction.requesterTokenId, token.id), gte(interaction.createdAt, since))),
+    db
+      .select({ value: count() })
+      .from(liveActivityOperation)
+      .innerJoin(liveActivity, eq(liveActivity.id, liveActivityOperation.activityId))
+      .where(
+        and(eq(liveActivity.userId, token.userId), gte(liveActivityOperation.createdAt, since)),
+      ),
+    db
+      .select({ value: count() })
+      .from(interaction)
+      .where(and(eq(interaction.userId, token.userId), gte(interaction.createdAt, since))),
+    db
+      .select({ value: count() })
+      .from(event)
+      .innerJoin(service, eq(event.serviceId, service.id))
+      .where(and(eq(service.userId, token.userId), gte(event.createdAt, since))),
+  ]);
+  if (
+    (tokenActivity?.value ?? 0) + (tokenInteractions?.value ?? 0) >=
+    billing.limits.servicePerMinute
+  ) {
+    return { error: "Requester rate limit exceeded", retryAfterSeconds: 60 };
+  }
+  if (
+    (accountActivity?.value ?? 0) + (accountInteractions?.value ?? 0) + (webhooks?.value ?? 0) >=
+    billing.limits.accountPerMinute
+  ) {
+    return { error: "Account rate limit exceeded", retryAfterSeconds: 60 };
+  }
+  return null;
+}
+
+async function recordDelivery(
+  operationId: string,
+  tokenId: string,
+  activityId: string,
+  delivery: DeliveryRow,
+  eventName: LiveActivityApnsEvent,
+  sequence: number,
+  result: Awaited<ReturnType<typeof sendLiveActivityPush>>,
+): Promise<void> {
+  const now = new Date();
+  const invalid = isInvalidApnsTokenReason(result.reason);
+  db.transaction((tx) => {
+    tx.insert(liveActivityDeliveryAttempt)
+      .values({
+        id: newId("laa"),
+        activityId,
+        deliveryId: delivery.id,
+        operationId,
+        requesterTokenId: tokenId,
+        event: eventName,
+        sequence,
+        apnsStatus: result.status || null,
+        apnsReason: result.reason,
+        apnsId: result.apnsId,
+        createdAt: now,
+      })
+      .run();
+    tx.update(liveActivityDelivery)
+      .set({
+        status: result.accepted ? (eventName === "end" ? "ended" : "accepted") : "failed",
+        lastEvent: eventName,
+        lastSequence: sequence,
+        lastApnsStatus: result.status || null,
+        lastApnsReason: result.reason,
+        lastApnsId: result.apnsId,
+        lastAttemptAt: now,
+        updatedAt: now,
+        endedAt: result.accepted && eventName === "end" ? now : null,
+        ...(invalid ? { updateTokenCiphertext: null, updateTokenUpdatedAt: null } : {}),
+      })
+      .where(eq(liveActivityDelivery.id, delivery.id))
+      .run();
+    if (invalid && eventName === "start") {
+      tx.update(device)
+        .set({
+          liveActivityPushToStartTokenCiphertext: null,
+          liveActivityTokenEnvironment: null,
+          liveActivitySchemaVersion: null,
+          liveActivityTokenUpdatedAt: null,
+        })
+        .where(eq(device.id, delivery.deviceId))
+        .run();
+    }
+  });
+}
+
+async function dispatch(
+  row: ActivityRow,
+  deliveries: DeliveryRow[],
+  operationId: string,
+  eventName: LiveActivityApnsEvent,
+  tokenId: string,
+): Promise<{ accepted: number; failed: number; errors: string[] }> {
+  const props = liveActivityPropsSchema.parse(row.props);
+  const timestamp = row.apnsTimestamp;
+  const results = await Promise.all(
+    deliveries.map(async (delivery) => {
+      let encryptedToken: string | null;
+      if (eventName === "start") {
+        const [target] = await db
+          .select({ token: device.liveActivityPushToStartTokenCiphertext })
+          .from(device)
+          .where(eq(device.id, delivery.deviceId))
+          .limit(1);
+        encryptedToken = target?.token ?? null;
+      } else {
+        encryptedToken = delivery.updateTokenCiphertext;
+      }
+      let result: Awaited<ReturnType<typeof sendLiveActivityPush>>;
+      if (!encryptedToken) {
+        result = {
+          status: 0,
+          apnsId: null,
+          reason: eventName === "start" ? "MissingPushToStartToken" : "MissingUpdateToken",
+          accepted: false,
+        };
+      } else {
+        try {
+          result = await sendLiveActivityPush(
+            decryptLiveActivityToken(encryptedToken),
+            delivery.environment as "sandbox" | "production",
+            {
+              event: eventName,
+              props,
+              timestamp,
+              ...(row.staleAt ? { staleDate: Math.floor(row.staleAt.getTime() / 1000) } : {}),
+              ...(row.dismissalAt
+                ? { dismissalDate: Math.floor(row.dismissalAt.getTime() / 1000) }
+                : {}),
+            },
+            eventName === "update" ? 5 : 10,
+          );
+        } catch (error) {
+          result = {
+            status: 0,
+            apnsId: null,
+            reason: error instanceof Error ? error.message : "DeliveryFailed",
+            accepted: false,
+          };
+        }
+      }
+      await recordDelivery(operationId, tokenId, row.id, delivery, eventName, row.sequence, result);
+      return result;
+    }),
+  );
+  return {
+    accepted: results.filter((result) => result.accepted).length,
+    failed: results.filter((result) => !result.accepted).length,
+    errors: [...new Set(results.flatMap((result) => (result.reason ? [result.reason] : [])))],
+  };
+}
+
+async function operationReplay(
+  tokenId: string,
+  key: string | undefined,
+  requestHash: string,
+): Promise<
+  | { conflict: true }
+  | { conflict: false; operation: typeof liveActivityOperation.$inferSelect; row: ActivityRow }
+  | undefined
+> {
+  if (!key) return undefined;
+  const [operation] = await db
+    .select()
+    .from(liveActivityOperation)
+    .where(
+      and(
+        eq(liveActivityOperation.requesterTokenId, tokenId),
+        eq(liveActivityOperation.idempotencyKey, key),
+      ),
+    )
+    .limit(1);
+  if (!operation) return undefined;
+  if (operation.requestHash !== requestHash) return { conflict: true };
+  const [row] = await db
+    .select()
+    .from(liveActivity)
+    .where(eq(liveActivity.id, operation.activityId))
+    .limit(1);
+  return row ? { conflict: false, operation, row } : undefined;
+}
+
+export const activitiesAgentRoute = new Hono<AgentEnv>()
+  .use("*", requireApiToken)
+  .get("/", requireScopes("activities:read"), async (c) => {
+    const requested = Number.parseInt(c.req.query("limit") ?? "50", 10);
+    const limit = Number.isFinite(requested) ? Math.min(Math.max(requested, 1), 100) : 50;
+    const rows = await db
+      .select()
+      .from(liveActivity)
+      .where(eq(liveActivity.requesterTokenId, c.get("apiToken").id))
+      .orderBy(desc(liveActivity.createdAt))
+      .limit(limit);
+    return c.json({
+      activities: await Promise.all(rows.map(expire)).then((items) => items.map(toDto)),
+    });
+  })
+  .post("/", requireScopes("activities:write"), async (c) => {
+    const token = c.get("apiToken");
+    const parsed = liveActivityStartSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid Live Activity", issues: parsed.error.issues }, 400);
+    }
+    const key = idempotencyKey(c.req.header("Idempotency-Key"));
+    if (key === null) {
+      return c.json({ error: "Idempotency-Key must contain between 1 and 200 characters" }, 400);
+    }
+    const requestHash = hash(parsed.data);
+    if (key) {
+      const [existing] = await db
+        .select()
+        .from(liveActivity)
+        .where(
+          and(eq(liveActivity.requesterTokenId, token.id), eq(liveActivity.idempotencyKey, key)),
+        )
+        .limit(1);
+      if (existing) {
+        if (existing.requestHash !== requestHash) {
+          return c.json(
+            { error: "Idempotency-Key was already used with a different payload" },
+            409,
+          );
+        }
+        return c.json<LiveActivityMutationResponse>({
+          activity: toDto(await expire(existing)),
+          accepted: existing.acceptedCount,
+          failed: existing.failedCount,
+          idempotent: true,
+        });
+      }
+    }
+
+    const [owner] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, token.userId))
+      .limit(1);
+    if (!owner) return c.json({ error: "Account not found" }, 404);
+    const billing = await getBilling(owner, true);
+    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
+      return c.json({ error: "Device routing requires Hark Pro" }, 402);
+    }
+    const limited = await enforceActivityRateLimit(token, owner);
+    if (limited) {
+      c.header("Retry-After", "60");
+      return c.json(limited, 429);
+    }
+    if (!(await checkNotificationAllowance(token.userId))) {
+      return c.json({ error: "Monthly notification limit reached" }, 429);
+    }
+
+    let targets = await db
+      .select()
+      .from(device)
+      .where(
+        and(
+          eq(device.userId, token.userId),
+          eq(device.active, true),
+          eq(device.platform, "ios"),
+          ...(parsed.data.deviceIds ? [inArray(device.id, parsed.data.deviceIds)] : []),
+        ),
+      )
+      .orderBy(desc(device.lastSeenAt));
+    if (parsed.data.deviceIds && targets.length !== parsed.data.deviceIds.length) {
+      return c.json({ error: "Invalid device selection" }, 400);
+    }
+    if (!parsed.data.deviceIds && billing.limits.devices !== null) {
+      targets = targets.slice(0, billing.limits.devices);
+    }
+    targets = targets.filter(
+      (target) =>
+        target.liveActivityPushToStartTokenCiphertext &&
+        target.liveActivitySchemaVersion === LIVE_ACTIVITY_SCHEMA_VERSION &&
+        (target.liveActivityTokenEnvironment === "sandbox" ||
+          target.liveActivityTokenEnvironment === "production"),
+    );
+
+    const now = new Date();
+    const apnsTimestamp = Math.floor(now.getTime() / 1000);
+    const activityId = newId("act");
+    const props: LiveActivityProps = {
+      schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+      activityId,
+      title: parsed.data.title,
+      status: parsed.data.status,
+      ...(parsed.data.detail ? { detail: parsed.data.detail } : {}),
+      ...(parsed.data.progress !== undefined ? { progress: parsed.data.progress } : {}),
+      updatedAt: now.toISOString(),
+      symbol: parsed.data.symbol,
+      privacyMode: parsed.data.privacyMode,
+    };
+    const values: typeof liveActivity.$inferInsert = {
+      id: activityId,
+      userId: token.userId,
+      requesterTokenId: token.id,
+      key: parsed.data.key ?? null,
+      schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+      props,
+      status: "starting",
+      sequence: 0,
+      apnsTimestamp,
+      idempotencyKey: key ?? null,
+      requestHash: key ? requestHash : null,
+      expiresAt: new Date(now.getTime() + parsed.data.expiresInSeconds * 1000),
+      staleAt:
+        parsed.data.staleAfterSeconds !== undefined
+          ? new Date(now.getTime() + parsed.data.staleAfterSeconds * 1000)
+          : null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    let row: ActivityRow | undefined;
+    try {
+      [row] = await db.insert(liveActivity).values(values).returning();
+    } catch (error) {
+      if (key) {
+        const [existing] = await db
+          .select()
+          .from(liveActivity)
+          .where(
+            and(eq(liveActivity.requesterTokenId, token.id), eq(liveActivity.idempotencyKey, key)),
+          )
+          .limit(1);
+        if (existing?.requestHash === requestHash) {
+          return c.json<LiveActivityMutationResponse>({
+            activity: toDto(existing),
+            accepted: existing.acceptedCount,
+            failed: existing.failedCount,
+            idempotent: true,
+          });
+        }
+        if (existing) {
+          return c.json(
+            { error: "Idempotency-Key was already used with a different payload" },
+            409,
+          );
+        }
+      }
+      throw error;
+    }
+    if (!row) return c.json({ error: "Failed to create Live Activity" }, 500);
+    const createdActivityId = row.id;
+    const operationId = newId("lao");
+    await db.insert(liveActivityOperation).values({
+      id: operationId,
+      activityId: row.id,
+      requesterTokenId: token.id,
+      event: "start",
+      sequence: row.sequence,
+      idempotencyKey: key ?? null,
+      requestHash: key ? requestHash : null,
+      createdAt: now,
+    });
+    const deliveries =
+      targets.length === 0
+        ? []
+        : await db
+            .insert(liveActivityDelivery)
+            .values(
+              targets.map((target) => ({
+                id: newId("lad"),
+                activityId: createdActivityId,
+                deviceId: target.id,
+                status: "pending",
+                environment: target.liveActivityTokenEnvironment as "sandbox" | "production",
+                schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+                createdAt: now,
+                updatedAt: now,
+              })),
+            )
+            .returning();
+    const result = await dispatch(row, deliveries, operationId, "start", token.id);
+    const status = result.accepted === 0 ? "failed" : result.failed > 0 ? "partial" : "active";
+    const [updatedRow] = await db
+      .update(liveActivity)
+      .set({ status, acceptedCount: result.accepted, failedCount: result.failed, updatedAt: now })
+      .where(eq(liveActivity.id, row.id))
+      .returning();
+    row = updatedRow ?? row;
+    await db
+      .update(liveActivityOperation)
+      .set({ acceptedCount: result.accepted, failedCount: result.failed })
+      .where(eq(liveActivityOperation.id, operationId));
+    if (result.accepted > 0) await trackNotification(token.userId, operationId);
+    return c.json<LiveActivityMutationResponse>(
+      {
+        activity: toDto(row),
+        accepted: result.accepted,
+        failed: result.failed,
+        ...(result.accepted === 0
+          ? {
+              message:
+                result.errors.join("; ") ||
+                "No Live Activity-capable iOS devices are registered for this account.",
+            }
+          : {}),
+      },
+      201,
+    );
+  })
+  .get("/:identifier", requireScopes("activities:read"), async (c) => {
+    const row = await ownedActivity(c.get("apiToken").id, c.req.param("identifier"));
+    if (!row) return c.json({ error: "Live Activity not found" }, 404);
+    return c.json({ activity: toDto(row) });
+  })
+  .patch("/:identifier", requireScopes("activities:write"), async (c) => {
+    const token = c.get("apiToken");
+    const parsed = liveActivityUpdateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid Live Activity update", issues: parsed.error.issues }, 400);
+    }
+    const key = idempotencyKey(c.req.header("Idempotency-Key"));
+    if (key === null) return c.json({ error: "Invalid Idempotency-Key" }, 400);
+    const requestHash = hash({ activity: c.req.param("identifier"), ...parsed.data });
+    const replay = await operationReplay(token.id, key, requestHash);
+    if (replay?.conflict) {
+      return c.json({ error: "Idempotency-Key was already used with a different payload" }, 409);
+    }
+    if (replay && !replay.conflict) {
+      return c.json<LiveActivityMutationResponse>({
+        activity: toDto(replay.row),
+        accepted: replay.operation.acceptedCount,
+        failed: replay.operation.failedCount,
+        idempotent: true,
+      });
+    }
+    const current = await ownedActivity(token.id, c.req.param("identifier"));
+    if (!current) return c.json({ error: "Live Activity not found" }, 404);
+    if (!["starting", "active", "partial"].includes(current.status)) {
+      return c.json({ error: "Live Activity is already terminal", activity: toDto(current) }, 409);
+    }
+    if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
+      return c.json({ error: "Sequence conflict", activity: toDto(current) }, 409);
+    }
+    const [owner] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, token.userId))
+      .limit(1);
+    if (!owner) return c.json({ error: "Account not found" }, 404);
+    const limited = await enforceActivityRateLimit(token, owner);
+    if (limited) {
+      c.header("Retry-After", "60");
+      return c.json(limited, 429);
+    }
+    if (!(await checkNotificationAllowance(token.userId))) {
+      return c.json({ error: "Monthly notification limit reached" }, 429);
+    }
+    const now = new Date();
+    const apnsTimestamp = Math.max(Math.floor(now.getTime() / 1000), current.apnsTimestamp + 1);
+    const previous = liveActivityPropsSchema.parse(current.props);
+    const nextProps: Record<string, unknown> = {
+      ...previous,
+      ...(parsed.data.title !== undefined ? { title: parsed.data.title } : {}),
+      ...(parsed.data.status !== undefined ? { status: parsed.data.status } : {}),
+      ...(parsed.data.detail !== null && parsed.data.detail !== undefined
+        ? { detail: parsed.data.detail }
+        : {}),
+      ...(parsed.data.progress !== null && parsed.data.progress !== undefined
+        ? { progress: parsed.data.progress }
+        : {}),
+      ...(parsed.data.symbol !== undefined ? { symbol: parsed.data.symbol } : {}),
+      ...(parsed.data.privacyMode !== undefined ? { privacyMode: parsed.data.privacyMode } : {}),
+      updatedAt: now.toISOString(),
+    };
+    if (parsed.data.detail === null) delete nextProps.detail;
+    if (parsed.data.progress === null) delete nextProps.progress;
+    const props = liveActivityPropsSchema.parse(nextProps);
+    const operationId = newId("lao");
+    let row: ActivityRow | undefined;
+    try {
+      row = db.transaction((tx) => {
+        const updated = tx
+          .update(liveActivity)
+          .set({
+            props,
+            sequence: current.sequence + 1,
+            apnsTimestamp,
+            updatedAt: now,
+            ...(parsed.data.staleAfterSeconds !== undefined
+              ? { staleAt: new Date(now.getTime() + parsed.data.staleAfterSeconds * 1000) }
+              : {}),
+          })
+          .where(
+            and(
+              eq(liveActivity.id, current.id),
+              eq(liveActivity.sequence, current.sequence),
+              inArray(liveActivity.status, ["starting", "active", "partial"]),
+            ),
+          )
+          .returning()
+          .get();
+        if (!updated) return undefined;
+        tx.insert(liveActivityOperation)
+          .values({
+            id: operationId,
+            activityId: updated.id,
+            requesterTokenId: token.id,
+            event: "update",
+            sequence: updated.sequence,
+            idempotencyKey: key ?? null,
+            requestHash: key ? requestHash : null,
+            createdAt: now,
+          })
+          .run();
+        return updated;
+      });
+    } catch (error) {
+      const raced = await operationReplay(token.id, key, requestHash);
+      if (raced?.conflict) {
+        return c.json({ error: "Idempotency-Key was already used with a different payload" }, 409);
+      }
+      if (raced && !raced.conflict) {
+        return c.json<LiveActivityMutationResponse>({
+          activity: toDto(raced.row),
+          accepted: raced.operation.acceptedCount,
+          failed: raced.operation.failedCount,
+          idempotent: true,
+        });
+      }
+      throw error;
+    }
+    if (!row) return c.json({ error: "Sequence conflict" }, 409);
+    const deliveries = await db
+      .select()
+      .from(liveActivityDelivery)
+      .where(eq(liveActivityDelivery.activityId, row.id));
+    const result = await dispatch(row, deliveries, operationId, "update", token.id);
+    const [updated] = await db
+      .update(liveActivity)
+      .set({
+        status: result.accepted === 0 ? "failed" : result.failed > 0 ? "partial" : "active",
+        acceptedCount: result.accepted,
+        failedCount: result.failed,
+      })
+      .where(eq(liveActivity.id, row.id))
+      .returning();
+    await db
+      .update(liveActivityOperation)
+      .set({ acceptedCount: result.accepted, failedCount: result.failed })
+      .where(eq(liveActivityOperation.id, operationId));
+    if (result.accepted > 0) await trackNotification(token.userId, operationId);
+    return c.json<LiveActivityMutationResponse>({
+      activity: toDto(updated ?? row),
+      accepted: result.accepted,
+      failed: result.failed,
+      ...(result.errors.length ? { message: result.errors.join("; ") } : {}),
+    });
+  })
+  .post("/:identifier/end", requireScopes("activities:write"), async (c) => {
+    const token = c.get("apiToken");
+    const parsed = liveActivityEndSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid Live Activity end", issues: parsed.error.issues }, 400);
+    }
+    const key = idempotencyKey(c.req.header("Idempotency-Key"));
+    if (key === null) return c.json({ error: "Invalid Idempotency-Key" }, 400);
+    const requestHash = hash({ activity: c.req.param("identifier"), ...parsed.data });
+    const replay = await operationReplay(token.id, key, requestHash);
+    if (replay?.conflict) {
+      return c.json({ error: "Idempotency-Key was already used with a different payload" }, 409);
+    }
+    if (replay && !replay.conflict) {
+      return c.json<LiveActivityMutationResponse>({
+        activity: toDto(replay.row),
+        accepted: replay.operation.acceptedCount,
+        failed: replay.operation.failedCount,
+        idempotent: true,
+      });
+    }
+    const current = await ownedActivity(token.id, c.req.param("identifier"));
+    if (!current) return c.json({ error: "Live Activity not found" }, 404);
+    if (!["starting", "active", "partial"].includes(current.status)) {
+      return c.json({ error: "Live Activity is already terminal", activity: toDto(current) }, 409);
+    }
+    if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
+      return c.json({ error: "Sequence conflict", activity: toDto(current) }, 409);
+    }
+    const [owner] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, token.userId))
+      .limit(1);
+    if (!owner) return c.json({ error: "Account not found" }, 404);
+    const limited = await enforceActivityRateLimit(token, owner);
+    if (limited) {
+      c.header("Retry-After", "60");
+      return c.json(limited, 429);
+    }
+    // Ending intentionally bypasses the monthly allowance so an agent can always clear Lock Screen UI.
+    const now = new Date();
+    const apnsTimestamp = Math.max(Math.floor(now.getTime() / 1000), current.apnsTimestamp + 1);
+    const previous = liveActivityPropsSchema.parse(current.props);
+    const nextProps: Record<string, unknown> = {
+      ...previous,
+      status: parsed.data.status,
+      symbol: parsed.data.symbol,
+      ...(parsed.data.detail !== null && parsed.data.detail !== undefined
+        ? { detail: parsed.data.detail }
+        : {}),
+      ...(parsed.data.progress !== null && parsed.data.progress !== undefined
+        ? { progress: parsed.data.progress }
+        : {}),
+      updatedAt: now.toISOString(),
+    };
+    if (parsed.data.detail === null) delete nextProps.detail;
+    if (parsed.data.progress === null) delete nextProps.progress;
+    const props = liveActivityPropsSchema.parse(nextProps);
+    const operationId = newId("lao");
+    let row: ActivityRow | undefined;
+    try {
+      row = db.transaction((tx) => {
+        const updated = tx
+          .update(liveActivity)
+          .set({
+            props,
+            status: "ended",
+            sequence: current.sequence + 1,
+            apnsTimestamp,
+            dismissalAt: new Date(now.getTime() + parsed.data.dismissAfterSeconds * 1000),
+            updatedAt: now,
+            endedAt: now,
+          })
+          .where(
+            and(
+              eq(liveActivity.id, current.id),
+              eq(liveActivity.sequence, current.sequence),
+              inArray(liveActivity.status, ["starting", "active", "partial"]),
+            ),
+          )
+          .returning()
+          .get();
+        if (!updated) return undefined;
+        tx.insert(liveActivityOperation)
+          .values({
+            id: operationId,
+            activityId: updated.id,
+            requesterTokenId: token.id,
+            event: "end",
+            sequence: updated.sequence,
+            idempotencyKey: key ?? null,
+            requestHash: key ? requestHash : null,
+            createdAt: now,
+          })
+          .run();
+        return updated;
+      });
+    } catch (error) {
+      const raced = await operationReplay(token.id, key, requestHash);
+      if (raced?.conflict) {
+        return c.json({ error: "Idempotency-Key was already used with a different payload" }, 409);
+      }
+      if (raced && !raced.conflict) {
+        return c.json<LiveActivityMutationResponse>({
+          activity: toDto(raced.row),
+          accepted: raced.operation.acceptedCount,
+          failed: raced.operation.failedCount,
+          idempotent: true,
+        });
+      }
+      throw error;
+    }
+    if (!row) return c.json({ error: "Sequence conflict" }, 409);
+    const deliveries = await db
+      .select()
+      .from(liveActivityDelivery)
+      .where(eq(liveActivityDelivery.activityId, row.id));
+    const result = await dispatch(row, deliveries, operationId, "end", token.id);
+    const [updated] = await db
+      .update(liveActivity)
+      .set({ acceptedCount: result.accepted, failedCount: result.failed })
+      .where(eq(liveActivity.id, row.id))
+      .returning();
+    await db
+      .update(liveActivityOperation)
+      .set({ acceptedCount: result.accepted, failedCount: result.failed })
+      .where(eq(liveActivityOperation.id, operationId));
+    if (result.accepted > 0) await trackNotification(token.userId, operationId);
+    return c.json<LiveActivityMutationResponse>({
+      activity: toDto(updated ?? row),
+      accepted: result.accepted,
+      failed: result.failed,
+      ...(result.errors.length ? { message: result.errors.join("; ") } : {}),
+    });
+  });
+
+export const activitiesSessionRoute = new Hono<AuthedEnv>()
+  .use("*", requireAuth)
+  .get("/", async (c) => {
+    const rows = await db
+      .select()
+      .from(liveActivity)
+      .where(
+        and(
+          eq(liveActivity.userId, c.get("user").id),
+          inArray(liveActivity.status, ["starting", "active", "partial"]),
+        ),
+      )
+      .orderBy(desc(liveActivity.updatedAt))
+      .limit(20);
+    return c.json({
+      activities: await Promise.all(rows.map(expire)).then((items) => items.map(toDto)),
+    });
+  });

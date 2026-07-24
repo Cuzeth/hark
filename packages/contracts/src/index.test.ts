@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   deviceRegisterSchema,
+  interactionCreateSchema,
+  interactionResponseSchema,
+  LIVE_ACTIVITY_SCHEMA_VERSION,
+  liveActivityEndSchema,
+  liveActivityPropsSchema,
+  liveActivityStartSchema,
+  liveActivityUpdateSchema,
   pushDataSchema,
   serviceCreateSchema,
   webhookRequestSchema,
@@ -61,6 +68,80 @@ describe("webhookRequestSchema", () => {
 
   it("rejects an empty device routing list", () => {
     expect(webhookRequestSchema.safeParse({ body: "Targeted", deviceIds: [] }).success).toBe(false);
+  });
+});
+
+describe("interaction schemas", () => {
+  it("normalizes targets and supplies a conservative expiry", () => {
+    const result = interactionCreateSchema.safeParse({
+      title: "Release",
+      prompt: "Deploy?",
+      kind: "approval",
+      deviceIds: ["dev_b", "dev_a", "dev_b"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
+      expect(result.data.expiresInSeconds).toBe(900);
+    }
+  });
+
+  it("requires text only for reply actions", () => {
+    const actionDigest = "a".repeat(64);
+    expect(
+      interactionResponseSchema.safeParse({ action: "approve", deviceId: "dev_1", actionDigest })
+        .success,
+    ).toBe(true);
+    expect(
+      interactionResponseSchema.safeParse({
+        action: "reply",
+        response: "",
+        deviceId: "dev_1",
+        actionDigest,
+      }).success,
+    ).toBe(false);
+    expect(
+      interactionResponseSchema.safeParse({
+        action: "reply",
+        response: "Ship tomorrow",
+        deviceId: "dev_1",
+        actionDigest,
+      }).success,
+    ).toBe(true);
+  });
+});
+
+describe("Live Activity schemas", () => {
+  it("accepts the fixed Hark schema and bounds progress", () => {
+    const props = {
+      schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+      activityId: "act_1",
+      title: "Build release",
+      status: "Running tests",
+      detail: "Workspace checks",
+      progress: 0.42,
+      updatedAt: new Date().toISOString(),
+      symbol: "build",
+      privacyMode: "standard",
+    };
+    expect(liveActivityPropsSchema.safeParse(props).success).toBe(true);
+    expect(liveActivityPropsSchema.safeParse({ ...props, progress: 1.01 }).success).toBe(false);
+    expect(liveActivityPropsSchema.safeParse({ ...props, schemaVersion: 2 }).success).toBe(false);
+  });
+
+  it("normalizes start targets and requires a meaningful update", () => {
+    const start = liveActivityStartSchema.parse({
+      title: "Task",
+      status: "Starting",
+      deviceIds: ["dev_b", "dev_a", "dev_b"],
+    });
+    expect(start.deviceIds).toEqual(["dev_a", "dev_b"]);
+    expect(start.expiresInSeconds).toBe(3600);
+    expect(liveActivityUpdateSchema.safeParse({ ifSequence: 0 }).success).toBe(false);
+    expect(liveActivityUpdateSchema.safeParse({ progress: null, ifSequence: 2 }).success).toBe(
+      true,
+    );
+    expect(liveActivityEndSchema.parse({}).dismissAfterSeconds).toBe(0);
   });
 });
 

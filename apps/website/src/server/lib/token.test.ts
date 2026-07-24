@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  apiTokenPrefix,
+  decryptLiveActivityToken,
   decryptWebhookToken,
+  encryptLiveActivityToken,
   encryptWebhookToken,
+  generateApiToken,
   generateWebhookToken,
+  hashApiToken,
   hashWebhookToken,
 } from "./token";
 
@@ -15,6 +20,17 @@ describe("generateWebhookToken", () => {
   it("is unique across generations", () => {
     const tokens = new Set(Array.from({ length: 500 }, () => generateWebhookToken()));
     expect(tokens.size).toBe(500);
+  });
+});
+
+describe("API tokens", () => {
+  it("generates a high-entropy identified secret and stores a deterministic hash", () => {
+    const token = generateApiToken();
+    expect(token).toMatch(/^hark_[A-Za-z0-9_-]{43}$/);
+    expect(apiTokenPrefix(token)).toBe(token.slice(0, 13));
+    expect(hashApiToken(token)).toMatch(/^[a-f0-9]{64}$/);
+    expect(hashApiToken(token)).toBe(hashApiToken(token));
+    expect(hashApiToken(`${token}x`)).not.toBe(hashApiToken(token));
   });
 });
 
@@ -47,5 +63,15 @@ describe("webhook token encryption", () => {
   it("rejects modified ciphertext", () => {
     const encrypted = encryptWebhookToken(generateWebhookToken());
     expect(() => decryptWebhookToken(`${encrypted.slice(0, -1)}x`)).toThrow();
+  });
+});
+
+describe("Live Activity token encryption", () => {
+  it("round-trips in a separate encryption domain", () => {
+    const token = "ab".repeat(32);
+    const encrypted = encryptLiveActivityToken(token);
+    expect(encrypted).not.toContain(token);
+    expect(decryptLiveActivityToken(encrypted)).toBe(token);
+    expect(() => decryptWebhookToken(encrypted)).toThrow();
   });
 });

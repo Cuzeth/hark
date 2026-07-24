@@ -1,10 +1,18 @@
-import { type DeviceDto, deviceRegisterSchema, deviceUnregisterSchema } from "@hark/contracts";
-import { and, desc, eq } from "drizzle-orm";
+import {
+  type DeviceDto,
+  deviceRegisterSchema,
+  deviceUnregisterSchema,
+  LIVE_ACTIVITY_SCHEMA_VERSION,
+  liveActivityPushToStartTokenSchema,
+  liveActivityUpdateTokenSchema,
+} from "@hark/contracts";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
-import { device } from "../db/schema";
+import { device, liveActivity, liveActivityDelivery } from "../db/schema";
 import { getBilling } from "../lib/billing";
 import { newId } from "../lib/id";
+import { encryptLiveActivityToken } from "../lib/token";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
 function toDto(row: typeof device.$inferSelect): DeviceDto {
@@ -13,6 +21,13 @@ function toDto(row: typeof device.$inferSelect): DeviceDto {
     platform: "ios",
     deviceName: row.deviceName,
     active: row.active,
+    liveActivitiesCapable: Boolean(row.liveActivityPushToStartTokenCiphertext),
+    liveActivityTokenEnvironment:
+      row.liveActivityTokenEnvironment === "sandbox" ||
+      row.liveActivityTokenEnvironment === "production"
+        ? row.liveActivityTokenEnvironment
+        : null,
+    liveActivityTokenUpdatedAt: row.liveActivityTokenUpdatedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     lastSeenAt: row.lastSeenAt.toISOString(),
   };
@@ -28,6 +43,139 @@ export const devicesRoute = new Hono<AuthedEnv>()
       .where(eq(device.userId, user.id))
       .orderBy(desc(device.lastSeenAt));
     return c.json({ devices: rows.map(toDto) });
+  })
+  .post("/live-activity/push-to-start", async (c) => {
+    const parsed = liveActivityPushToStartTokenSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return c.json(
+        { error: "Invalid push-to-start token registration", issues: parsed.error.issues },
+        400,
+      );
+    }
+    const now = new Date();
+    const [registered] = await db
+      .update(device)
+      .set({
+        liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken(
+          parsed.data.pushToStartToken.toLowerCase(),
+        ),
+        liveActivityTokenEnvironment: parsed.data.environment,
+        liveActivitySchemaVersion: parsed.data.schemaVersion,
+        liveActivityTokenUpdatedAt: now,
+        lastSeenAt: now,
+      })
+      .where(
+        and(
+          eq(device.id, parsed.data.deviceId),
+          eq(device.userId, c.get("user").id),
+          eq(device.active, true),
+        ),
+      )
+      .returning({ id: device.id, updatedAt: device.liveActivityTokenUpdatedAt });
+    if (!registered) return c.json({ error: "Device not found" }, 404);
+    return c.json({ deviceId: registered.id, updatedAt: registered.updatedAt?.toISOString() });
+  })
+  .post("/live-activity/update-token", async (c) => {
+    const parsed = liveActivityUpdateTokenSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json(
+        { error: "Invalid Live Activity token registration", issues: parsed.error.issues },
+        400,
+      );
+    }
+    const userId = c.get("user").id;
+    const result = db.transaction((tx) => {
+      const registeredDevice = tx
+        .select({ id: device.id })
+        .from(device)
+        .where(
+          and(
+            eq(device.id, parsed.data.deviceId),
+            eq(device.userId, userId),
+            eq(device.active, true),
+          ),
+        )
+        .get();
+      if (!registeredDevice) return { kind: "device-not-found" } as const;
+
+      const candidateWhere = [
+        eq(liveActivityDelivery.deviceId, registeredDevice.id),
+        eq(liveActivity.userId, userId),
+        eq(liveActivity.schemaVersion, parsed.data.schemaVersion),
+        eq(liveActivityDelivery.schemaVersion, parsed.data.schemaVersion),
+        inArray(liveActivity.status, ["starting", "active", "partial"]),
+      ];
+      if (parsed.data.activityId) candidateWhere.push(eq(liveActivity.id, parsed.data.activityId));
+      let candidates: Array<{ id: string; activityId: string }> = [];
+      if (parsed.data.nativeActivityId) {
+        const exact = tx
+          .select({ id: liveActivityDelivery.id, activityId: liveActivityDelivery.activityId })
+          .from(liveActivityDelivery)
+          .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
+          .where(
+            and(
+              ...candidateWhere,
+              eq(liveActivityDelivery.nativeActivityId, parsed.data.nativeActivityId),
+            ),
+          )
+          .get();
+        if (exact) candidates = [exact];
+      }
+      if (candidates.length === 0) {
+        candidates = tx
+          .select({ id: liveActivityDelivery.id, activityId: liveActivityDelivery.activityId })
+          .from(liveActivityDelivery)
+          .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
+          .where(
+            and(
+              ...candidateWhere,
+              parsed.data.nativeActivityId
+                ? isNull(liveActivityDelivery.nativeActivityId)
+                : isNull(liveActivityDelivery.updateTokenCiphertext),
+            ),
+          )
+          .limit(2)
+          .all();
+      }
+      if (candidates.length === 0) return { kind: "delivery-not-found" } as const;
+      if (candidates.length > 1) return { kind: "ambiguous" } as const;
+      const candidate = candidates[0];
+      if (!candidate) return { kind: "delivery-not-found" } as const;
+      const now = new Date();
+      tx.update(liveActivityDelivery)
+        .set({
+          nativeActivityId: parsed.data.nativeActivityId ?? null,
+          updateTokenCiphertext: encryptLiveActivityToken(parsed.data.updateToken.toLowerCase()),
+          updateTokenUpdatedAt: now,
+          environment: parsed.data.environment,
+          schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+          status: "active",
+          updatedAt: now,
+        })
+        .where(eq(liveActivityDelivery.id, candidate.id))
+        .run();
+      return {
+        kind: "registered",
+        activityId: candidate.activityId,
+        deviceId: registeredDevice.id,
+      } as const;
+    });
+    if (result.kind === "device-not-found") return c.json({ error: "Device not found" }, 404);
+    if (result.kind === "delivery-not-found") {
+      return c.json({ error: "Live Activity delivery not found" }, 404);
+    }
+    if (result.kind === "ambiguous") {
+      return c.json(
+        {
+          error:
+            "Activity token association is ambiguous; reopen Hark after other pending starts resolve.",
+        },
+        409,
+      );
+    }
+    return c.json({ activityId: result.activityId, deviceId: result.deviceId });
   })
   .post("/", async (c) => {
     const user = c.get("user");
@@ -56,30 +204,65 @@ export const devicesRoute = new Hono<AuthedEnv>()
       return c.json({ error: "This account has reached its active device limit." }, 402);
     }
     const now = new Date();
-    const [row] = await db
-      .insert(device)
-      .values({
-        id: newId("dev"),
-        userId: user.id,
-        expoPushToken: parsed.data.expoPushToken,
-        apnsToken: parsed.data.apnsToken ?? null,
-        platform: "ios",
-        deviceName: parsed.data.deviceName ?? null,
-        active: true,
-        createdAt: now,
-        lastSeenAt: now,
-      })
-      .onConflictDoUpdate({
-        target: device.expoPushToken,
-        set: {
+    const row = db.transaction((tx) => {
+      const previous = tx
+        .select({ id: device.id, userId: device.userId })
+        .from(device)
+        .where(eq(device.expoPushToken, parsed.data.expoPushToken))
+        .get();
+      const ownerChanged = Boolean(previous && previous.userId !== user.id);
+      const registered = tx
+        .insert(device)
+        .values({
+          id: newId("dev"),
           userId: user.id,
+          expoPushToken: parsed.data.expoPushToken,
           apnsToken: parsed.data.apnsToken ?? null,
+          platform: "ios",
           deviceName: parsed.data.deviceName ?? null,
           active: true,
+          createdAt: now,
           lastSeenAt: now,
-        },
-      })
-      .returning();
+        })
+        .onConflictDoUpdate({
+          target: device.expoPushToken,
+          set: {
+            userId: user.id,
+            apnsToken: parsed.data.apnsToken ?? null,
+            deviceName: parsed.data.deviceName ?? null,
+            active: true,
+            lastSeenAt: now,
+            ...(ownerChanged
+              ? {
+                  liveActivityPushToStartTokenCiphertext: null,
+                  liveActivityTokenEnvironment: null,
+                  liveActivitySchemaVersion: null,
+                  liveActivityTokenUpdatedAt: null,
+                }
+              : {}),
+          },
+        })
+        .returning()
+        .get();
+      if (ownerChanged && previous) {
+        tx.update(liveActivityDelivery)
+          .set({
+            status: "failed",
+            updateTokenCiphertext: null,
+            updateTokenUpdatedAt: null,
+            lastApnsReason: "OwnerChanged",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(liveActivityDelivery.deviceId, previous.id),
+              inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
+            ),
+          )
+          .run();
+      }
+      return registered;
+    });
     if (!row) {
       return c.json({ error: "Failed to register device" }, 500);
     }

@@ -76,6 +76,20 @@ export function Privacy() {
             name, platform, and last registration time.
           </li>
           <li>
+            Agent access-token names, scopes, identifying prefixes, hashes, expiry and usage times.
+            Plaintext agent tokens are shown once and are not stored by Hark.
+          </li>
+          <li>
+            Approval and reply prompts, choices, expiry, response text or decision, requesting token
+            identity, responding device, and response timestamps.
+          </li>
+          <li>
+            Live Activity task titles, status text, optional detail and progress, expiry and update
+            history, requesting token identity, and encrypted ActivityKit delivery tokens. Private
+            mode replaces task content with generic text on the Lock Screen but does not remove the
+            task content from Hark's encrypted network and account-scoped processing.
+          </li>
+          <li>
             Subscription status and billing identifiers when you choose a paid plan. Payment-card
             details are collected and handled by Stripe, not stored by Hark.
           </li>
@@ -87,7 +101,9 @@ export function Privacy() {
         <p>
           We use this information to authenticate your account, create and secure webhook endpoints,
           deliver notifications, show delivery activity, prevent duplicate or abusive requests,
-          provide support, and maintain the reliability and security of Hark.
+          deliver requested interactions and return your response to the authorized agent, start and
+          update Live Activities you authorize, provide support, and maintain the reliability and
+          security of Hark.
         </p>
       </Section>
 
@@ -112,8 +128,10 @@ export function Privacy() {
       <Section title="Security and your choices">
         <p>
           Webhook URLs contain secret tokens and should be treated like passwords. You can rotate a
-          token from the dashboard if it is exposed. Hark uses access controls and encrypted network
-          connections, but no online service can guarantee absolute security.
+          webhook token or revoke a scoped agent token from the dashboard if it is exposed. Device
+          responses require the signed-in account and a registered device identity. Hark uses access
+          controls and encrypted network connections, but no online service can guarantee absolute
+          security.
         </p>
       </Section>
 
@@ -155,11 +173,20 @@ export function Terms() {
         </p>
       </Section>
 
+      <Section title="Agent interactions">
+        <p>
+          Scoped agent tokens may create approval or reply requests for your own registered devices.
+          You are responsible for deciding what authority an agent receives and for reviewing
+          prompts before responding. Hark does not guarantee that a push is delivered, seen, or
+          answered, and callers must treat canceled, expired, denied, and missing responses safely.
+        </p>
+      </Section>
+
       <Section title="Your account and webhook secrets">
         <p>
           You are responsible for activity under your account and for keeping webhook URLs and
-          account access secure. Notify us and rotate affected webhook tokens if you believe they
-          have been exposed.
+          account access secure. Agent API tokens are also credentials; grant only needed scopes,
+          configure an expiry where practical, and revoke affected tokens if exposed.
         </p>
       </Section>
 

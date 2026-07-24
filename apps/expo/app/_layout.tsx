@@ -8,10 +8,19 @@ import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { Linking } from "react-native";
+import { useSession } from "../src/lib/auth";
+import {
+  flushInteractionResponses,
+  handleNotificationResponse,
+  registerInteractionCategories,
+} from "../src/lib/interactions";
+import { startLiveActivityTokenSync } from "../src/lib/live-activities";
 import { colors } from "../src/lib/theme";
 
 void SplashScreen.preventAutoHideAsync();
+void registerInteractionCategories().catch((error) => {
+  console.warn("Could not register notification actions", error);
+});
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -23,6 +32,7 @@ Notifications.setNotificationHandler({
 });
 
 export default function RootLayout() {
+  const { data: session } = useSession();
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_500Medium,
@@ -34,25 +44,24 @@ export default function RootLayout() {
   }, [fontsLoaded, fontError]);
 
   useEffect(() => {
-    const openDestination = (notification: Notifications.Notification) => {
-      const data = notification.request.content.data as { url?: string } | undefined;
-      if (data?.url) {
-        Linking.openURL(data.url).catch(() => {});
-      }
-    };
-
     // Handle both a cold launch from a notification and taps while the app is running.
     const initialResponse = Notifications.getLastNotificationResponse();
-    if (initialResponse?.notification) {
-      openDestination(initialResponse.notification);
+    if (initialResponse) {
+      void handleNotificationResponse(initialResponse);
       void Notifications.clearLastNotificationResponseAsync();
     }
+    void flushInteractionResponses();
 
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      openDestination(response.notification);
+      void handleNotificationResponse(response);
     });
     return () => subscription.remove();
   }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    return startLiveActivityTokenSync();
+  }, [session]);
 
   if (!fontsLoaded && !fontError) return null;
 

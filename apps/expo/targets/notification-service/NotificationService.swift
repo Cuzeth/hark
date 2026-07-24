@@ -152,7 +152,12 @@ final class NotificationService: UNNotificationServiceExtension {
       }
       do {
         let updated = try content.updating(from: intent)
-        self.completeOnce(with: updated)
+        // Intent styling can replace the category, which would remove Hark's actions.
+        let actionable =
+          (updated.mutableCopy() as? UNMutableNotificationContent)
+          ?? content
+        actionable.categoryIdentifier = content.categoryIdentifier
+        self.completeOnce(with: actionable)
       } catch {
         self.completeOnce(with: content)
       }

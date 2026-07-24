@@ -3,11 +3,41 @@ import { env } from "../env";
 
 const ENCRYPTION_VERSION = "v1";
 
-function encryptionKey(): Buffer {
+function encryptionKey(purpose: "webhook-token" | "live-activity-token"): Buffer {
   return createHash("sha256")
-    .update("hark:webhook-token:v1\0", "utf8")
+    .update(`hark:${purpose}:v1\0`, "utf8")
     .update(env.BETTER_AUTH_SECRET, "utf8")
     .digest();
+}
+
+function encryptToken(token: string, purpose: "webhook-token" | "live-activity-token"): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(purpose), iv);
+  const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [
+    ENCRYPTION_VERSION,
+    iv.toString("base64url"),
+    tag.toString("base64url"),
+    ciphertext.toString("base64url"),
+  ].join(".");
+}
+
+function decryptToken(value: string, purpose: "webhook-token" | "live-activity-token"): string {
+  const [version, iv, tag, ciphertext, extra] = value.split(".");
+  if (version !== ENCRYPTION_VERSION || !iv || !tag || !ciphertext || extra) {
+    throw new Error("Invalid encrypted token");
+  }
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    encryptionKey(purpose),
+    Buffer.from(iv, "base64url"),
+  );
+  decipher.setAuthTag(Buffer.from(tag, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(ciphertext, "base64url")),
+    decipher.final(),
+  ]).toString("utf8");
 }
 
 /**
@@ -23,30 +53,66 @@ export function hashWebhookToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
+/** Generates a non-recoverable agent token with 256 bits of entropy. */
+export function generateApiToken(): string {
+  return `hark_${randomBytes(32).toString("base64url")}`;
+}
+
+export function apiTokenPrefix(token: string): string {
+  return token.slice(0, 13);
+}
+
+export function hashApiToken(token: string): string {
+  return createHash("sha256").update("hark:api-token:v1\0", "utf8").update(token).digest("hex");
+}
+
+export const MAX_ACTIVE_API_TOKENS = 25;
+
+/** Generates a 256-bit secret used only by a polling authorization client. */
+export function generateDeviceCode(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashDeviceCode(code: string): string {
+  return createHash("sha256")
+    .update("hark:device-authorization:v1\0", "utf8")
+    .update(code, "utf8")
+    .digest("hex");
+}
+
+/** Eight unambiguous base32 characters provide 40 bits for the short-lived human code. */
+export function generateUserCode(): string {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const bytes = randomBytes(5);
+  let bits = 0;
+  let value = 0;
+  let code = "";
+  for (const byte of bytes) {
+    value = (value << 8) | byte;
+    bits += 8;
+    while (bits >= 5) {
+      code += alphabet[(value >>> (bits - 5)) & 31];
+      bits -= 5;
+    }
+  }
+  return `${code.slice(0, 4)}-${code.slice(4, 8)}`;
+}
+
 /** Encrypts a token for owner-only recovery while keeping the hash as the lookup key. */
 export function encryptWebhookToken(token: string): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
-  const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return [
-    ENCRYPTION_VERSION,
-    iv.toString("base64url"),
-    tag.toString("base64url"),
-    ciphertext.toString("base64url"),
-  ].join(".");
+  return encryptToken(token, "webhook-token");
 }
 
 /** Decrypts and authenticates a stored token. Throws if the value was modified. */
 export function decryptWebhookToken(value: string): string {
-  const [version, iv, tag, ciphertext, extra] = value.split(".");
-  if (version !== ENCRYPTION_VERSION || !iv || !tag || !ciphertext || extra) {
-    throw new Error("Invalid encrypted webhook token");
-  }
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(iv, "base64url"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([
-    decipher.update(Buffer.from(ciphertext, "base64url")),
-    decipher.final(),
-  ]).toString("utf8");
+  return decryptToken(value, "webhook-token");
+}
+
+/** Encrypts ActivityKit tokens separately from recoverable webhook secrets. */
+export function encryptLiveActivityToken(token: string): string {
+  return encryptToken(token, "live-activity-token");
+}
+
+export function decryptLiveActivityToken(value: string): string {
+  return decryptToken(value, "live-activity-token");
 }

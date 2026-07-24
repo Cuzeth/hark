@@ -1,4 +1,12 @@
-import { PUSH_SCHEMA_VERSION, type PushData, type WebhookRequest } from "@hark/contracts";
+import {
+  HARK_APPROVAL_CATEGORY_ID,
+  HARK_REPLY_CATEGORY_ID,
+  type InteractionKind,
+  type InteractionPushData,
+  PUSH_SCHEMA_VERSION,
+  type PushData,
+  type WebhookRequest,
+} from "@hark/contracts";
 import { Expo, type ExpoPushMessage, type ExpoPushTicket } from "expo-server-sdk";
 import { env } from "../env";
 
@@ -59,6 +67,39 @@ export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
   }));
 }
 
+export interface BuildInteractionPushInput {
+  to: string[];
+  interactionId: string;
+  kind: InteractionKind;
+  title: string;
+  prompt: string;
+  actionDigest: string;
+  url?: string;
+}
+
+export function buildInteractionPushMessages(input: BuildInteractionPushInput): ExpoPushMessage[] {
+  const categoryId = input.kind === "approval" ? HARK_APPROVAL_CATEGORY_ID : HARK_REPLY_CATEGORY_ID;
+  const data: InteractionPushData = {
+    v: PUSH_SCHEMA_VERSION,
+    interactionId: input.interactionId,
+    interactionKind: input.kind,
+    sourceName: input.title,
+    conversationId: `hark-interaction-${input.interactionId}`,
+    categoryId,
+    actionDigest: input.actionDigest,
+    ...(input.url ? { url: input.url } : {}),
+  };
+  return input.to.map((to) => ({
+    to,
+    title: input.title,
+    body: input.prompt,
+    categoryId,
+    priority: "high",
+    mutableContent: true,
+    data,
+  }));
+}
+
 let expoClient: Expo | undefined;
 function getExpo(): Expo {
   if (!expoClient) {
@@ -68,7 +109,8 @@ function getExpo(): Expo {
 }
 
 export interface SendResult {
-  delivered: number;
+  /** Requests accepted by Expo. This is not a device-delivery receipt. */
+  accepted: number;
   errors: string[];
   /** Expo push tokens that Expo reported as no longer registered. */
   staleTokens: string[];
@@ -76,7 +118,7 @@ export interface SendResult {
 
 export async function sendPushMessages(messages: ExpoPushMessage[]): Promise<SendResult> {
   const expo = getExpo();
-  const result: SendResult = { delivered: 0, errors: [], staleTokens: [] };
+  const result: SendResult = { accepted: 0, errors: [], staleTokens: [] };
 
   for (const chunk of expo.chunkPushNotifications(messages)) {
     let tickets: ExpoPushTicket[];
@@ -88,7 +130,7 @@ export async function sendPushMessages(messages: ExpoPushMessage[]): Promise<Sen
     }
     tickets.forEach((ticket, index) => {
       if (ticket.status === "ok") {
-        result.delivered += 1;
+        result.accepted += 1;
         return;
       }
       result.errors.push(ticket.message ?? "Unknown push error");

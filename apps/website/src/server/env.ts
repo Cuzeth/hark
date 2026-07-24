@@ -14,6 +14,12 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** Optional. Enables authenticated requests to the Expo Push Service. */
   EXPO_ACCESS_TOKEN: z.string().optional(),
+  /** Optional direct APNs credentials for Live Activity start/update/end delivery. */
+  APNS_KEY_ID: z.string().optional(),
+  APPLE_TEAM_ID: z.string().optional(),
+  APNS_PRIVATE_KEY: z.string().optional(),
+  APNS_BUNDLE_ID: z.string().min(1).default("ceo.ryan.hark"),
+  APNS_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
   /** Autumn production secret key. Kept server-side and never exposed to clients. */
   AUTUMN_API_KEY: z.string().optional(),
   SERVICE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
@@ -44,6 +50,11 @@ export function assertRuntimeEnv(): void {
   }
   if (!env.EXPO_ACCESS_TOKEN) {
     problems.push("EXPO_ACCESS_TOKEN is not set — push requests to Expo will be unauthenticated.");
+  }
+  if (!env.APNS_KEY_ID || !env.APPLE_TEAM_ID || !env.APNS_PRIVATE_KEY) {
+    problems.push(
+      "APNS_KEY_ID / APPLE_TEAM_ID / APNS_PRIVATE_KEY are not all set — Live Activity delivery will be unavailable.",
+    );
   }
   if (!env.AUTUMN_API_KEY) {
     problems.push("AUTUMN_API_KEY is not set — paid plans and checkout will be unavailable.");
