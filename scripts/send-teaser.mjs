@@ -4,7 +4,7 @@ if (!webhookUrl) {
 }
 
 const origin = process.env.HARK_PUBLIC_URL ?? "https://hark.ryan.ceo";
-const delayMs = Number(process.env.HARK_TEASER_DELAY_MS ?? 1500);
+const delayMs = Number(process.env.HARK_TEASER_DELAY_MS ?? 2000);
 if (!Number.isFinite(delayMs) || delayMs < 0) {
   throw new Error("HARK_TEASER_DELAY_MS must be a positive number.");
 }
