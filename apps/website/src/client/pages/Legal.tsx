@@ -145,8 +145,8 @@ export function Privacy() {
       <Section title="Contact">
         <p>
           Questions or privacy requests can be sent to{" "}
-          <a className="text-accent underline underline-offset-2" href="mailto:raavtube@icloud.com">
-            raavtube@icloud.com
+          <a className="text-accent underline underline-offset-2" href="mailto:ryan@mandarin3d.com">
+            ryan@mandarin3d.com
           </a>
           .
         </p>
@@ -246,8 +246,8 @@ export function Terms() {
       <Section title="Contact">
         <p>
           Questions about these terms can be sent to{" "}
-          <a className="text-accent underline underline-offset-2" href="mailto:raavtube@icloud.com">
-            raavtube@icloud.com
+          <a className="text-accent underline underline-offset-2" href="mailto:ryan@mandarin3d.com">
+            ryan@mandarin3d.com
           </a>
           .
         </p>
