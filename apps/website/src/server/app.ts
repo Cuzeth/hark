@@ -1,5 +1,6 @@
-import { Hono } from "hono";
-import { logger } from "hono/logger";
+import { type Context, Hono, type Next } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
 import { activitiesAgentRoute, activitiesSessionRoute } from "./routes/activities";
 import { apiTokensRoute } from "./routes/api-tokens";
@@ -13,8 +14,22 @@ import { servicesRoute } from "./routes/services";
 
 export const app = new Hono();
 
+/**
+ * Logs requests without query strings and redacts webhook paths: `/hooks/:token`
+ * embeds a plaintext credential that must never reach a log sink.
+ */
+async function accessLog(c: Context, next: Next): Promise<void> {
+  const startedAt = Date.now();
+  await next();
+  const path = c.req.path.startsWith("/hooks/") ? "/hooks/:token" : c.req.path;
+  console.log(`${c.req.method} ${path} ${c.res.status} ${Date.now() - startedAt}ms`);
+}
+
+// Bounds memory use for unauthenticated POST bodies; accepted payloads are far smaller.
+app.use("*", bodyLimit({ maxSize: 64 * 1024 }));
+
 if (process.env.NODE_ENV !== "test") {
-  app.use("*", logger());
+  app.use("*", accessLog);
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
@@ -41,6 +56,8 @@ app.notFound((c) => {
 });
 
 app.onError((err, c) => {
+  // Middleware rejections (for example the body-size limit) carry their own status.
+  if (err instanceof HTTPException) return err.getResponse();
   console.error(err);
   return c.json({ error: "Internal server error" }, 500);
 });
