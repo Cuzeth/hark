@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-const updated = "July 23, 2026";
+const updated = "July 24, 2026";
 
 function LegalLayout({
   eyebrow,
@@ -94,6 +94,11 @@ export function Privacy() {
             details are collected and handled by Stripe, not stored by Hark.
           </li>
           <li>Limited technical logs used to secure, operate, and troubleshoot the service.</li>
+          <li>
+            Aggregate usage counts for product analytics, such as event names, coarse outcome
+            buckets, counters, and the related account, service, or device identifiers — never
+            notification content, prompts, replies, tokens, or addresses.
+          </li>
         </ul>
       </Section>
 

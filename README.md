@@ -268,6 +268,32 @@ does not provide.
 Expose the container port publicly only behind a trusted reverse proxy that overwrites
 `X-Real-IP`/`X-Forwarded-For`; device-authorization rate limits use the first forwarded client value.
 
+## Usage analytics
+
+The server records aggregate product usage in three SQLite tables:
+`analytics_event` (append-only, pruned after 180 days), `analytics_daily`
+(idempotent `day` + `metric` rollups, kept forever) and `analytics_user_day`
+(one row per user per UTC day, powering DAU/WAU/MAU). Only identifiers, event
+names, coarse outcome buckets and counters are stored — never notification
+content, prompts, replies, tokens, emails, IPs or user agents. Analytics writes
+are wrapped so a failure can never fail a request.
+
+Query it read-only with the bundled script, which needs no extra dependencies:
+
+```sh
+# Locally (DATABASE_URL or --db selects the file)
+node apps/website/scripts/analytics.mjs summary
+node apps/website/scripts/analytics.mjs dau --days 30
+
+# In the production container
+docker compose exec hark node scripts/analytics.mjs summary
+docker exec hark node scripts/analytics.mjs errors --days 7
+```
+
+`node scripts/analytics.mjs --help` lists every subcommand (`summary`, `dau`,
+`wau`, `mau`, `retention`, `services`, `devices`, `notifications`, `errors`,
+`plans`, `events --name <name>`, `names`). Output is always JSON on stdout.
+
 ## Manual production workflows
 
 The GitHub Actions workflows are intentionally manual-only and do not run on

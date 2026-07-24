@@ -3,6 +3,7 @@ import { and, count, desc, eq, gt, isNull, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
 import { apiToken } from "../db/schema";
+import { track } from "../lib/analytics";
 import { newId } from "../lib/id";
 import {
   apiTokenPrefix,
@@ -81,6 +82,15 @@ export const apiTokensRoute = new Hono<AuthedEnv>()
         409,
       );
     }
+    track({
+      name: "api_token_created",
+      userId: c.get("user").id,
+      outcome: "dashboard",
+      metadata: {
+        scopeCount: (row.scopes as string[]).length,
+        expires: row.expiresAt !== null,
+      },
+    });
     return c.json({ token: toDto(row), secret }, 201);
   })
   .delete("/:id", async (c) => {
@@ -96,5 +106,6 @@ export const apiTokensRoute = new Hono<AuthedEnv>()
       )
       .returning({ id: apiToken.id });
     if (rows.length === 0) return c.json({ error: "API token not found" }, 404);
+    track({ name: "api_token_revoked", userId: c.get("user").id, outcome: "dashboard" });
     return c.json({ ok: true });
   });

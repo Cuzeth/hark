@@ -342,3 +342,66 @@ export const liveActivityDeliveryAttempt = sqliteTable(
     index("live_activity_attempt_activity_created_idx").on(table.activityId, table.createdAt),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// Self-hosted product analytics
+//
+// These tables hold aggregate usage signals only: identifiers, enum-ish names,
+// coarse buckets and counters. Notification content, prompts, reply text,
+// tokens, emails, IP addresses and user agents are never written here.
+// ---------------------------------------------------------------------------
+
+/** Append-only usage log. Pruned after ANALYTICS_RETENTION_DAYS. */
+export const analyticsEvent = sqliteTable(
+  "analytics_event",
+  {
+    id: text("id").primaryKey(),
+    /** Stable event name, e.g. `webhook_delivered`. See lib/analytics.ts. */
+    name: text("name").notNull(),
+    userId: text("user_id"),
+    serviceId: text("service_id"),
+    deviceId: text("device_id"),
+    /** Billing plan observed when the event happened: `free` or `pro`. */
+    plan: text("plan"),
+    /** Coarse outcome bucket, e.g. `accepted`, `no_devices`, `push_rejected`. */
+    outcome: text("outcome"),
+    /** Counter carried by the event, e.g. accepted pushes. */
+    value: integer("value").notNull().default(0),
+    /** Small JSON object of primitives. Capped in size; never free-form content. */
+    metadata: text("metadata"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    index("analytics_event_name_created_at_idx").on(table.name, table.createdAt),
+    index("analytics_event_user_created_at_idx").on(table.userId, table.createdAt),
+    index("analytics_event_created_at_idx").on(table.createdAt),
+  ],
+);
+
+/** Tiny idempotent rollup keyed by UTC day plus metric name. Kept indefinitely. */
+export const analyticsDaily = sqliteTable(
+  "analytics_daily",
+  {
+    /** UTC date as `YYYY-MM-DD`. */
+    day: text("day").notNull(),
+    /** Event name, or `<name>:value` for the summed counter. */
+    metric: text("metric").notNull(),
+    value: integer("value").notNull().default(0),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [uniqueIndex("analytics_daily_day_metric_unique").on(table.day, table.metric)],
+);
+
+/** One row per user per UTC day of activity, so DAU/WAU/MAU is a cheap count. */
+export const analyticsUserDay = sqliteTable(
+  "analytics_user_day",
+  {
+    userId: text("user_id").notNull(),
+    day: text("day").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("analytics_user_day_user_day_unique").on(table.userId, table.day),
+    index("analytics_user_day_day_idx").on(table.day),
+  ],
+);

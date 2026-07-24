@@ -10,6 +10,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
 import { device, liveActivity, liveActivityDelivery, user as userTable } from "../db/schema";
+import { track } from "../lib/analytics";
 import { getBilling } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildWelcomePushMessages, sendPushMessages } from "../lib/push";
@@ -277,9 +278,17 @@ export const devicesRoute = new Hono<AuthedEnv>()
     if (!row) {
       return c.json({ error: "Failed to register device" }, 500);
     }
+    track({
+      name: "device_registered",
+      userId: user.id,
+      deviceId: row.id,
+      plan: billing.plan,
+      outcome: existing[0] ? "reregistered" : "created",
+    });
     let responseRow = row;
     if (shouldSendWelcome) {
       const messages = buildWelcomePushMessages(parsed.data.expoPushToken);
+      let sentWelcome = 0;
       for (const [index, message] of messages.entries()) {
         if (index > 0) await wait(2_000);
         const result = await sendPushMessages([message]);
@@ -289,17 +298,44 @@ export const devicesRoute = new Hono<AuthedEnv>()
             .set({ active: false, lastSeenAt: now })
             .where(eq(device.id, row.id));
           responseRow = { ...row, active: false };
+          track({
+            name: "device_deactivated_stale",
+            userId: user.id,
+            deviceId: row.id,
+            plan: billing.plan,
+            outcome: "onboarding",
+            value: 1,
+          });
           break;
         }
+        sentWelcome += result.accepted;
       }
+      track({
+        name: "onboarding_welcome_sent",
+        userId: user.id,
+        deviceId: row.id,
+        plan: billing.plan,
+        outcome: sentWelcome === messages.length ? "complete" : "partial",
+        value: sentWelcome,
+      });
     }
     return c.json({ device: toDto(responseRow) }, 201);
   })
   .delete("/:id", async (c) => {
     const user = c.get("user");
-    await db
+    const removed = await db
       .delete(device)
-      .where(and(eq(device.userId, user.id), eq(device.id, c.req.param("id"))));
+      .where(and(eq(device.userId, user.id), eq(device.id, c.req.param("id"))))
+      .returning({ id: device.id });
+    if (removed.length > 0) {
+      track({
+        name: "device_unregistered",
+        userId: user.id,
+        deviceId: removed[0]?.id ?? null,
+        outcome: "by_id",
+        value: removed.length,
+      });
+    }
     return c.json({ ok: true });
   })
   .delete("/", async (c) => {
@@ -308,8 +344,18 @@ export const devicesRoute = new Hono<AuthedEnv>()
     if (!parsed.success) {
       return c.json({ error: "Invalid request", issues: parsed.error.issues }, 400);
     }
-    await db
+    const removed = await db
       .delete(device)
-      .where(and(eq(device.userId, user.id), eq(device.expoPushToken, parsed.data.expoPushToken)));
+      .where(and(eq(device.userId, user.id), eq(device.expoPushToken, parsed.data.expoPushToken)))
+      .returning({ id: device.id });
+    if (removed.length > 0) {
+      track({
+        name: "device_unregistered",
+        userId: user.id,
+        deviceId: removed[0]?.id ?? null,
+        outcome: "by_token",
+        value: removed.length,
+      });
+    }
     return c.json({ ok: true });
   });

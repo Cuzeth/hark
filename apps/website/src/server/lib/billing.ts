@@ -2,6 +2,7 @@ import type { BillingDto } from "@hark/contracts";
 import { Autumn } from "autumn-js";
 import { env } from "../env";
 import type { AuthedUser } from "../middleware";
+import { track } from "./analytics";
 
 const FREE_NOTIFICATIONS = 10_000;
 const PRO_NOTIFICATIONS = 100_000;
@@ -12,6 +13,15 @@ const autumn = env.AUTUMN_API_KEY
   : null;
 
 const cache = new Map<string, { value: BillingDto; expiresAt: number }>();
+/** Per-process memo so an observed free → pro transition is recorded once. */
+const upgradesRecorded = new Set<string>();
+
+function recordUpgrade(userId: string, previous: BillingDto | undefined, next: BillingDto): void {
+  if (next.plan !== "pro" || previous?.plan !== "free" || upgradesRecorded.has(userId)) return;
+  if (upgradesRecorded.size > 10_000) upgradesRecorded.clear();
+  upgradesRecorded.add(userId);
+  track({ name: "plan_upgraded", userId, plan: "pro", outcome: "free_to_pro" });
+}
 
 function freeBilling(): BillingDto {
   return {
@@ -84,6 +94,7 @@ export async function getBilling(user: AuthedUser, useCache = false): Promise<Bi
       autoEnablePlanId: "free",
     });
     const value = toBilling(customer);
+    recordUpgrade(user.id, cached?.value, value);
     cache.set(user.id, { value, expiresAt: Date.now() + CACHE_TTL_MS });
     return value;
   } catch (error) {

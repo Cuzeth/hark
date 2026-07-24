@@ -299,6 +299,48 @@ describe("POST /hooks/:token", () => {
     expect(stale?.active).toBe(false);
   });
 
+  it("never returns provider error detail when every push fails", async () => {
+    const now = new Date();
+    const failToken = "whk_fail-only-abcdefghijklmnopqrstu";
+    await db.insert(schema.user).values({
+      id: "user_fail",
+      name: "Fail User",
+      email: "fail@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.service).values({
+      id: "svc_fail",
+      userId: "user_fail",
+      title: "Fail only",
+      tokenHash: hashWebhookToken(failToken),
+      createdAt: now,
+      updatedAt: now,
+    });
+    // The Expo mock only fails this token, and it is unique across devices.
+    const { eq } = await import("drizzle-orm");
+    await db
+      .delete(schema.device)
+      .where(eq(schema.device.expoPushToken, "ExponentPushToken[stale]"));
+    await db.insert(schema.device).values({
+      id: "dev_fail_only",
+      userId: "user_fail",
+      expoPushToken: "ExponentPushToken[stale]",
+      platform: "ios",
+      active: true,
+      createdAt: now,
+      lastSeenAt: now,
+    });
+
+    const res = await post(failToken, { body: "ping" });
+    expect(res.status).toBe(502);
+    const raw = await res.text();
+    expect(raw).not.toContain("ExponentPushToken");
+    expect(raw).not.toContain("device gone");
+    expect(JSON.parse(raw)).toEqual({ ok: false, error: "Push delivery failed" });
+  });
+
   it("rejects unauthenticated access to the services API", async () => {
     const res = await app.request("/api/services");
     expect(res.status).toBe(401);

@@ -24,6 +24,7 @@ import {
   service,
   user as userTable,
 } from "../db/schema";
+import { type AnalyticsEventName, failureBucket, track } from "../lib/analytics";
 import {
   isInvalidApnsTokenReason,
   type LiveActivityApnsEvent,
@@ -285,6 +286,48 @@ async function dispatch(
   };
 }
 
+/** Records the outcome of one Live Activity operation without touching task content. */
+function trackActivityOutcome(
+  name: Extract<
+    AnalyticsEventName,
+    "live_activity_started" | "live_activity_updated" | "live_activity_ended"
+  >,
+  userId: string,
+  targets: number,
+  result: { accepted: number; failed: number; errors: string[] },
+): void {
+  const outcome =
+    result.accepted > 0
+      ? result.failed > 0
+        ? "partial"
+        : "accepted"
+      : targets === 0
+        ? "no_devices"
+        : failureBucket(result.errors[0]);
+  track({
+    name,
+    userId,
+    outcome,
+    value: result.accepted,
+    metadata: { failed: result.failed, targets },
+  });
+  if (result.accepted > 0) {
+    track({
+      name: "notification_sent",
+      userId,
+      outcome: "live_activity",
+      value: result.accepted,
+    });
+    return;
+  }
+  track({
+    name: "live_activity_failed",
+    userId,
+    outcome,
+    metadata: { event: name.replace("live_activity_", ""), targets },
+  });
+}
+
 async function operationReplay(
   tokenId: string,
   key: string | undefined,
@@ -516,6 +559,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
+    trackActivityOutcome("live_activity_started", token.userId, deliveries.length, result);
     if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>(
       {
@@ -661,6 +705,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .from(liveActivityDelivery)
       .where(eq(liveActivityDelivery.activityId, row.id));
     const result = await dispatch(row, deliveries, operationId, "update", token.id);
+    trackActivityOutcome("live_activity_updated", token.userId, deliveries.length, result);
     const [updated] = await db
       .update(liveActivity)
       .set({
@@ -801,6 +846,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .from(liveActivityDelivery)
       .where(eq(liveActivityDelivery.activityId, row.id));
     const result = await dispatch(row, deliveries, operationId, "end", token.id);
+    trackActivityOutcome("live_activity_ended", token.userId, deliveries.length, result);
     const [updated] = await db
       .update(liveActivity)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })

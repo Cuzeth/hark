@@ -64,6 +64,13 @@
       "when": 1784916448420,
       "tag": "0008_eminent_havok",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1784919690458,
+      "tag": "0009_chemical_sumo",
+      "breakpoints": true
     }
   ]
 }

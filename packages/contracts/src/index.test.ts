@@ -47,6 +47,34 @@ describe("webhookRequestSchema", () => {
     ).toBe(true);
   });
 
+  it("only accepts http and https tap destinations", () => {
+    for (const url of [
+      "javascript:alert(1)",
+      "data:text/html,x",
+      "file:///etc/passwd",
+      "hark://open",
+    ]) {
+      expect(webhookRequestSchema.safeParse({ body: "x", url }).success).toBe(false);
+    }
+    expect(webhookRequestSchema.safeParse({ body: "x", url: "http://example.com" }).success).toBe(
+      true,
+    );
+    expect(webhookRequestSchema.safeParse({ body: "x", url: "https://example.com" }).success).toBe(
+      true,
+    );
+  });
+
+  it("rejects image URLs on mapped and carrier-grade private ranges", () => {
+    for (const imageUrl of [
+      "https://[::ffff:127.0.0.1]/a.png",
+      "https://100.64.0.1/a.png",
+      "https://192.0.0.1/a.png",
+      "https://198.18.0.1/a.png",
+    ]) {
+      expect(webhookRequestSchema.safeParse({ body: "x", imageUrl }).success).toBe(false);
+    }
+  });
+
   it("accepts full overrides", () => {
     const result = webhookRequestSchema.safeParse({
       body: "3 new sign-ups",

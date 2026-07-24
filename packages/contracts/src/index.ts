@@ -30,6 +30,10 @@ function isPublicHttpsUrl(value: string): boolean {
         (a === 169 && b === 254) ||
         (a === 172 && b !== undefined && b >= 16 && b <= 31) ||
         (a === 192 && b === 168) ||
+        // Carrier-grade NAT and IETF protocol assignments reach internal hosts too.
+        (a === 100 && b !== undefined && b >= 64 && b <= 127) ||
+        (a === 192 && b === 0) ||
+        (a === 198 && b !== undefined && (b === 18 || b === 19)) ||
         a === 224 ||
         a === 255
       ) {
@@ -41,7 +45,9 @@ function isPublicHttpsUrl(value: string): boolean {
       hostname === "::1" ||
       hostname.startsWith("fc") ||
       hostname.startsWith("fd") ||
-      hostname.startsWith("fe80:")
+      hostname.startsWith("fe80:") ||
+      // IPv4-mapped IPv6 (::ffff:127.0.0.1) otherwise bypasses the checks above.
+      hostname.startsWith("::ffff:")
     ) {
       return false;
     }
@@ -57,6 +63,23 @@ const publicHttpsUrlSchema = z
   .max(2048)
   .refine(isPublicHttpsUrl, "Must be a public HTTPS URL");
 
+/**
+ * Tap destinations are handed to the iOS app and opened with `Linking.openURL`,
+ * so only web schemes are accepted: `javascript:`, `data:`, `file:` and custom
+ * app schemes must never reach a device.
+ */
+const webUrlSchema = z
+  .url()
+  .max(2048)
+  .refine((value) => {
+    try {
+      const { protocol } = new URL(value);
+      return protocol === "https:" || protocol === "http:";
+    } catch {
+      return false;
+    }
+  }, "Must be an http or https URL");
+
 // ---------------------------------------------------------------------------
 // Services
 // ---------------------------------------------------------------------------
@@ -64,7 +87,7 @@ const publicHttpsUrlSchema = z
 export const serviceCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),
   imageUrl: publicHttpsUrlSchema.nullish(),
-  url: z.url().max(2048).nullish(),
+  url: webUrlSchema.nullish(),
 });
 export type ServiceCreateInput = z.infer<typeof serviceCreateSchema>;
 
@@ -99,7 +122,7 @@ export const webhookRequestSchema = z.object({
   body: z.string().trim().min(1, "body is required").max(2000),
   title: z.string().trim().min(1).max(80).optional(),
   imageUrl: publicHttpsUrlSchema.optional(),
-  url: z.url().max(2048).optional(),
+  url: webUrlSchema.optional(),
   deviceIds: z
     .array(z.string().trim().min(1).max(100))
     .min(1)
@@ -389,7 +412,7 @@ export const interactionCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),
   prompt: z.string().trim().min(1, "Prompt is required").max(2000),
   kind: interactionKindSchema,
-  url: z.url().max(2048).optional(),
+  url: webUrlSchema.optional(),
   deviceIds: z
     .array(z.string().trim().min(1).max(100))
     .min(1)

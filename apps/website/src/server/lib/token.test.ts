@@ -62,7 +62,9 @@ describe("webhook token encryption", () => {
 
   it("rejects modified ciphertext", () => {
     const encrypted = encryptWebhookToken(generateWebhookToken());
-    expect(() => decryptWebhookToken(`${encrypted.slice(0, -1)}x`)).toThrow();
+    // Values are base64url, so swap to a character the original cannot already be.
+    const replacement = encrypted.endsWith("A") ? "B" : "A";
+    expect(() => decryptWebhookToken(`${encrypted.slice(0, -1)}${replacement}`)).toThrow();
   });
 });
 

@@ -19,6 +19,7 @@ import {
   service,
   user as userTable,
 } from "../db/schema";
+import { failureBucket, track } from "../lib/analytics";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildInteractionPushMessages, sendPushMessages } from "../lib/push";
@@ -103,6 +104,7 @@ export const agentRoute = new Hono<AgentEnv>()
       .update(apiToken)
       .set({ revokedAt: new Date() })
       .where(and(eq(apiToken.id, c.get("apiToken").id), isNull(apiToken.revokedAt)));
+    track({ name: "api_token_revoked", userId: c.get("apiToken").userId, outcome: "agent" });
     return c.json({ ok: true });
   })
   .get("/devices", requireScopes("devices:read"), async (c) => {
@@ -374,6 +376,13 @@ export const agentRoute = new Hono<AgentEnv>()
       throw error;
     }
     if (selectedDevices.length === 0) {
+      track({
+        name: "interaction_created",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "no_devices",
+        metadata: { kind: parsed.data.kind },
+      });
       return c.json(
         {
           interaction: toDto(row),
@@ -398,6 +407,13 @@ export const agentRoute = new Hono<AgentEnv>()
         .update(device)
         .set({ active: false })
         .where(inArray(device.expoPushToken, result.staleTokens));
+      track({
+        name: "device_deactivated_stale",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "interaction",
+        value: result.staleTokens.length,
+      });
     }
     const [updated] = await db
       .update(interaction)
@@ -405,14 +421,30 @@ export const agentRoute = new Hono<AgentEnv>()
       .where(eq(interaction.id, row.id))
       .returning();
     row = updated ?? row;
-    if (result.accepted > 0) await trackNotification(token.userId, row.id);
+    track({
+      name: "interaction_created",
+      userId: token.userId,
+      plan: billing.plan,
+      outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
+      value: result.accepted,
+      metadata: { kind: parsed.data.kind, targets: messages.length },
+    });
+    if (result.accepted > 0) {
+      track({
+        name: "notification_sent",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "interaction",
+        value: result.accepted,
+      });
+      await trackNotification(token.userId, row.id);
+    }
     return c.json(
       {
         interaction: toDto(row),
         accepted: result.accepted,
-        ...(result.accepted === 0
-          ? { message: result.errors.join("; ") || "No notifications were accepted by Expo." }
-          : {}),
+        // Provider errors can embed push tokens, so the reason is deliberately coarse.
+        ...(result.accepted === 0 ? { message: "No notifications were accepted by Expo." } : {}),
       },
       201,
     );
@@ -531,7 +563,16 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
         ),
       )
       .returning();
-    if (row) return c.json({ interaction: toDto(row) });
+    if (row) {
+      track({
+        name: "interaction_responded",
+        userId: user.id,
+        deviceId: registeredDevice.id,
+        outcome: parsed.data.action,
+        metadata: { kind: current.kind },
+      });
+      return c.json({ interaction: toDto(row) });
+    }
 
     const terminal = await expireIfNeeded(current);
     const [latest] = await db

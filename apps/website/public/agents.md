@@ -37,7 +37,7 @@ curl -X POST https://hark.ryan.ceo/hooks/whk_your_token \
 | `url` | No | Destination opened when the notification is tapped. |
 | `deviceIds` | No | Hark Pro only. One or more device IDs from the dashboard. Omit to notify all active devices. |
 
-Unknown fields are rejected.
+Unknown fields are ignored. The `url` field must use `http` or `https`.
 
 ## Idempotency
 

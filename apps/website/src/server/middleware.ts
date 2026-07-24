@@ -4,6 +4,7 @@ import { createMiddleware } from "hono/factory";
 import { auth } from "./auth";
 import { db } from "./db";
 import { apiToken } from "./db/schema";
+import { trackUserActive } from "./lib/analytics";
 import { hashApiToken } from "./lib/token";
 
 export interface AuthedUser {
@@ -37,6 +38,7 @@ export const requireAuth = createMiddleware<AuthedEnv>(async (c, next) => {
     email: session.user.email,
     image: session.user.image,
   });
+  trackUserActive(session.user.id);
   await next();
 });
 
@@ -63,6 +65,7 @@ export const requireApiToken = createMiddleware<AgentEnv>(async (c, next) => {
   }
 
   c.set("apiToken", token);
+  trackUserActive(token.userId);
   if (!token.lastUsedAt || token.lastUsedAt.getTime() <= now.getTime() - 60_000) {
     await db
       .update(apiToken)

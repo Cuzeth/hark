@@ -12,6 +12,7 @@ import {
   service as serviceTable,
   user as userTable,
 } from "../db/schema";
+import { failureBucket, track } from "../lib/analytics";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildPushMessages, resolveNotification, sendPushMessages } from "../lib/push";
@@ -114,6 +115,12 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
   }
 
   const billing = await getBilling(owner, true);
+  track({
+    name: "webhook_received",
+    userId: svc.userId,
+    serviceId: svc.id,
+    plan: billing.plan,
+  });
   if (parsed.data.deviceIds && !billing.features.deviceRouting) {
     return c.json<WebhookResponse>({ ok: false, error: "Device routing requires Hark Pro" }, 402);
   }
@@ -159,6 +166,13 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
 
   if ((serviceUsage?.value ?? 0) >= billing.limits.servicePerMinute) {
     c.header("Retry-After", "60");
+    track({
+      name: "webhook_rate_limited",
+      userId: svc.userId,
+      serviceId: svc.id,
+      plan: billing.plan,
+      outcome: "service",
+    });
     return c.json<WebhookResponse>(
       { ok: false, error: "Service rate limit exceeded", retryAfterSeconds: 60 },
       429,
@@ -171,6 +185,13 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
     billing.limits.accountPerMinute
   ) {
     c.header("Retry-After", "60");
+    track({
+      name: "webhook_rate_limited",
+      userId: svc.userId,
+      serviceId: svc.id,
+      plan: billing.plan,
+      outcome: "account",
+    });
     return c.json<WebhookResponse>(
       { ok: false, error: "Account rate limit exceeded", retryAfterSeconds: 60 },
       429,
@@ -178,6 +199,12 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
   }
 
   if (!(await checkNotificationAllowance(svc.userId))) {
+    track({
+      name: "webhook_quota_exceeded",
+      userId: svc.userId,
+      serviceId: svc.id,
+      plan: billing.plan,
+    });
     return c.json<WebhookResponse>({ ok: false, error: "Monthly notification limit reached" }, 429);
   }
 
@@ -234,6 +261,13 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
 
   if (devices.length === 0) {
     await db.update(event).set({ status: "no_devices" }).where(eq(event.id, eventId));
+    track({
+      name: "webhook_delivered",
+      userId: svc.userId,
+      serviceId: svc.id,
+      plan: billing.plan,
+      outcome: "no_devices",
+    });
     return c.json<WebhookResponse>({
       ok: true,
       eventId,
@@ -255,6 +289,13 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
       .update(device)
       .set({ active: false })
       .where(inArray(device.expoPushToken, result.staleTokens));
+    track({
+      name: "device_deactivated_stale",
+      userId: svc.userId,
+      plan: billing.plan,
+      outcome: "webhook",
+      value: result.staleTokens.length,
+    });
   }
 
   const status =
@@ -267,11 +308,36 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
     .where(eq(event.id, eventId));
 
   if (result.accepted === 0) {
-    return c.json<WebhookResponse>(
-      { ok: false, error: "Push delivery failed", issues: result.errors },
-      502,
-    );
+    track({
+      name: "webhook_failed",
+      userId: svc.userId,
+      serviceId: svc.id,
+      plan: billing.plan,
+      outcome: failureBucket(result.errors[0]),
+      metadata: { targets: messages.length },
+    });
+    // Provider errors can embed the recipient push token, so they stay in the
+    // owner-only event log rather than the webhook caller's response.
+    return c.json<WebhookResponse>({ ok: false, error: "Push delivery failed" }, 502);
   }
+
+  track({
+    name: "webhook_delivered",
+    userId: svc.userId,
+    serviceId: svc.id,
+    plan: billing.plan,
+    outcome: status,
+    value: result.accepted,
+    metadata: { targets: messages.length },
+  });
+  track({
+    name: "notification_sent",
+    userId: svc.userId,
+    serviceId: svc.id,
+    plan: billing.plan,
+    outcome: "webhook",
+    value: result.accepted,
+  });
 
   await trackNotification(svc.userId, eventId);
 
