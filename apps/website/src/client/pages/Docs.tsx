@@ -122,54 +122,6 @@ export function Docs() {
             log to inspect failures and devices that are no longer registered.
           </p>
         </DocSection>
-
-        <DocSection title="Agent approvals and replies">
-          <p className="text-sm leading-relaxed text-neutral-500">
-            Install the Node 22+ <InlineCode>harkctl</InlineCode> package, then authorize it in your
-            browser. Hark shows the requested scopes before creating a short-lived, revocable token.
-            Dashboard token management remains available as an advanced fallback.
-          </p>
-          <div className="mt-4">
-            <Code>{`harkctl auth login
-harkctl auth status
-harkctl ask "Deploy production?" --approval --wait --timeout 15m --json
-harkctl ask "Release note?" --reply --device dev_your_iphone_id --wait --json
-harkctl auth logout`}</Code>
-          </div>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-            Approval interactions have fixed Approve and Deny actions. Reply interactions provide a
-            text action. The first valid response before expiry wins across devices. Use a unique
-            <InlineCode>--idempotency-key</InlineCode> when a caller may retry creation. A
-            successful create reports how many requests Expo accepted; it does not prove device
-            delivery or that the user saw the notification.
-          </p>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-            Expand or long-press the notification to reveal its actions. Tapping the notification
-            body only opens its configured deep link and does not submit a response.
-          </p>
-        </DocSection>
-
-        <DocSection title="Agent task Live Activities">
-          <p className="text-sm leading-relaxed text-neutral-500">
-            A browser-authorized agent with <InlineCode>activities:read</InlineCode> and{" "}
-            <InlineCode>activities:write</InlineCode> can show finite task progress on the Lock
-            Screen and Dynamic Island. Hark uses one fixed template; agents cannot provide custom
-            SwiftUI or remote images. Device targeting is Pro-only.
-          </p>
-          <div className="mt-4">
-            <Code>{`harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 --stale-after 20m --idempotency-key release-start
-harkctl activity update release-main --status "Testing" --progress 0.7 --if-sequence 0
-harkctl activity get release-main
-harkctl activity list
-harkctl activity end release-main --status "Complete" --progress 1 --if-sequence 1 --dismiss-after 30s`}</Code>
-          </div>
-          <p className="mt-3 text-sm leading-relaxed text-neutral-500">
-            Progress is between 0 and 1. Use <InlineCode>--if-sequence</InlineCode> to reject stale
-            writers and <InlineCode>--idempotency-key</InlineCode> when retrying a mutation. The
-            response reports APNs-accepted and failed device counts; acceptance is not proof the
-            activity was visible. Use private mode for sensitive Lock Screen environments.
-          </p>
-        </DocSection>
       </main>
     </div>
   );
