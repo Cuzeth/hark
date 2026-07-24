@@ -26,12 +26,18 @@ const REQUEST_TTL_SECONDS = 600;
 const INITIAL_POLL_INTERVAL_SECONDS = 5;
 const buckets = new Map<string, { count: number; resetAt: number }>();
 
-function requestKey(c: { req: { header(name: string): string | undefined } }): string {
-  return (
-    c.req.header("x-real-ip") ??
-    c.req.header("x-forwarded-for")?.split(",", 1)[0]?.trim() ??
-    "unknown"
-  );
+/**
+ * A client IP is only trustworthy when an edge we control sets it, and any header a
+ * client can send is attacker-controlled: rotating it would hand out a fresh bucket
+ * and defeat the per-client limit. Returns null unless TRUSTED_CLIENT_IP_HEADER names
+ * a header the edge is known to overwrite, in which case per-client limits resume.
+ */
+export function requestKey(c: {
+  req: { header(name: string): string | undefined };
+}): string | null {
+  if (!env.TRUSTED_CLIENT_IP_HEADER) return null;
+  const value = c.req.header(env.TRUSTED_CLIENT_IP_HEADER)?.split(",", 1)[0]?.trim();
+  return value || null;
 }
 
 function consumeLimit(key: string, limit: number, windowMs: number): boolean {
@@ -51,15 +57,18 @@ function consumeLimit(key: string, limit: number, windowMs: number): boolean {
   return current.count <= limit;
 }
 
-function rateLimited(kind: string, key: string, limit: number): boolean {
-  return (
-    !consumeLimit(`${kind}:client:${key}`, limit, 60_000) ||
-    !consumeLimit(`${kind}:global`, limit * 20, 60_000)
-  );
+/** Without a trusted client key the shared bucket is the only honest control. */
+function rateLimited(kind: string, key: string | null, limit: number): boolean {
+  if (key !== null && !consumeLimit(`${kind}:client:${key}`, limit, 60_000)) return true;
+  return !consumeLimit(`${kind}:global`, limit * 20, 60_000);
 }
 
-function codeRateLimited(userId: string, clientKey: string): boolean {
-  return rateLimited("code", `${userId}:${clientKey}`, 30) || rateLimited("code-user", userId, 60);
+function codeRateLimited(userId: string, clientKey: string | null): boolean {
+  return (
+    rateLimited("code", clientKey === null ? null : `${userId}:${clientKey}`, 30) ||
+    // Keyed by session, so this bucket cannot be reset with a request header.
+    rateLimited("code-user", userId, 60)
+  );
 }
 
 function hasForeignOrigin(c: { req: { header(name: string): string | undefined } }): boolean {

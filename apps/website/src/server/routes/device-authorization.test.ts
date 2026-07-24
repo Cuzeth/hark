@@ -25,6 +25,7 @@ vi.mock("../auth", () => ({
 }));
 
 let app: typeof import("../app")["app"];
+let requestKey: typeof import("./device-authorization")["requestKey"];
 let db: typeof import("../db")["db"];
 let schema: typeof import("../db/schema");
 let hashApiToken: typeof import("../lib/token")["hashApiToken"];
@@ -35,6 +36,7 @@ beforeAll(async () => {
   ({ db } = await import("../db"));
   schema = await import("../db/schema");
   ({ hashApiToken, hashDeviceCode } = await import("../lib/token"));
+  ({ requestKey } = await import("./device-authorization"));
   const { runMigrations } = await import("../db/migrate");
   runMigrations();
   const now = new Date();
@@ -67,6 +69,18 @@ async function start(clientName = "Test CLI") {
   };
 }
 
+function startWithForwardedFor(ip: string) {
+  return app.request("/api/device-authorization/start", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-for": ip, "x-real-ip": ip },
+    body: JSON.stringify({
+      clientName: "Spoofer",
+      scopes: ["services:read"],
+      expiresInSeconds: 3600,
+    }),
+  });
+}
+
 async function poll(deviceCode: string) {
   return app.request("/api/device-authorization/token", {
     method: "POST",
@@ -85,6 +99,13 @@ async function allowNextPoll(deviceCode: string) {
 
 describe("device authorization", () => {
   it("requires a human approval and returns the API secret exactly once", async () => {
+    const spoofed = { req: { header: () => "203.0.113.7" } };
+    // Without TRUSTED_CLIENT_IP_HEADER, a caller must not be able to select its own
+    // bucket by sending x-forwarded-for / x-real-ip.
+    expect(requestKey(spoofed)).toBeNull();
+    expect((await startWithForwardedFor("203.0.113.7")).status).toBe(201);
+    expect((await startWithForwardedFor("198.51.100.9")).status).toBe(201);
+
     const started = await start("Local Agent");
     expect(started.deviceCode).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(started.userCode).toMatch(/^[23456789A-Z]{4}-[23456789A-Z]{4}$/);

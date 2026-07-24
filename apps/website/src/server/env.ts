@@ -22,6 +22,13 @@ const envSchema = z.object({
   APNS_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
   /** Autumn production secret key. Kept server-side and never exposed to clients. */
   AUTUMN_API_KEY: z.string().optional(),
+  /**
+   * Header carrying the real client IP, set (and overwritten) by a trusted edge.
+   * Leave unset when the edge does not provide one: client-supplied forwarded
+   * headers are spoofable and would let a caller reset its own rate-limit bucket.
+   */
+  /** Empty means unset, matching how compose passes absent optional values. */
+  TRUSTED_CLIENT_IP_HEADER: z.string().trim().optional(),
   SERVICE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   ACCOUNT_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
   PRO_SERVICE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
