@@ -104,6 +104,7 @@ export function Dashboard() {
   const [billingActivating, setBillingActivating] = useState(
     () => new URLSearchParams(window.location.search).get("billing") === "success",
   );
+  const [planOpen, setPlanOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState<
     (ServiceCreatedResponse & { kind: "created" | "rotated" }) | null
@@ -202,6 +203,18 @@ export function Dashboard() {
             <Link className="text-sm text-neutral-500 transition hover:text-neutral-900" to="/docs">
               Docs
             </Link>
+            <button
+              type="button"
+              disabled={billing === null}
+              onClick={() => setPlanOpen(true)}
+              className={`min-h-10 rounded-full px-3.5 text-xs font-semibold transition-transform active:scale-[0.96] disabled:opacity-50 ${
+                billing?.plan === "pro"
+                  ? "bg-accent-soft text-accent"
+                  : "bg-accent hover:bg-accent-hover text-white"
+              }`}
+            >
+              {billingActivating ? "Activating…" : billing?.plan === "pro" ? "Pro" : "Upgrade"}
+            </button>
             {session.user.image ? (
               <img
                 src={session.user.image}
@@ -224,7 +237,6 @@ export function Dashboard() {
 
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
         <AppDownloadBanner />
-        <BillingCard billing={billing} activating={billingActivating} />
 
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
@@ -268,6 +280,14 @@ export function Dashboard() {
               setReveal({ ...response, kind: "created" });
               void refresh();
             }}
+          />
+        ) : null}
+
+        {planOpen ? (
+          <PlanModal
+            activating={billingActivating}
+            billing={billing}
+            onClose={() => setPlanOpen(false)}
           />
         ) : null}
 
@@ -346,9 +366,37 @@ function WebhookReveal({
   );
 }
 
-function BillingCard({ billing, activating }: { billing: BillingDto | null; activating: boolean }) {
+function PlanModal({
+  billing,
+  activating,
+  onClose,
+}: {
+  billing: BillingDto | null;
+  activating: boolean;
+  onClose: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  const close = useCallback(() => {
+    if (closing || busy) return;
+    setClosing(true);
+    window.setTimeout(onClose, 120);
+  }, [busy, closing, onClose]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [close]);
 
   const redirectToBilling = async (kind: "checkout" | "portal") => {
     setBusy(true);
@@ -364,48 +412,151 @@ function BillingCard({ billing, activating }: { billing: BillingDto | null; acti
   };
 
   return (
-    <section className="mb-10 rounded-2xl border border-neutral-200 bg-white p-5 shadow-xs">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold">
-              {billing?.plan === "pro" ? "Hark Pro" : "Hark Free"}
+    <div className={`hark-modal-backdrop ${closing ? "is-closing" : ""}`}>
+      <button
+        aria-label="Close plans dialog"
+        className="hark-modal-dismiss"
+        disabled={busy}
+        onClick={close}
+        type="button"
+      />
+      <section
+        aria-labelledby="plans-title"
+        aria-modal="true"
+        className="hark-modal-panel hark-plan-panel"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-accent text-xs font-medium uppercase">Plans</p>
+            <h2 id="plans-title" className="mt-1 text-xl font-semibold">
+              Choose how far Hark can reach.
             </h2>
-            {billing?.plan === "pro" ? (
-              <span className="bg-accent-soft text-accent rounded-full px-2 py-0.5 text-[11px] font-medium">
-                Active
-              </span>
-            ) : null}
+            <p className="mt-1 text-sm text-neutral-500">
+              Start free, then upgrade when you need more devices or volume.
+            </p>
           </div>
-          <p className="mt-1 max-w-xl text-xs leading-5 text-neutral-500">
-            {activating
-              ? "Payment received. Activating your Pro entitlements…"
-              : billing?.plan === "pro"
-                ? "Multiple iPhones, targeted device routing, and 5× higher per-minute limits."
-                : billing?.configured === false
-                  ? "Billing is temporarily unavailable. Your Free features continue to work."
-                  : "One iPhone, 10,000 notifications each month, and generous basic rate limits."}
-          </p>
-          {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+          <button
+            aria-label="Close"
+            className="grid size-10 shrink-0 place-items-center rounded-full text-xl leading-none text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 active:scale-[0.96]"
+            disabled={busy}
+            onClick={close}
+            type="button"
+          >
+            ×
+          </button>
         </div>
-        <button
-          type="button"
-          disabled={busy || billing === null || !billing.configured || activating}
-          onClick={() => void redirectToBilling(billing?.plan === "pro" ? "portal" : "checkout")}
-          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50 sm:self-auto"
-        >
-          {busy
-            ? "Opening…"
-            : activating
-              ? "Activating…"
-              : billing?.configured === false
-                ? "Billing unavailable"
-                : billing?.plan === "pro"
-                  ? "Manage billing"
-                  : "Upgrade · $8/month"}
-        </button>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <PlanTier
+            current={billing?.plan === "free"}
+            description="Everything a personal webhook setup needs."
+            features={[
+              "1 active iPhone",
+              "10,000 notifications per month",
+              "60 requests per minute per service",
+              "300 requests per minute per account",
+            ]}
+            name="Free"
+            price="$0"
+          />
+          <PlanTier
+            current={billing?.plan === "pro"}
+            description="For more devices and busier automations."
+            featured
+            features={[
+              "Unlimited active iPhones",
+              "Route notifications to specific devices",
+              "100,000 notifications per month",
+              "300 requests per minute per service",
+              "1,500 requests per minute per account",
+            ]}
+            name="Pro"
+            price="$8"
+            priceSuffix="/ month"
+          />
+        </div>
+
+        {activating ? (
+          <p className="bg-accent-soft text-accent mt-4 rounded-xl px-4 py-3 text-sm font-medium">
+            Payment received. Activating your Pro entitlements…
+          </p>
+        ) : null}
+        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+
+        <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-neutral-400">Powered by Autumn. Cancel anytime.</p>
+          <button
+            type="button"
+            disabled={busy || billing === null || !billing.configured || activating}
+            onClick={() => void redirectToBilling(billing?.plan === "pro" ? "portal" : "checkout")}
+            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-5 text-sm font-semibold text-white transition-transform active:scale-[0.96] disabled:opacity-50"
+          >
+            {busy
+              ? "Opening…"
+              : activating
+                ? "Activating…"
+                : billing?.configured === false
+                  ? "Billing unavailable"
+                  : billing?.plan === "pro"
+                    ? "Manage billing"
+                    : "Upgrade to Pro · $8/month"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PlanTier({
+  name,
+  price,
+  priceSuffix,
+  description,
+  features,
+  current,
+  featured,
+}: {
+  name: string;
+  price: string;
+  priceSuffix?: string;
+  description: string;
+  features: string[];
+  current: boolean;
+  featured?: boolean;
+}) {
+  return (
+    <article
+      className={`rounded-xl border p-4 ${
+        featured ? "border-accent bg-accent/[0.025]" : "border-neutral-200 bg-neutral-50/60"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className={`text-sm font-semibold ${featured ? "text-accent" : ""}`}>{name}</h3>
+          <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+            {price}
+            {priceSuffix ? (
+              <span className="ml-1 text-xs font-normal text-neutral-400">{priceSuffix}</span>
+            ) : null}
+          </p>
+        </div>
+        {current ? (
+          <span className="bg-accent-soft text-accent rounded-full px-2 py-1 text-[11px] font-semibold">
+            Current
+          </span>
+        ) : null}
       </div>
-    </section>
+      <p className="mt-2 text-xs leading-5 text-neutral-500">{description}</p>
+      <ul className="mt-4 space-y-2.5">
+        {features.map((feature) => (
+          <li className="flex gap-2 text-xs leading-4 text-neutral-600" key={feature}>
+            <span className="bg-accent mt-1.5 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
+            <span>{feature}</span>
+          </li>
+        ))}
+      </ul>
+    </article>
   );
 }
 

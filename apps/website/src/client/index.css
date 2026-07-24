@@ -106,6 +106,12 @@ address {
   animation: hark-panel-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
+.hark-plan-panel {
+  width: min(100%, 42rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
 .hark-modal-dismiss {
   position: absolute;
   inset: 0;
