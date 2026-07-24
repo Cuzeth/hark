@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo"
+        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo",
+        "EXPO_PUBLIC_APNS_ENVIRONMENT": "sandbox"
       }
     },
     "development-simulator": {
@@ -18,7 +19,8 @@
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo"
+        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo",
+        "EXPO_PUBLIC_APNS_ENVIRONMENT": "sandbox"
       }
     },
     "production": {
@@ -28,7 +30,8 @@
         "buildConfiguration": "Release"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo"
+        "EXPO_PUBLIC_API_URL": "https://hark.ryan.ceo",
+        "EXPO_PUBLIC_APNS_ENVIRONMENT": "production"
       }
     }
   },
