@@ -61,39 +61,6 @@ export function Landing() {
             <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
           )}
         </div>
-        <section
-          className="mt-20 w-full border-t border-neutral-200 pt-8"
-          aria-labelledby="pricing-heading"
-        >
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-accent text-xs font-medium uppercase">Pricing</p>
-              <h2 id="pricing-heading" className="mt-2 text-2xl font-semibold">
-                Start free. Route more with Pro.
-              </h2>
-            </div>
-            <span className="text-xs text-neutral-400">Powered by Autumn</span>
-          </div>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-neutral-200 bg-white p-5">
-              <p className="text-sm font-semibold">Free</p>
-              <p className="mt-2 text-3xl font-semibold">$0</p>
-              <p className="mt-3 text-sm leading-6 text-neutral-500">
-                One iPhone, 10,000 notifications per month, and 60 requests per minute per service.
-              </p>
-            </div>
-            <div className="border-accent rounded-2xl border bg-white p-5">
-              <p className="text-accent text-sm font-semibold">Pro</p>
-              <p className="mt-2 text-3xl font-semibold">
-                $8<span className="text-sm font-normal text-neutral-400">/month</span>
-              </p>
-              <p className="mt-3 text-sm leading-6 text-neutral-500">
-                Multiple iPhones, targeted routing, 100,000 notifications, and 5× higher rate
-                limits.
-              </p>
-            </div>
-          </div>
-        </section>
       </main>
 
       <footer className="mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-6 text-xs text-neutral-400">

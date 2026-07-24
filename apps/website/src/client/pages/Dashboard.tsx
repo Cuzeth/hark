@@ -112,6 +112,7 @@ export function Dashboard() {
     () => new URLSearchParams(window.location.search).get("billing") === "success",
   );
   const [planOpen, setPlanOpen] = useState(false);
+  const [agentAccessOpen, setAgentAccessOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ServiceDto | null>(null);
   const [reveal, setReveal] = useState<
@@ -318,6 +319,14 @@ export function Dashboard() {
           />
         ) : null}
 
+        {agentAccessOpen ? (
+          <AgentAccessModal
+            tokens={apiTokens}
+            onChanged={() => void refresh()}
+            onClose={() => setAgentAccessOpen(false)}
+          />
+        ) : null}
+
         <ServiceList
           services={services}
           onEdit={setEditing}
@@ -330,7 +339,7 @@ export function Dashboard() {
 
         <Devices devices={devices} billing={billing} onRemoved={() => void refresh()} />
 
-        <AgentAccess tokens={apiTokens} onChanged={() => void refresh()} />
+        <AgentAccessSummary tokens={apiTokens} onOpen={() => setAgentAccessOpen(true)} />
 
         <LiveActivities activities={liveActivities} />
 
@@ -340,7 +349,113 @@ export function Dashboard() {
   );
 }
 
-function AgentAccess({
+function AgentAccessSummary({
+  tokens,
+  onOpen,
+}: {
+  tokens: ApiTokenDto[] | null;
+  onOpen: () => void;
+}) {
+  const activeCount = tokens?.filter((token) => !token.revokedAt).length ?? null;
+  return (
+    <section
+      className="mt-16 flex items-center justify-between gap-4 border-y border-neutral-200 py-4"
+      aria-labelledby="agent-access-heading"
+    >
+      <div>
+        <h2 id="agent-access-heading" className="text-sm font-semibold">
+          Agent access
+        </h2>
+        <p className="mt-0.5 text-xs text-neutral-500">
+          {activeCount === null
+            ? "Loading access…"
+            : activeCount === 0
+              ? "Connect harkctl and other agents."
+              : `${activeCount} active ${activeCount === 1 ? "token" : "tokens"}`}
+        </p>
+      </div>
+      <button
+        className="min-h-10 rounded-full border border-neutral-200 px-4 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50"
+        onClick={onOpen}
+        type="button"
+      >
+        Manage
+      </button>
+    </section>
+  );
+}
+
+function AgentAccessModal({
+  tokens,
+  onChanged,
+  onClose,
+}: {
+  tokens: ApiTokenDto[] | null;
+  onChanged: () => void;
+  onClose: () => void;
+}) {
+  const [closing, setClosing] = useState(false);
+
+  const close = useCallback(() => {
+    if (closing) return;
+    setClosing(true);
+    window.setTimeout(onClose, 120);
+  }, [closing, onClose]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [close]);
+
+  return (
+    <div className={`hark-modal-backdrop ${closing ? "is-closing" : ""}`}>
+      <button
+        aria-label="Close agent access dialog"
+        className="hark-modal-dismiss"
+        onClick={close}
+        type="button"
+      />
+      <section
+        aria-labelledby="agent-access-dialog-title"
+        aria-modal="true"
+        className="hark-modal-panel hark-plan-panel"
+        role="dialog"
+      >
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-accent text-xs font-medium uppercase">harkctl</p>
+            <h2 id="agent-access-dialog-title" className="mt-1 text-xl font-semibold">
+              Agent access
+            </h2>
+            <p className="mt-1 max-w-xl text-sm text-neutral-500">
+              Create and revoke scoped credentials. New agents can also connect with{" "}
+              <code className="font-mono text-xs">harkctl auth login</code>.
+            </p>
+          </div>
+          <button
+            aria-label="Close"
+            className="grid size-10 shrink-0 place-items-center rounded-full text-xl leading-none text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 active:scale-[0.96]"
+            onClick={close}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <AgentAccessManager tokens={tokens} onChanged={onChanged} />
+      </section>
+    </div>
+  );
+}
+
+function AgentAccessManager({
   tokens,
   onChanged,
 }: {
@@ -408,15 +523,7 @@ function AgentAccess({
   };
 
   return (
-    <section className="mt-16" aria-labelledby="agent-access-heading">
-      <h2 id="agent-access-heading" className="text-lg font-semibold">
-        Agent access
-      </h2>
-      <p className="mt-1 max-w-2xl text-sm text-neutral-500">
-        Create a scoped token for <code className="font-mono text-xs">harkctl</code>. The secret is
-        shown once and cannot access billing, account deletion, or webhook token rotation.
-      </p>
-
+    <div className="mt-6">
       {created ? (
         <div className="bg-accent-soft mt-5 rounded-xl p-4">
           <div className="flex items-start justify-between gap-3">
@@ -530,7 +637,7 @@ function AgentAccess({
           ))}
         </ul>
       ) : null}
-    </section>
+    </div>
   );
 }
 
@@ -714,7 +821,7 @@ function PlanModal({
         {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
 
         <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-neutral-400">Powered by Autumn. Cancel anytime.</p>
+          <p className="text-xs text-neutral-400">Cancel anytime.</p>
           <button
             type="button"
             disabled={busy || billing === null || !billing.configured || activating}
@@ -1272,20 +1379,17 @@ function ServiceList({
   };
 
   return (
-    <ul className="space-y-3">
+    <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
       {services.map((svc) => (
-        <li
-          key={svc.id}
-          className="flex flex-col gap-4 rounded-2xl border border-neutral-200 bg-white p-4 shadow-xs sm:flex-row sm:items-center"
-        >
+        <li key={svc.id} className="flex items-center gap-3 py-3">
           {svc.imageUrl ? (
             <img
               src={svc.imageUrl}
               alt=""
-              className="size-10 shrink-0 rounded-full border border-neutral-200 object-cover"
+              className="size-8 shrink-0 rounded-full border border-neutral-200 object-cover"
             />
           ) : (
-            <div className="bg-accent flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white">
+            <div className="bg-accent flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white">
               {svc.title.slice(0, 1).toUpperCase()}
             </div>
           )}
@@ -1296,7 +1400,7 @@ function ServiceList({
               {new Date(svc.createdAt).toLocaleDateString()}
             </p>
           </div>
-          <div className="flex shrink-0 flex-wrap gap-2 self-end sm:self-auto">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
             <button
               type="button"
               disabled={!svc.webhookUrl}
@@ -1306,7 +1410,7 @@ function ServiceList({
                   : "Rotate this legacy token once to make its URL copyable"
               }
               onClick={() => void copy(svc)}
-              className="bg-accent hover:bg-accent-hover rounded-full px-3 py-1.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-400"
+              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-300"
             >
               {copiedId === svc.id ? "Copied" : "Copy webhook"}
             </button>
