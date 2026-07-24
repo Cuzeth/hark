@@ -2,6 +2,7 @@ import type { DeviceAuthorizationRequestDto } from "@hark/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { GoogleButton } from "../components/GoogleButton";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { api } from "../lib/api";
 import { signInWithGoogle, useSession } from "../lib/auth";
 
@@ -69,14 +70,19 @@ export function CliAuthorize() {
         <Link className="text-lg font-semibold" to="/">
           Hark
         </Link>
-        {session ? (
-          <span className="max-w-48 truncate text-xs text-neutral-400">{session.user.email}</span>
-        ) : null}
+        <div className="flex items-center gap-3">
+          {session ? (
+            <span className="text-ink-faint max-w-48 truncate text-xs">{session.user.email}</span>
+          ) : null}
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-lg flex-1 items-center px-5 pb-20 sm:px-6">
-        <section className="w-full rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl shadow-neutral-900/5 sm:p-8">
-          <p className="text-accent text-xs font-semibold uppercase tracking-wide">CLI access</p>
+        <section className="w-full rounded-2xl border border-line bg-surface p-5 shadow-xl shadow-ink/5 sm:p-8 dark:shadow-none dark:ring-1 dark:ring-white/10">
+          <p className="text-accent-text text-xs font-semibold uppercase tracking-wide">
+            CLI access
+          </p>
           <h1 className="mt-2 text-2xl font-semibold text-balance">
             Authorize a command-line client
           </h1>
@@ -89,7 +95,7 @@ export function CliAuthorize() {
               <input
                 autoCapitalize="characters"
                 autoComplete="one-time-code"
-                className="focus:border-accent mt-2 min-h-12 w-full rounded-xl border border-neutral-300 px-4 font-mono text-lg uppercase tracking-[0.12em] outline-none"
+                className="focus:border-accent border-line-strong bg-field text-ink placeholder:text-ink-faint mt-2 min-h-12 w-full rounded-xl border px-4 font-mono text-lg uppercase tracking-[0.12em] outline-none"
                 id="device-code"
                 maxLength={9}
                 onChange={(event) => setCode(event.target.value)}
@@ -97,30 +103,30 @@ export function CliAuthorize() {
                 value={code}
               />
               <button
-                className="bg-accent hover:bg-accent-hover mt-4 min-h-11 w-full rounded-full px-5 text-sm font-semibold text-white"
+                className="bg-accent hover:bg-accent-hover mt-4 min-h-11 w-full rounded-full px-5 text-sm font-semibold text-on-accent"
                 type="submit"
               >
                 Continue
               </button>
             </form>
           ) : isPending ? (
-            <p className="mt-6 text-sm text-neutral-400">Checking your session…</p>
+            <p className="mt-6 text-sm text-ink-faint">Checking your session…</p>
           ) : !session ? (
             <div className="mt-6">
-              <p className="mb-5 text-sm leading-6 text-neutral-500">
+              <p className="mb-5 text-sm leading-6 text-ink-subtle">
                 Sign in to choose whether this client may access your Hark account. Signing in does
                 not authorize it.
               </p>
               <GoogleButton onClick={() => void signInWithGoogle(callbackURL)} />
             </div>
           ) : loading ? (
-            <p className="mt-6 text-sm text-neutral-400">Loading authorization request…</p>
+            <p className="mt-6 text-sm text-ink-faint">Loading authorization request…</p>
           ) : request ? (
             <AuthorizationDetails request={request} busy={busy} onResolve={resolve} />
           ) : null}
 
           {error ? (
-            <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="mt-5 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
               {error}
             </div>
           ) : null}
@@ -142,17 +148,17 @@ function AuthorizationDetails({
   const pending = request.status === "pending";
   return (
     <div className="mt-6">
-      <div className="rounded-xl bg-neutral-50 p-4">
-        <p className="text-xs text-neutral-400">Requesting client</p>
+      <div className="rounded-xl bg-surface-muted p-4">
+        <p className="text-xs text-ink-faint">Requesting client</p>
         <p className="mt-1 font-semibold">{request.clientName}</p>
-        <div className="mt-4 flex items-end justify-between gap-4 border-t border-neutral-200 pt-4">
+        <div className="mt-4 flex items-end justify-between gap-4 border-t border-line pt-4">
           <div>
-            <p className="text-xs text-neutral-400">Code</p>
+            <p className="text-xs text-ink-faint">Code</p>
             <p className="mt-1 font-mono text-lg font-semibold tracking-[0.12em]">
               {request.userCode}
             </p>
           </div>
-          <p className="text-right text-xs leading-5 text-neutral-400">
+          <p className="text-right text-xs leading-5 text-ink-faint">
             Request expires
             <br />
             {new Date(request.expiresAt).toLocaleTimeString()}
@@ -165,14 +171,14 @@ function AuthorizationDetails({
         <ul className="mt-2 space-y-2">
           {request.scopes.map((scope) => (
             <li
-              className="rounded-lg border border-neutral-200 px-3 py-2 font-mono text-xs text-neutral-600"
+              className="rounded-lg border border-line px-3 py-2 font-mono text-xs text-ink-muted"
               key={scope}
             >
               {scope}
             </li>
           ))}
         </ul>
-        <p className="mt-3 text-xs text-neutral-400">
+        <p className="mt-3 text-xs text-ink-faint">
           Access token expires {new Date(request.tokenExpiresAt).toLocaleString()}.
         </p>
       </div>
@@ -180,7 +186,7 @@ function AuthorizationDetails({
       {pending ? (
         <div className="mt-6 grid grid-cols-2 gap-3">
           <button
-            className="min-h-11 rounded-full border border-neutral-300 px-4 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="min-h-11 rounded-full border border-line-strong px-4 text-sm font-semibold text-ink-muted hover:bg-surface-hover disabled:opacity-50"
             disabled={busy}
             onClick={() => void onResolve("deny")}
             type="button"
@@ -188,7 +194,7 @@ function AuthorizationDetails({
             Deny
           </button>
           <button
-            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-4 text-sm font-semibold text-white disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-4 text-sm font-semibold text-on-accent disabled:opacity-50"
             disabled={busy}
             onClick={() => void onResolve("approve")}
             type="button"
@@ -198,7 +204,7 @@ function AuthorizationDetails({
         </div>
       ) : (
         <div
-          className={`mt-6 rounded-xl px-4 py-3 text-sm font-medium ${request.status === "approved" || request.status === "consumed" ? "bg-accent-soft text-accent" : "bg-neutral-100 text-neutral-600"}`}
+          className={`mt-6 rounded-xl px-4 py-3 text-sm font-medium ${request.status === "approved" || request.status === "consumed" ? "bg-accent-soft text-accent-text" : "bg-surface-hover text-ink-muted"}`}
         >
           {request.status === "approved" || request.status === "consumed"
             ? "Authorized. You can return to your terminal."

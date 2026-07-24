@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { ThemeToggle } from "../components/ThemeToggle";
 
 const updated = "July 24, 2026";
 
@@ -18,21 +19,22 @@ function LegalLayout({
           <Link to="/" className="text-lg font-semibold">
             Hark
           </Link>
-          <nav className="flex items-center gap-4 text-sm text-neutral-500" aria-label="Primary">
-            <Link className="transition hover:text-neutral-900" to="/docs">
+          <nav className="flex items-center gap-4 text-sm text-ink-subtle" aria-label="Primary">
+            <Link className="transition hover:text-ink" to="/docs">
               Docs
             </Link>
-            <Link className="transition hover:text-neutral-900" to="/">
+            <Link className="transition hover:text-ink" to="/">
               Home
             </Link>
+            <ThemeToggle />
           </nav>
         </div>
       </header>
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
-        <p className="text-accent mb-3 text-xs font-medium uppercase">{eyebrow}</p>
+        <p className="text-accent-text mb-3 text-xs font-medium uppercase">{eyebrow}</p>
         <h1 className="text-3xl font-semibold">{title}</h1>
-        <p className="mt-3 text-sm text-neutral-400">Last updated {updated}</p>
-        <div className="legal-copy mt-10 max-w-2xl space-y-8 text-sm leading-relaxed text-neutral-600">
+        <p className="mt-3 text-sm text-ink-faint">Last updated {updated}</p>
+        <div className="legal-copy mt-10 max-w-2xl space-y-8 text-sm leading-relaxed text-ink-muted">
           {children}
         </div>
       </main>
@@ -43,7 +45,7 @@ function LegalLayout({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section>
-      <h2 className="mb-2 text-base font-semibold text-neutral-900">{title}</h2>
+      <h2 className="mb-2 text-base font-semibold text-ink">{title}</h2>
       {children}
     </section>
   );
@@ -150,7 +152,10 @@ export function Privacy() {
       <Section title="Contact">
         <p>
           Questions or privacy requests can be sent to{" "}
-          <a className="text-accent underline underline-offset-2" href="mailto:ryan@mandarin3d.com">
+          <a
+            className="text-accent-text underline underline-offset-2"
+            href="mailto:ryan@mandarin3d.com"
+          >
             ryan@mandarin3d.com
           </a>
           .
@@ -251,7 +256,10 @@ export function Terms() {
       <Section title="Contact">
         <p>
           Questions about these terms can be sent to{" "}
-          <a className="text-accent underline underline-offset-2" href="mailto:ryan@mandarin3d.com">
+          <a
+            className="text-accent-text underline underline-offset-2"
+            href="mailto:ryan@mandarin3d.com"
+          >
             ryan@mandarin3d.com
           </a>
           .

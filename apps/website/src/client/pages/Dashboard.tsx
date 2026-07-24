@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
 import { CopyField } from "../components/CopyField";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { api } from "../lib/api";
 import { signOut, useSession } from "../lib/auth";
 
@@ -192,7 +193,7 @@ export function Dashboard() {
   }, [session, billingActivating]);
 
   if (isPending || !session) {
-    return <div className="flex min-h-dvh items-center justify-center text-neutral-400">…</div>;
+    return <div className="flex min-h-dvh items-center justify-center text-ink-faint">…</div>;
   }
 
   const activeDeviceCount = devices?.filter((device) => device.active).length ?? null;
@@ -209,23 +210,31 @@ export function Dashboard() {
             Hark
           </Link>
           <div className="flex items-center gap-3">
-            <Link className="text-sm text-neutral-500 transition hover:text-neutral-900" to="/docs">
+            {/*
+              The dashboard header is the densest on the site — the overlapping
+              Upgrade/Sign out pair alone is ~150px — so the toggle appears from
+              `sm` up, the same way the account email does. Below `sm` the OS
+              preference applies and the toggle is one tap away on any other
+              page.
+            */}
+            <ThemeToggle className="hidden sm:inline-flex" />
+            <Link className="text-ink-subtle hover:text-ink text-sm transition" to="/docs">
               Docs
             </Link>
             {session.user.image ? (
               <img
                 src={session.user.image}
                 alt=""
-                className="size-7 rounded-full border border-neutral-200"
+                className="border-media-line size-7 rounded-full border"
                 referrerPolicy="no-referrer"
               />
             ) : null}
-            <span className="hidden text-sm text-neutral-500 sm:block">{session.user.email}</span>
+            <span className="hidden text-sm text-ink-subtle sm:block">{session.user.email}</span>
             <div className="relative">
               <button
                 type="button"
                 onClick={() => void signOut().then(() => navigate("/"))}
-                className="min-h-10 rounded-full border border-neutral-200 bg-white pr-3.5 pl-[5.75rem] text-xs font-medium text-neutral-600 shadow-xs transition-colors hover:bg-neutral-50"
+                className="min-h-10 rounded-full border border-line bg-surface pr-3.5 pl-[5.75rem] text-xs font-medium text-ink-muted shadow-xs transition-colors hover:bg-surface-hover"
               >
                 Sign out
               </button>
@@ -233,7 +242,7 @@ export function Dashboard() {
                 type="button"
                 disabled={billing === null}
                 onClick={() => setPlanOpen(true)}
-                className="bg-accent hover:bg-accent-hover absolute inset-y-0 left-0 z-10 min-h-10 rounded-full px-4 text-xs font-semibold text-white shadow-md transition-transform active:scale-[0.96] disabled:opacity-50"
+                className="bg-accent hover:bg-accent-hover absolute inset-y-0 left-0 z-10 min-h-10 rounded-full px-4 text-xs font-semibold text-on-accent shadow-md transition-transform active:scale-[0.96] disabled:opacity-50"
               >
                 {billingActivating ? "Activating…" : billing?.plan === "pro" ? "Pro" : "Upgrade"}
               </button>
@@ -248,7 +257,7 @@ export function Dashboard() {
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Services</h1>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-subtle">
               {deliveryDeviceCount === null
                 ? "Each service gets a secret webhook URL."
                 : deliveryDeviceCount === 0
@@ -259,14 +268,14 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-white transition"
+            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition"
           >
             New service
           </button>
         </div>
 
         {error ? (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <div className="mb-6 rounded-xl border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger">
             {error}
           </div>
         ) : null}
@@ -358,7 +367,7 @@ function WebhookReveal({
   return (
     <section className="mb-10">
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-accent text-sm font-semibold">
+        <h2 className="text-accent-text text-sm font-semibold">
           {reveal.kind === "created"
             ? `“${reveal.service.title}” is ready`
             : `New webhook URL for “${reveal.service.title}”`}
@@ -366,12 +375,12 @@ function WebhookReveal({
         <button
           type="button"
           onClick={onDismiss}
-          className="text-accent text-xs font-medium underline-offset-2 hover:underline"
+          className="text-accent-text text-xs font-medium underline-offset-2 hover:underline"
         >
           Done
         </button>
       </div>
-      <p className="text-accent mb-4 text-xs">
+      <p className="text-accent-text mb-4 text-xs">
         This URL is encrypted at rest and remains available from your service's copy button.
       </p>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -381,7 +390,7 @@ function WebhookReveal({
         <button
           type="button"
           onClick={copyAgentPrompt}
-          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium text-white transition sm:self-auto"
+          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium text-on-accent transition sm:self-auto"
         >
           {agentPromptCopied ? "Agent prompt copied" : "Copy agent prompt"}
         </button>
@@ -452,17 +461,17 @@ function PlanModal({
       >
         <div className="flex items-start justify-between gap-6">
           <div>
-            <p className="text-accent text-xs font-medium uppercase">Plans</p>
+            <p className="text-accent-text text-xs font-medium uppercase">Plans</p>
             <h2 id="plans-title" className="mt-1 text-xl font-semibold">
               Choose how far Hark can reach.
             </h2>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-subtle">
               Start free, then upgrade when you need more devices or volume.
             </p>
           </div>
           <button
             aria-label="Close"
-            className="grid size-10 shrink-0 place-items-center rounded-full text-xl leading-none text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 active:scale-[0.96]"
+            className="grid size-10 shrink-0 place-items-center rounded-full text-xl leading-none text-ink-faint transition-colors hover:bg-surface-hover hover:text-ink-muted active:scale-[0.96]"
             disabled={busy}
             onClick={close}
             type="button"
@@ -502,19 +511,19 @@ function PlanModal({
         </div>
 
         {activating ? (
-          <p className="bg-accent-soft text-accent mt-4 rounded-xl px-4 py-3 text-sm font-medium">
+          <p className="bg-accent-soft text-accent-text mt-4 rounded-xl px-4 py-3 text-sm font-medium">
             Payment received. Activating your Pro entitlements…
           </p>
         ) : null}
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
 
         <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-neutral-400">Cancel anytime.</p>
+          <p className="text-xs text-ink-faint">Cancel anytime.</p>
           <button
             type="button"
             disabled={busy || billing === null || !billing.configured || activating}
             onClick={() => void redirectToBilling(billing?.plan === "pro" ? "portal" : "checkout")}
-            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-5 text-sm font-semibold text-white transition-transform active:scale-[0.96] disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-5 text-sm font-semibold text-on-accent transition-transform active:scale-[0.96] disabled:opacity-50"
           >
             {busy
               ? "Opening…"
@@ -552,29 +561,29 @@ function PlanTier({
   return (
     <article
       className={`rounded-xl border p-4 ${
-        featured ? "border-accent bg-accent/[0.025]" : "border-neutral-200 bg-neutral-50/60"
+        featured ? "border-accent bg-accent-wash" : "border-line bg-surface-muted"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className={`text-sm font-semibold ${featured ? "text-accent" : ""}`}>{name}</h3>
+          <h3 className={`text-sm font-semibold ${featured ? "text-accent-text" : ""}`}>{name}</h3>
           <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
             {price}
             {priceSuffix ? (
-              <span className="ml-1 text-xs font-normal text-neutral-400">{priceSuffix}</span>
+              <span className="ml-1 text-xs font-normal text-ink-faint">{priceSuffix}</span>
             ) : null}
           </p>
         </div>
         {current ? (
-          <span className="bg-accent-soft text-accent rounded-full px-2 py-1 text-[11px] font-semibold">
+          <span className="bg-accent-soft text-accent-text rounded-full px-2 py-1 text-[11px] font-semibold">
             Current
           </span>
         ) : null}
       </div>
-      <p className="mt-2 text-xs leading-5 text-neutral-500">{description}</p>
+      <p className="mt-2 text-xs leading-5 text-ink-subtle">{description}</p>
       <ul className="mt-4 space-y-2.5">
         {features.map((feature) => (
-          <li className="flex gap-2 text-xs leading-4 text-neutral-600" key={feature}>
+          <li className="flex gap-2 text-xs leading-4 text-ink-muted" key={feature}>
             <span className="bg-accent mt-1.5 size-1.5 shrink-0 rounded-full" aria-hidden="true" />
             <span>{feature}</span>
           </li>
@@ -617,30 +626,30 @@ function Devices({
         <h2 id="devices-heading" className="text-lg font-semibold">
           Devices
         </h2>
-        <p className="mt-1 text-sm text-neutral-500">
-          Omit <code className="font-mono text-xs text-neutral-700">deviceIds</code> to notify all
+        <p className="mt-1 text-sm text-ink-subtle">
+          Omit <code className="font-mono text-xs text-ink-muted">deviceIds</code> to notify all
           active devices. Pro can route a webhook to specific IDs.
         </p>
       </div>
-      {devices === null ? <p className="py-6 text-sm text-neutral-400">Loading devices…</p> : null}
+      {devices === null ? <p className="py-6 text-sm text-ink-faint">Loading devices…</p> : null}
       {devices?.length === 0 ? (
-        <p className="border-y border-neutral-200 py-8 text-sm text-neutral-400">
+        <p className="border-y border-line py-8 text-sm text-ink-faint">
           No iPhones registered yet.
         </p>
       ) : null}
       {devices && devices.length > 0 ? (
-        <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+        <ul className="divide-y divide-line border-y border-line">
           {devices.map((device) => (
             <li className="flex items-center justify-between gap-4 py-3" key={device.id}>
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">
                   {device.deviceName ?? "iPhone"}
                   {!device.active ? (
-                    <span className="ml-2 text-xs text-neutral-400">Inactive</span>
+                    <span className="ml-2 text-xs text-ink-faint">Inactive</span>
                   ) : null}
                 </p>
-                <p className="truncate font-mono text-[11px] text-neutral-400">{device.id}</p>
-                <p className="mt-0.5 text-[11px] text-neutral-400">
+                <p className="truncate font-mono text-[11px] text-ink-faint">{device.id}</p>
+                <p className="mt-0.5 text-[11px] text-ink-faint">
                   {device.liveActivitiesCapable
                     ? `Live Activities ready · ${device.liveActivityTokenEnvironment} · refreshed ${new Date(
                         device.liveActivityTokenUpdatedAt ?? device.lastSeenAt,
@@ -652,7 +661,7 @@ function Devices({
                 <button
                   type="button"
                   onClick={() => void navigator.clipboard.writeText(device.id)}
-                  className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50"
+                  className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover"
                 >
                   Copy ID
                 </button>
@@ -660,7 +669,7 @@ function Devices({
                   type="button"
                   disabled={busyId === device.id}
                   onClick={() => void remove(device)}
-                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                  className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -670,11 +679,11 @@ function Devices({
         </ul>
       ) : null}
       {billing?.plan === "free" && activeDevices.length >= 1 ? (
-        <p className="mt-3 text-xs text-neutral-400">
+        <p className="mt-3 text-xs text-ink-faint">
           Free includes one active iPhone. Upgrade to Pro before registering another.
         </p>
       ) : null}
-      {error ? <p className="mt-3 text-xs text-red-600">{error}</p> : null}
+      {error ? <p className="mt-3 text-xs text-danger">{error}</p> : null}
     </section>
   );
 }
@@ -749,7 +758,7 @@ function ServiceModal({
   };
 
   const inputClass =
-    "focus:border-accent w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-base text-neutral-900 placeholder:text-neutral-400 focus:outline-none sm:text-sm";
+    "focus:border-accent w-full rounded-lg border border-line-strong bg-field px-3 py-2 text-base text-ink placeholder:text-ink-faint focus:outline-none sm:text-sm";
 
   return (
     <div className={`hark-modal-backdrop ${closing ? "is-closing" : ""}`}>
@@ -772,13 +781,13 @@ function ServiceModal({
             <h2 id="service-form-title" className="text-lg font-semibold">
               {service ? "Edit service" : "New service"}
             </h2>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-sm text-ink-subtle">
               {service ? "Update this webhook's defaults." : "Set the defaults for this webhook."}
             </p>
           </div>
           <button
             aria-label="Close"
-            className="grid size-9 shrink-0 place-items-center rounded-full text-xl leading-none text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-xl leading-none text-ink-faint transition hover:bg-surface-hover hover:text-ink-muted"
             disabled={busy}
             onClick={() => close()}
             type="button"
@@ -788,7 +797,7 @@ function ServiceModal({
         </div>
         <div className="space-y-4">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-neutral-500">
+            <span className="mb-1.5 block text-xs font-medium text-ink-subtle">
               Title (sender name)
             </span>
             <input
@@ -802,7 +811,7 @@ function ServiceModal({
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-neutral-500">
+            <span className="mb-1.5 block text-xs font-medium text-ink-subtle">
               Avatar image URL <span className="font-normal">(optional)</span>
             </span>
             <input
@@ -814,7 +823,7 @@ function ServiceModal({
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-neutral-500">
+            <span className="mb-1.5 block text-xs font-medium text-ink-subtle">
               Destination URL <span className="font-normal">(optional, opened on tap)</span>
             </span>
             <input
@@ -826,20 +835,20 @@ function ServiceModal({
             />
           </label>
         </div>
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             disabled={busy}
             onClick={() => close()}
-            className="rounded-full px-4 py-2 text-sm font-medium text-neutral-500 transition hover:bg-neutral-100 disabled:opacity-50"
+            className="rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition hover:bg-surface-hover disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={busy || title.trim().length === 0}
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition disabled:opacity-50"
           >
             {busy
               ? service
@@ -862,14 +871,14 @@ function LiveActivities({ activities }: { activities: LiveActivityDto[] | null }
       <h2 id="live-activities-heading" className="text-lg font-semibold">
         Live Activities
       </h2>
-      <ul className="mt-4 divide-y divide-neutral-200 border-y border-neutral-200">
+      <ul className="mt-4 divide-y divide-line border-y border-line">
         {activities.map((activity) => (
           <li className="flex items-center justify-between gap-4 py-3" key={activity.id}>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{activity.props.title}</p>
-              <p className="truncate text-xs text-neutral-500">{activity.props.status}</p>
+              <p className="truncate text-xs text-ink-subtle">{activity.props.status}</p>
             </div>
-            <p className="shrink-0 font-mono text-[11px] text-neutral-400">
+            <p className="shrink-0 font-mono text-[11px] text-ink-faint">
               seq {activity.sequence} · {activity.status}
             </p>
           </li>
@@ -893,25 +902,23 @@ function ActivityLog({
           <h2 id="activity-heading" className="text-lg font-semibold">
             Activity
           </h2>
-          <p className="mt-1 text-sm text-neutral-500">Latest webhook delivery attempts.</p>
+          <p className="mt-1 text-sm text-ink-subtle">Latest webhook delivery attempts.</p>
         </div>
         <button
           type="button"
           onClick={() => void onRefresh()}
-          className="rounded-full px-3 py-1.5 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800"
+          className="rounded-full px-3 py-1.5 text-xs font-medium text-ink-subtle transition hover:bg-surface-hover hover:text-ink"
         >
           Refresh
         </button>
       </div>
 
-      {events === null ? <p className="py-6 text-sm text-neutral-400">Loading activity…</p> : null}
+      {events === null ? <p className="py-6 text-sm text-ink-faint">Loading activity…</p> : null}
       {events?.length === 0 ? (
-        <p className="border-t border-neutral-200 py-8 text-sm text-neutral-400">
-          No webhook activity yet.
-        </p>
+        <p className="border-t border-line py-8 text-sm text-ink-faint">No webhook activity yet.</p>
       ) : null}
       {events && events.length > 0 ? (
-        <ol className="divide-y divide-neutral-200 border-y border-neutral-200">
+        <ol className="divide-y divide-line border-y border-line">
           {events.map((activityEvent) => (
             <li className="flex gap-2.5 py-3" key={activityEvent.id}>
               <ActivityAvatar activityEvent={activityEvent} />
@@ -921,7 +928,7 @@ function ActivityLog({
                     {activityEvent.serviceTitle} · {activityEvent.title}
                   </p>
                   <time
-                    className="shrink-0 text-xs text-neutral-400"
+                    className="shrink-0 text-xs text-ink-faint"
                     dateTime={activityEvent.createdAt}
                     title={new Date(activityEvent.createdAt).toLocaleString()}
                   >
@@ -931,10 +938,10 @@ function ActivityLog({
                     })}
                   </time>
                 </div>
-                <p className="mt-0.5 truncate text-xs leading-4 text-neutral-500">
+                <p className="mt-0.5 truncate text-xs leading-4 text-ink-subtle">
                   {activityEvent.body}
                 </p>
-                <p className="mt-0.5 text-[11px] leading-4 text-neutral-400">
+                <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">
                   {activityLabel(activityEvent)}
                   {activityEvent.error ? ` · ${activityEvent.error}` : ""}
                 </p>
@@ -952,12 +959,12 @@ function StatusDot({ status }: { status: string }) {
     status === "accepted" || status === "delivered"
       ? "bg-accent"
       : status === "failed"
-        ? "bg-red-500"
+        ? "bg-danger-strong"
         : status === "partial"
-          ? "bg-amber-500"
+          ? "bg-warn"
           : status === "processing"
-            ? "bg-blue-500"
-            : "bg-neutral-300";
+            ? "bg-info"
+            : "bg-idle";
   return <span className={`${color} size-2 rounded-full`} aria-hidden="true" />;
 }
 
@@ -967,15 +974,15 @@ function ActivityAvatar({ activityEvent }: { activityEvent: EventDto }) {
       {activityEvent.imageUrl ? (
         <img
           alt=""
-          className="size-8 rounded-full border border-neutral-200 object-cover"
+          className="border-media-line size-8 rounded-full border object-cover"
           src={activityEvent.imageUrl}
         />
       ) : (
-        <span className="bg-accent-soft text-accent grid size-8 place-items-center rounded-full text-xs font-medium">
+        <span className="bg-accent-soft text-accent-text grid size-8 place-items-center rounded-full text-xs font-medium">
           {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
         </span>
       )}
-      <span className="absolute -right-0.5 -bottom-0.5 grid size-3 place-items-center rounded-full bg-white">
+      <span className="absolute -right-0.5 -bottom-0.5 grid size-3 place-items-center rounded-full bg-surface">
         <StatusDot status={activityEvent.status} />
       </span>
     </span>
@@ -1009,13 +1016,13 @@ function ServiceList({
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   if (services === null) {
-    return <div className="py-12 text-center text-sm text-neutral-400">Loading…</div>;
+    return <div className="py-12 text-center text-sm text-ink-faint">Loading…</div>;
   }
   if (services.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-neutral-300 py-14 text-center">
-        <p className="text-sm font-medium text-neutral-600">No services yet</p>
-        <p className="mx-auto mt-1 max-w-sm text-sm text-neutral-400">
+      <div className="rounded-2xl border border-dashed border-line-strong py-14 text-center">
+        <p className="text-sm font-medium text-ink-muted">No services yet</p>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-ink-faint">
           Create your first service to get a secret webhook URL you can POST to from CI, cron jobs,
           or anything else.
         </p>
@@ -1067,23 +1074,23 @@ function ServiceList({
   };
 
   return (
-    <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+    <ul className="divide-y divide-line border-y border-line">
       {services.map((svc) => (
         <li key={svc.id} className="flex items-center gap-3 py-3">
           {svc.imageUrl ? (
             <img
               src={svc.imageUrl}
               alt=""
-              className="size-8 shrink-0 rounded-full border border-neutral-200 object-cover"
+              className="border-media-line size-8 shrink-0 rounded-full border object-cover"
             />
           ) : (
-            <div className="bg-accent flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white">
+            <div className="bg-accent flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-on-accent">
               {svc.title.slice(0, 1).toUpperCase()}
             </div>
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{svc.title}</p>
-            <p className="truncate text-xs text-neutral-400">
+            <p className="truncate text-xs text-ink-faint">
               {svc.url ?? "No destination URL"} · created{" "}
               {new Date(svc.createdAt).toLocaleDateString()}
             </p>
@@ -1098,7 +1105,7 @@ function ServiceList({
                   : "Rotate this legacy token once to make its URL copyable"
               }
               onClick={() => void copy(svc)}
-              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed disabled:text-neutral-300"
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-disabled"
             >
               {copiedId === svc.id ? "Copied" : "Copy webhook"}
             </button>
@@ -1106,7 +1113,7 @@ function ServiceList({
               type="button"
               disabled={busyId === svc.id}
               onClick={() => onEdit(svc)}
-              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
             >
               Edit
             </button>
@@ -1114,7 +1121,7 @@ function ServiceList({
               type="button"
               disabled={busyId === svc.id}
               onClick={() => void rotate(svc)}
-              className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50 disabled:opacity-50"
+              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
             >
               Rotate token
             </button>
@@ -1122,7 +1129,7 @@ function ServiceList({
               type="button"
               disabled={busyId === svc.id}
               onClick={() => void remove(svc)}
-              className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+              className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
             >
               Delete
             </button>

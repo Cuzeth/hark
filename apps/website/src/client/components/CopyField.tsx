@@ -26,11 +26,11 @@ export function CopyField({ label, value }: Props) {
   return (
     <div className="min-w-0">
       {label ? (
-        <div className="mb-1 text-xs font-medium text-neutral-500 uppercase">{label}</div>
+        <div className="mb-1 text-xs font-medium text-ink-subtle uppercase">{label}</div>
       ) : null}
       <div className="flex items-center gap-2">
         <code
-          className="block min-w-0 flex-1 truncate font-mono text-[13px] leading-relaxed text-neutral-700"
+          className="block min-w-0 flex-1 truncate font-mono text-[13px] leading-relaxed text-ink-muted"
           title={value}
         >
           {value}
@@ -38,7 +38,7 @@ export function CopyField({ label, value }: Props) {
         <button
           type="button"
           onClick={copy}
-          className="grid size-9 shrink-0 place-items-center rounded-lg text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-900"
+          className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-subtle transition hover:bg-surface-hover hover:text-ink"
           aria-label={copied ? "Webhook URL copied" : "Copy webhook URL"}
           title={copied ? "Copied" : "Copy webhook URL"}
         >

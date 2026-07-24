@@ -4,7 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <meta name="theme-color" content="#035B49" />
+    <!--
+      Fallback chrome colours for the no-JS case. These can only track the OS
+      preference, so the script below replaces them with a single tag matching
+      the resolved theme (including a stored manual override).
+    -->
+    <meta name="theme-color" content="#035B49" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <script>
+      // Blocking on purpose: React mounts after first paint, so the theme class
+      // has to be on <html> before the browser paints or a dark-mode reload
+      // flashes the light theme. Keep in sync with src/client/lib/theme.ts.
+      try {
+        const stored = localStorage.getItem("hark-theme");
+        const isDark =
+          stored === "dark" ||
+          (stored !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", isDark);
+        for (const tag of document.querySelectorAll('meta[name="theme-color"]')) tag.remove();
+        const meta = document.createElement("meta");
+        meta.name = "theme-color";
+        meta.content = isDark ? "#0f1115" : "#035B49";
+        document.head.appendChild(meta);
+      } catch {
+        // Blocked storage: fall through to the light default.
+      }
+    </script>
     <title>Hark — webhooks to iOS notifications</title>
     <meta
       name="description"
