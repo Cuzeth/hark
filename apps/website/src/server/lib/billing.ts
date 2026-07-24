@@ -34,7 +34,9 @@ function toBilling(
 ): BillingDto {
   const isPro = customer.subscriptions.some(
     (subscription) =>
-      subscription.planId === "pro" && subscription.status === "active" && !subscription.pastDue,
+      subscription.planId === "pro_monthly" &&
+      subscription.status === "active" &&
+      !subscription.pastDue,
   );
   const notificationBalance = customer.balances.notifications;
 
@@ -133,7 +135,7 @@ export async function createCheckout(user: AuthedUser): Promise<string> {
   });
   const result = await autumn.billing.attach({
     customerId: user.id,
-    planId: "pro",
+    planId: "pro_monthly",
     redirectMode: "always",
     successUrl: `${env.APP_URL}/dashboard?billing=success`,
     checkoutSessionParams: { managed_payments: { enabled: false } },

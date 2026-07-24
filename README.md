@@ -125,15 +125,12 @@ Auth user IDs. If Autumn is temporarily unavailable, ordinary single-device
 delivery fails open and the last known plan remains active; accounts without a
 cached plan temporarily fall back to Free capabilities.
 
-Push the catalog and verify the live plans with:
+Preview and push the catalog with:
 
 ```sh
+pnpm exec atmn preview
 pnpm exec atmn push --prod --yes --headless
-pnpm exec atmn plans --prod --headless --id pro
 ```
-
-`atmn` 1.1.15's local preview currently formats base-plan minor units as
-major units. The production plan detail is the authoritative price check.
 
 ## Google OAuth
 

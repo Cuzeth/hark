@@ -50,14 +50,13 @@ export const freeV1 = plan({
   ],
 });
 
-export const proV1 = plan({
-  id: "pro",
-  version: 1,
+export const pro = plan({
+  id: "pro_monthly",
   name: "Pro",
   description: "Multiple iPhones, targeted routing, and higher limits.",
   group: "main",
   price: {
-    amount: 800,
+    amount: 8,
     interval: "month",
   },
   items: [
