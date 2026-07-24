@@ -136,6 +136,7 @@ export async function createCheckout(user: AuthedUser): Promise<string> {
     planId: "pro",
     redirectMode: "always",
     successUrl: `${env.APP_URL}/dashboard?billing=success`,
+    checkoutSessionParams: { managed_payments: { enabled: false } },
   });
   clearBillingCache(user.id);
   if (!result.paymentUrl) throw new Error("Autumn did not return a checkout URL");
