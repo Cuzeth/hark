@@ -5,8 +5,10 @@ Sign in with Google, create a **service**, copy its secret webhook URL, and
 every `POST` to it lands on your iPhone as a notification with the service's
 name and avatar — like a message from a contact.
 
-This MVP proves notification delivery only. No Android, billing, teams,
-browser push, transformations, or analytics.
+Hark supports a generous single-device Free plan and an $8/month Pro plan
+powered by Autumn. Pro unlocks multiple devices, targeted routing, and higher
+rate limits. Android, teams, browser push, transformations, and analytics are
+not currently supported.
 
 ## Architecture
 
@@ -31,13 +33,15 @@ hark/
 
 ### Delivery pipeline
 
-1. `POST /hooks/:token` with `{ "body": "...", "title"?, "imageUrl"?, "url"? }`.
+1. `POST /hooks/:token` with
+   `{ "body": "...", "title"?, "imageUrl"?, "url"?, "deviceIds"? }`.
 2. The token is hashed (SHA-256) and matched against the stored hash — the
    plaintext token is never persisted and is shown exactly once at creation
    or rotation.
 3. Overrides win over service defaults for title/image/url.
 4. A push is sent through the Expo Push Service to every active iOS device of
-   the owning user: `mutableContent: true`, `priority: high`,
+   the owning user by default. Pro requests can include `deviceIds` to target
+   specific registered devices. Pushes use `mutableContent: true`, `priority: high`,
    `richContent.image`, and a `data` payload
    (`v`, `eventId`, `serviceId`/`sourceId`, `sourceName`, `avatarUrl`, `url`,
    `conversationId`).
@@ -79,6 +83,7 @@ curl -X POST "$APP_URL/hooks/whk_..." \
 | `title`    | no       | Overrides the service title (sender name)    |
 | `imageUrl` | no       | Overrides the service avatar (valid URL)     |
 | `url`      | no       | Overrides the tap destination (valid URL)    |
+| `deviceIds`| no       | Pro: target IDs; omit to notify all devices   |
 
 `imageUrl` must be a public HTTPS URL. Localhost, private-network addresses,
 and non-HTTPS images are rejected.
@@ -87,14 +92,48 @@ and non-HTTPS images are rejected.
 same payload returns the original event without another push. Reusing it with a
 different payload returns `409 Conflict`.
 
-Rate limits use a rolling 60-second window: 60 requests per service and 300
-requests per account. Limited requests return `429` with `Retry-After: 60`.
+Device IDs are listed in the dashboard. `deviceIds` must be a non-empty array
+of IDs owned by the webhook's account. Unknown and cross-account IDs return
+`400 Invalid device selection`; inactive targets are skipped. The parsed array
+is deduplicated and sorted so target order does not alter idempotency.
+
+Rate limits use a rolling 60-second window. Free allows 60 requests per service
+and 300 per account; Pro allows 300 per service and 1,500 per account. Limited
+requests return `429` with `Retry-After: 60`.
 
 Responses: `200 { ok, eventId, delivered }`,
 `200 { ok, delivered: 0, message }` when no devices are registered,
 `400` invalid payload, `404` unknown token, `502` when Expo rejects delivery.
 Authenticated users can inspect the latest 50 attempts in the dashboard activity
 log. Public integration documentation is available at `/docs`.
+
+## Billing
+
+The pricing catalog is defined in `autumn.config.ts` and synced to Autumn with
+the `atmn` CLI:
+
+- Free: one iPhone, 10,000 accepted notifications per month, 60 requests per
+  minute per service, and 300 per minute per account.
+- Pro: $8/month, unlimited iPhones, targeted device routing, 100,000 accepted
+  notifications per month, 300 requests per minute per service, and 1,500 per
+  minute per account.
+
+The website server uses `AUTUMN_API_KEY`; it is never exposed to the browser or
+Expo app. Authenticated users start checkout and open the Stripe customer portal
+through Hark's `/api/billing` routes. Autumn customer IDs are the stable Better
+Auth user IDs. If Autumn is temporarily unavailable, ordinary single-device
+delivery fails open and the last known plan remains active; accounts without a
+cached plan temporarily fall back to Free capabilities.
+
+Push the catalog and verify the live plans with:
+
+```sh
+pnpm exec atmn push --prod --yes --headless
+pnpm exec atmn plans --prod --headless --id pro
+```
+
+`atmn` 1.1.15's local preview currently formats base-plan minor units as
+major units. The production plan detail is the authoritative price check.
 
 ## Google OAuth
 

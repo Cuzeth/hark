@@ -1,0 +1,152 @@
+import type { BillingDto } from "@hark/contracts";
+import { Autumn } from "autumn-js";
+import { env } from "../env";
+import type { AuthedUser } from "../middleware";
+
+const FREE_NOTIFICATIONS = 10_000;
+const PRO_NOTIFICATIONS = 100_000;
+const CACHE_TTL_MS = 60_000;
+
+const autumn = env.AUTUMN_API_KEY
+  ? new Autumn({ secretKey: env.AUTUMN_API_KEY, timeoutMs: 5_000 })
+  : null;
+
+const cache = new Map<string, { value: BillingDto; expiresAt: number }>();
+
+function freeBilling(): BillingDto {
+  return {
+    configured: autumn !== null,
+    plan: "free",
+    priceMonthly: 8,
+    features: { deviceRouting: false },
+    limits: {
+      devices: 1,
+      notificationsPerMonth: FREE_NOTIFICATIONS,
+      servicePerMinute: env.SERVICE_RATE_LIMIT_PER_MINUTE,
+      accountPerMinute: env.ACCOUNT_RATE_LIMIT_PER_MINUTE,
+    },
+    usage: { notificationsRemaining: FREE_NOTIFICATIONS },
+  };
+}
+
+function toBilling(
+  customer: Awaited<ReturnType<NonNullable<typeof autumn>["customers"]["getOrCreate"]>>,
+): BillingDto {
+  const isPro = customer.subscriptions.some(
+    (subscription) =>
+      subscription.planId === "pro" && subscription.status === "active" && !subscription.pastDue,
+  );
+  const notificationBalance = customer.balances.notifications;
+
+  return {
+    configured: true,
+    plan: isPro ? "pro" : "free",
+    priceMonthly: 8,
+    features: { deviceRouting: Boolean(customer.flags.device_routing) },
+    limits: {
+      devices: isPro ? null : 1,
+      notificationsPerMonth: isPro ? PRO_NOTIFICATIONS : FREE_NOTIFICATIONS,
+      servicePerMinute: isPro
+        ? env.PRO_SERVICE_RATE_LIMIT_PER_MINUTE
+        : env.SERVICE_RATE_LIMIT_PER_MINUTE,
+      accountPerMinute: isPro
+        ? env.PRO_ACCOUNT_RATE_LIMIT_PER_MINUTE
+        : env.ACCOUNT_RATE_LIMIT_PER_MINUTE,
+    },
+    usage: {
+      notificationsRemaining:
+        typeof notificationBalance?.remaining === "number" ? notificationBalance.remaining : null,
+    },
+  };
+}
+
+export function hasAutumn(): boolean {
+  return autumn !== null;
+}
+
+export function clearBillingCache(userId: string): void {
+  cache.delete(userId);
+}
+
+export async function getBilling(user: AuthedUser, useCache = false): Promise<BillingDto> {
+  if (!autumn) return freeBilling();
+
+  const cached = cache.get(user.id);
+  if (useCache && cached && cached.expiresAt > Date.now()) return cached.value;
+
+  try {
+    const customer = await autumn.customers.getOrCreate({
+      customerId: user.id,
+      name: user.name,
+      email: user.email,
+      autoEnablePlanId: "free",
+    });
+    const value = toBilling(customer);
+    cache.set(user.id, { value, expiresAt: Date.now() + CACHE_TTL_MS });
+    return value;
+  } catch (error) {
+    console.error("[billing] Could not load Autumn customer", error);
+    const fallback = cached?.value ?? freeBilling();
+    cache.set(user.id, { value: fallback, expiresAt: Date.now() + 15_000 });
+    return fallback;
+  }
+}
+
+export async function checkNotificationAllowance(userId: string): Promise<boolean> {
+  if (!autumn) return true;
+  try {
+    return (await autumn.check({ customerId: userId, featureId: "notifications" })).allowed;
+  } catch (error) {
+    console.error("[billing] Could not check notification allowance", error);
+    return true;
+  }
+}
+
+export async function trackNotification(userId: string, eventId: string): Promise<void> {
+  if (!autumn) return;
+  try {
+    await autumn.track({
+      customerId: userId,
+      featureId: "notifications",
+      value: 1,
+      properties: { eventId },
+    });
+    const cached = cache.get(userId);
+    if (cached && typeof cached.value.usage.notificationsRemaining === "number") {
+      cached.value.usage.notificationsRemaining = Math.max(
+        0,
+        cached.value.usage.notificationsRemaining - 1,
+      );
+    }
+  } catch (error) {
+    console.error("[billing] Could not track notification usage", error);
+  }
+}
+
+export async function createCheckout(user: AuthedUser): Promise<string> {
+  if (!autumn) throw new Error("Billing is not configured");
+  await autumn.customers.getOrCreate({
+    customerId: user.id,
+    name: user.name,
+    email: user.email,
+    autoEnablePlanId: "free",
+  });
+  const result = await autumn.billing.attach({
+    customerId: user.id,
+    planId: "pro",
+    redirectMode: "always",
+    successUrl: `${env.APP_URL}/dashboard?billing=success`,
+  });
+  clearBillingCache(user.id);
+  if (!result.paymentUrl) throw new Error("Autumn did not return a checkout URL");
+  return result.paymentUrl;
+}
+
+export async function createBillingPortal(user: AuthedUser): Promise<string> {
+  if (!autumn) throw new Error("Billing is not configured");
+  const result = await autumn.billing.openCustomerPortal({
+    customerId: user.id,
+    returnUrl: `${env.APP_URL}/dashboard`,
+  });
+  return result.url;
+}

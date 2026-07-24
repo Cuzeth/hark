@@ -16,3 +16,4 @@ data/
 apps/expo/ios/
 apps/expo/android/
 expo-env.d.ts
+@useautumn-sdk.d.ts

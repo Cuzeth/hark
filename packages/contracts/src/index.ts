@@ -93,6 +93,12 @@ export const webhookRequestSchema = z.object({
   title: z.string().trim().min(1).max(80).optional(),
   imageUrl: publicHttpsUrlSchema.optional(),
   url: z.url().max(2048).optional(),
+  deviceIds: z
+    .array(z.string().trim().min(1).max(100))
+    .min(1)
+    .max(50)
+    .transform((ids) => [...new Set(ids)].sort())
+    .optional(),
 });
 export type WebhookRequest = z.infer<typeof webhookRequestSchema>;
 
@@ -144,6 +150,32 @@ export interface DeviceDto {
   active: boolean;
   createdAt: string;
   lastSeenAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+export interface BillingDto {
+  configured: boolean;
+  plan: "free" | "pro";
+  priceMonthly: number;
+  features: {
+    deviceRouting: boolean;
+  };
+  limits: {
+    devices: number | null;
+    notificationsPerMonth: number;
+    servicePerMinute: number;
+    accountPerMinute: number;
+  };
+  usage: {
+    notificationsRemaining: number | null;
+  };
+}
+
+export interface BillingRedirectResponse {
+  url: string;
 }
 
 // ---------------------------------------------------------------------------

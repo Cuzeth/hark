@@ -1,5 +1,7 @@
 import type {
   ApiError,
+  BillingDto,
+  BillingRedirectResponse,
   DeviceDto,
   EventDto,
   ServiceCreatedResponse,
@@ -41,5 +43,11 @@ export const api = {
     request<ServiceCreatedResponse>(`/api/services/${id}/rotate`, { method: "POST" }),
   deleteService: (id: string) => request<{ ok: true }>(`/api/services/${id}`, { method: "DELETE" }),
   listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
+  removeDevice: (id: string) => request<{ ok: true }>(`/api/devices/${id}`, { method: "DELETE" }),
+  getBilling: () => request<BillingDto>("/api/billing"),
+  startCheckout: () =>
+    request<BillingRedirectResponse>("/api/billing/checkout", { method: "POST" }),
+  openBillingPortal: () =>
+    request<BillingRedirectResponse>("/api/billing/portal", { method: "POST" }),
   listEvents: (limit = 50) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
 };

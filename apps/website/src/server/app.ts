@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { auth } from "./auth";
+import { billingRoute } from "./routes/billing";
 import { devicesRoute } from "./routes/devices";
 import { eventsRoute } from "./routes/events";
 import { hooksRoute } from "./routes/hooks";
@@ -17,6 +18,7 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/services", servicesRoute);
+app.route("/api/billing", billingRoute);
 app.route("/api/devices", devicesRoute);
 app.route("/api/events", eventsRoute);
 app.route("/hooks", hooksRoute);

@@ -17,6 +17,7 @@
     "@better-auth/expo": "^1.6.25",
     "@hark/contracts": "workspace:*",
     "@hono/node-server": "^1.19.9",
+    "autumn-js": "1.2.44",
     "better-auth": "^1.6.25",
     "better-sqlite3": "^13.0.1",
     "drizzle-orm": "^0.45.2",

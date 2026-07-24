@@ -49,6 +49,19 @@ describe("webhookRequestSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("normalizes device routing targets for stable idempotency", () => {
+    const result = webhookRequestSchema.safeParse({
+      body: "Targeted",
+      deviceIds: ["dev_b", "dev_a", "dev_b"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
+  });
+
+  it("rejects an empty device routing list", () => {
+    expect(webhookRequestSchema.safeParse({ body: "Targeted", deviceIds: [] }).success).toBe(false);
+  });
 });
 
 describe("serviceCreateSchema", () => {

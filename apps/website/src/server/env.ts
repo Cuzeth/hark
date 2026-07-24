@@ -14,8 +14,12 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** Optional. Enables authenticated requests to the Expo Push Service. */
   EXPO_ACCESS_TOKEN: z.string().optional(),
+  /** Autumn production secret key. Kept server-side and never exposed to clients. */
+  AUTUMN_API_KEY: z.string().optional(),
   SERVICE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
   ACCOUNT_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
+  PRO_SERVICE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(300),
+  PRO_ACCOUNT_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(1500),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -40,6 +44,9 @@ export function assertRuntimeEnv(): void {
   }
   if (!env.EXPO_ACCESS_TOKEN) {
     problems.push("EXPO_ACCESS_TOKEN is not set — push requests to Expo will be unauthenticated.");
+  }
+  if (!env.AUTUMN_API_KEY) {
+    problems.push("AUTUMN_API_KEY is not set — paid plans and checkout will be unavailable.");
   }
 
   if (env.NODE_ENV === "production" && env.BETTER_AUTH_SECRET === DEV_SECRET) {

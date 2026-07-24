@@ -4,6 +4,29 @@ process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
 
 const sent: Array<Record<string, unknown>> = [];
+const billingTestState = vi.hoisted(() => ({ pro: false }));
+
+vi.mock("../lib/billing", () => ({
+  getBilling: async () => ({
+    configured: true,
+    plan: billingTestState.pro ? "pro" : "free",
+    priceMonthly: 8,
+    features: { deviceRouting: billingTestState.pro },
+    limits: {
+      devices: billingTestState.pro ? null : 1,
+      notificationsPerMonth: billingTestState.pro ? 100_000 : 10_000,
+      servicePerMinute: billingTestState.pro ? 300 : 60,
+      accountPerMinute: billingTestState.pro ? 1500 : 300,
+    },
+    usage: { notificationsRemaining: 10_000 },
+  }),
+  checkNotificationAllowance: async () => true,
+  trackNotification: async () => undefined,
+  hasAutumn: () => false,
+  clearBillingCache: () => undefined,
+  createCheckout: async () => "https://example.com/checkout",
+  createBillingPortal: async () => "https://example.com/portal",
+}));
 
 vi.mock("expo-server-sdk", () => {
   class Expo {
@@ -135,6 +158,95 @@ describe("POST /hooks/:token", () => {
     expect(JSON.stringify(sent[0])).not.toContain("user_1");
   });
 
+  it("delivers to all active devices by default on Pro", async () => {
+    const now = new Date();
+    await db.insert(schema.device).values({
+      id: "dev_2",
+      userId: "user_1",
+      expoPushToken: "ExponentPushToken[b]",
+      platform: "ios",
+      active: true,
+      createdAt: now,
+      lastSeenAt: now,
+    });
+
+    billingTestState.pro = true;
+    sent.length = 0;
+    const res = await post(TOKEN, { body: "Everyone" });
+    billingTestState.pro = false;
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, delivered: 2 });
+    expect(sent.map((message) => message.to).sort()).toEqual([
+      "ExponentPushToken[a]",
+      "ExponentPushToken[b]",
+    ]);
+  });
+
+  it("routes a Pro notification only to selected devices", async () => {
+    billingTestState.pro = true;
+    sent.length = 0;
+    const res = await post(TOKEN, { body: "Only A", deviceIds: ["dev_1"] });
+    billingTestState.pro = false;
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ ok: true, delivered: 1 });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.to).toBe("ExponentPushToken[a]");
+  });
+
+  it("requires Pro for targeted device routing", async () => {
+    const res = await post(TOKEN, { body: "Only A", deviceIds: ["dev_1"] });
+    expect(res.status).toBe(402);
+    expect(await res.json()).toMatchObject({
+      ok: false,
+      error: "Device routing requires Hark Pro",
+    });
+  });
+
+  it("rejects device IDs owned by another account", async () => {
+    const now = new Date();
+    await db.insert(schema.user).values({
+      id: "user_2",
+      name: "Other User",
+      email: "other@example.com",
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await db.insert(schema.device).values({
+      id: "dev_foreign",
+      userId: "user_2",
+      expoPushToken: "ExponentPushToken[foreign]",
+      platform: "ios",
+      active: true,
+      createdAt: now,
+      lastSeenAt: now,
+    });
+
+    billingTestState.pro = true;
+    sent.length = 0;
+    const res = await post(TOKEN, { body: "No leak", deviceIds: ["dev_foreign"] });
+    billingTestState.pro = false;
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ ok: false, error: "Invalid device selection" });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("treats reordered device IDs as the same idempotent request", async () => {
+    billingTestState.pro = true;
+    sent.length = 0;
+    const first = await post(TOKEN, { body: "Both", deviceIds: ["dev_1", "dev_2"] }, "targeted-1");
+    const second = await post(TOKEN, { body: "Both", deviceIds: ["dev_2", "dev_1"] }, "targeted-1");
+    billingTestState.pro = false;
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ ok: true, idempotent: true, delivered: 2 });
+    expect(sent).toHaveLength(2);
+  });
+
   it("suppresses duplicate requests with the same idempotency key", async () => {
     sent.length = 0;
     const first = await post(TOKEN, { body: "Only once", title: "CI" }, "deploy-184");
@@ -174,7 +286,9 @@ describe("POST /hooks/:token", () => {
       lastSeenAt: now,
     });
 
+    billingTestState.pro = true;
     const res = await post(TOKEN, { body: "ping" });
+    billingTestState.pro = false;
     expect(res.status).toBe(200);
 
     const { eq } = await import("drizzle-orm");

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { type WebhookResponse, webhookRequestSchema } from "@hark/contracts";
-import { and, count, eq, gte, inArray } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
-import { device, event, service as serviceTable } from "../db/schema";
-import { env } from "../env";
+import { device, event, service as serviceTable, user as userTable } from "../db/schema";
+import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildPushMessages, resolveNotification, sendPushMessages } from "../lib/push";
 import { hashWebhookToken } from "../lib/token";
@@ -56,14 +56,17 @@ function replayResponse(row: EventRow): {
 
 export const hooksRoute = new Hono().post("/:token", async (c) => {
   const token = c.req.param("token");
-  const [svc] = await db
-    .select()
+  const [match] = await db
+    .select({ service: serviceTable, owner: userTable })
     .from(serviceTable)
+    .innerJoin(userTable, eq(serviceTable.userId, userTable.id))
     .where(eq(serviceTable.tokenHash, hashWebhookToken(token)))
     .limit(1);
-  if (!svc) {
+  if (!match) {
     return c.json<WebhookResponse>({ ok: false, error: "Unknown webhook" }, 404);
   }
+  const svc = match.service;
+  const owner = match.owner;
 
   const json = await c.req.json().catch(() => null);
   const parsed = webhookRequestSchema.safeParse(json);
@@ -102,6 +105,25 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
     }
   }
 
+  const billing = await getBilling(owner, true);
+  if (parsed.data.deviceIds && !billing.features.deviceRouting) {
+    return c.json<WebhookResponse>({ ok: false, error: "Device routing requires Hark Pro" }, 402);
+  }
+
+  let targetedDevices: (typeof device.$inferSelect)[] | undefined;
+  if (parsed.data.deviceIds) {
+    const selected = await db
+      .select()
+      .from(device)
+      .where(and(eq(device.userId, svc.userId), inArray(device.id, parsed.data.deviceIds)));
+    if (selected.length !== parsed.data.deviceIds.length) {
+      return c.json<WebhookResponse>({ ok: false, error: "Invalid device selection" }, 400);
+    }
+    targetedDevices = selected.filter(
+      (registeredDevice) => registeredDevice.active && registeredDevice.platform === "ios",
+    );
+  }
+
   const since = new Date(Date.now() - 60_000);
   const [[serviceUsage], [accountUsage]] = await Promise.all([
     db
@@ -115,19 +137,23 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
       .where(and(eq(serviceTable.userId, svc.userId), gte(event.createdAt, since))),
   ]);
 
-  if ((serviceUsage?.value ?? 0) >= env.SERVICE_RATE_LIMIT_PER_MINUTE) {
+  if ((serviceUsage?.value ?? 0) >= billing.limits.servicePerMinute) {
     c.header("Retry-After", "60");
     return c.json<WebhookResponse>(
       { ok: false, error: "Service rate limit exceeded", retryAfterSeconds: 60 },
       429,
     );
   }
-  if ((accountUsage?.value ?? 0) >= env.ACCOUNT_RATE_LIMIT_PER_MINUTE) {
+  if ((accountUsage?.value ?? 0) >= billing.limits.accountPerMinute) {
     c.header("Retry-After", "60");
     return c.json<WebhookResponse>(
       { ok: false, error: "Account rate limit exceeded", retryAfterSeconds: 60 },
       429,
     );
+  }
+
+  if (!(await checkNotificationAllowance(svc.userId))) {
+    return c.json<WebhookResponse>({ ok: false, error: "Monthly notification limit reached" }, 429);
   }
 
   const resolved = resolveNotification(svc, parsed.data);
@@ -164,10 +190,22 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
     throw error;
   }
 
-  const devices = await db
-    .select()
-    .from(device)
-    .where(and(eq(device.userId, svc.userId), eq(device.active, true), eq(device.platform, "ios")));
+  let devices: (typeof device.$inferSelect)[];
+  if (targetedDevices) {
+    devices = targetedDevices;
+  } else {
+    const activeDevices = await db
+      .select()
+      .from(device)
+      .where(
+        and(eq(device.userId, svc.userId), eq(device.active, true), eq(device.platform, "ios")),
+      )
+      .orderBy(desc(device.lastSeenAt));
+    devices =
+      billing.limits.devices === null
+        ? activeDevices
+        : activeDevices.slice(0, billing.limits.devices);
+  }
 
   if (devices.length === 0) {
     await db.update(event).set({ status: "no_devices" }).where(eq(event.id, eventId));
@@ -209,6 +247,8 @@ export const hooksRoute = new Hono().post("/:token", async (c) => {
       502,
     );
   }
+
+  await trackNotification(svc.userId, eventId);
 
   return c.json<WebhookResponse>({ ok: true, eventId, delivered: result.delivered });
 });

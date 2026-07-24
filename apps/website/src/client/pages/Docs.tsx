@@ -70,6 +70,10 @@ export function Docs() {
                   field="url"
                   description="Destination opened when the notification is tapped."
                 />
+                <PayloadRow
+                  field="deviceIds"
+                  description="Pro: one or more device IDs from the dashboard. Omit to notify all active devices."
+                />
               </tbody>
             </table>
           </div>
@@ -83,11 +87,27 @@ export function Docs() {
           </p>
         </DocSection>
 
+        <DocSection title="Device routing">
+          <p className="text-sm leading-relaxed text-neutral-500">
+            Every request goes to all active devices by default. Hark Pro can include a non-empty{" "}
+            <InlineCode>deviceIds</InlineCode> array to notify only those registered iPhones. Copy
+            stable device IDs from the dashboard. Unknown or cross-account IDs return{" "}
+            <InlineCode>400</InlineCode>; inactive targets are skipped.
+          </p>
+          <div className="mt-4">
+            <Code>{`{
+  "body": "The production deploy needs attention.",
+  "deviceIds": ["dev_your_iphone_id"]
+}`}</Code>
+          </div>
+        </DocSection>
+
         <DocSection title="Rate limits">
           <p className="text-sm leading-relaxed text-neutral-500">
-            Each service accepts 60 requests per minute. An account accepts 300 requests per minute
-            across all services. A limited request returns <InlineCode>429</InlineCode> with a{" "}
-            <InlineCode>Retry-After</InlineCode> header.
+            Free accepts 60 requests per minute per service and 300 per minute per account. Pro
+            accepts 300 per minute per service and 1,500 per minute per account. A limited request
+            returns <InlineCode>429</InlineCode> with a <InlineCode>Retry-After</InlineCode> header.
+            Monthly plan limits also return <InlineCode>429</InlineCode> when exhausted.
           </p>
         </DocSection>
 

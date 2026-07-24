@@ -1,4 +1,10 @@
-import type { EventDto, ServiceCreatedResponse, ServiceDto } from "@hark/contracts";
+import type {
+  BillingDto,
+  DeviceDto,
+  EventDto,
+  ServiceCreatedResponse,
+  ServiceDto,
+} from "@hark/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
@@ -15,7 +21,7 @@ function curlExample(webhookUrl: string): string {
   ].join("\n");
 }
 
-function agentPrompt(webhookUrl: string): string {
+function agentPrompt(webhookUrl: string, devices: DeviceDto[]): string {
   const schema = {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     type: "object",
@@ -47,6 +53,18 @@ function agentPrompt(webhookUrl: string): string {
         maxLength: 2048,
         description: "Optional destination opened when the notification is tapped.",
       },
+      deviceIds: {
+        type: "array",
+        minItems: 1,
+        maxItems: 50,
+        uniqueItems: true,
+        items: {
+          type: "string",
+          ...(devices.length > 0 ? { enum: devices.map((device) => device.id) } : {}),
+        },
+        description:
+          "Optional Hark Pro routing targets. Omit to notify every active registered device.",
+      },
     },
   };
 
@@ -64,6 +82,14 @@ function agentPrompt(webhookUrl: string): string {
     curlExample(webhookUrl),
     "",
     "Use body for the notification message. title, imageUrl, and url are optional per-request overrides of the service defaults.",
+    "Omit deviceIds to deliver to all devices. Include one or more IDs to route only to those devices.",
+    ...(devices.length > 0
+      ? [
+          "",
+          "Registered devices:",
+          ...devices.map((device) => `- ${device.deviceName ?? "iPhone"}: ${device.id}`),
+        ]
+      : []),
   ].join("\n");
 }
 
@@ -73,7 +99,11 @@ export function Dashboard() {
 
   const [services, setServices] = useState<ServiceDto[] | null>(null);
   const [events, setEvents] = useState<EventDto[] | null>(null);
-  const [deviceCount, setDeviceCount] = useState<number | null>(null);
+  const [devices, setDevices] = useState<DeviceDto[] | null>(null);
+  const [billing, setBilling] = useState<BillingDto | null>(null);
+  const [billingActivating, setBillingActivating] = useState(
+    () => new URLSearchParams(window.location.search).get("billing") === "success",
+  );
   const [creating, setCreating] = useState(false);
   const [reveal, setReveal] = useState<
     (ServiceCreatedResponse & { kind: "created" | "rotated" }) | null
@@ -82,14 +112,16 @@ export function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [svc, dev, activity] = await Promise.all([
+      const [svc, dev, activity, billingState] = await Promise.all([
         api.listServices(),
         api.listDevices(),
         api.listEvents(),
+        api.getBilling(),
       ]);
       setServices(svc.services);
-      setDeviceCount(dev.devices.filter((d) => d.active).length);
+      setDevices(dev.devices);
       setEvents(activity.events);
+      setBilling(billingState);
     } catch {
       setError("Could not load your services. Are you signed in?");
     }
@@ -118,9 +150,46 @@ export function Dashboard() {
     return () => window.clearInterval(interval);
   }, [session, refreshActivity]);
 
+  useEffect(() => {
+    if (!session || !billingActivating) return;
+    let cancelled = false;
+    let attempts = 0;
+    let timeout: number | undefined;
+
+    const poll = async () => {
+      attempts += 1;
+      try {
+        const next = await api.getBilling();
+        if (cancelled) return;
+        setBilling(next);
+        if (next.plan === "pro") {
+          setBillingActivating(false);
+          window.history.replaceState(null, "", "/dashboard");
+          return;
+        }
+      } catch {
+        // Autumn can take a moment to receive Stripe's checkout webhook.
+      }
+      if (!cancelled && attempts < 8) timeout = window.setTimeout(() => void poll(), 2_000);
+      else if (!cancelled) setBillingActivating(false);
+    };
+
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeout !== undefined) window.clearTimeout(timeout);
+    };
+  }, [session, billingActivating]);
+
   if (isPending || !session) {
     return <div className="flex min-h-dvh items-center justify-center text-neutral-400">…</div>;
   }
+
+  const activeDeviceCount = devices?.filter((device) => device.active).length ?? null;
+  const deliveryDeviceCount =
+    activeDeviceCount === null || billing?.limits.devices === null
+      ? activeDeviceCount
+      : Math.min(activeDeviceCount, billing?.limits.devices ?? activeDeviceCount);
 
   return (
     <div className="min-h-dvh">
@@ -155,16 +224,17 @@ export function Dashboard() {
 
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
         <AppDownloadBanner />
+        <BillingCard billing={billing} activating={billingActivating} />
 
         <div className="mb-8 flex items-end justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Services</h1>
             <p className="mt-1 text-sm text-neutral-500">
-              {deviceCount === null
+              {deliveryDeviceCount === null
                 ? "Each service gets a secret webhook URL."
-                : deviceCount === 0
+                : deliveryDeviceCount === 0
                   ? "No iPhone registered yet — sign in inside the Hark app to receive notifications."
-                  : `Delivering to ${deviceCount} registered ${deviceCount === 1 ? "iPhone" : "iPhones"}.`}
+                  : `Delivering to ${deliveryDeviceCount} registered ${deliveryDeviceCount === 1 ? "iPhone" : "iPhones"}.`}
             </p>
           </div>
           <button
@@ -182,7 +252,13 @@ export function Dashboard() {
           </div>
         ) : null}
 
-        {reveal ? <WebhookReveal reveal={reveal} onDismiss={() => setReveal(null)} /> : null}
+        {reveal ? (
+          <WebhookReveal
+            devices={devices?.filter((device) => device.active) ?? []}
+            reveal={reveal}
+            onDismiss={() => setReveal(null)}
+          />
+        ) : null}
 
         {creating ? (
           <CreateServiceModal
@@ -201,6 +277,8 @@ export function Dashboard() {
           onDeleted={() => void refresh()}
         />
 
+        <Devices devices={devices} billing={billing} onRemoved={() => void refresh()} />
+
         <ActivityLog events={events} onRefresh={refreshActivity} />
       </main>
     </div>
@@ -208,9 +286,11 @@ export function Dashboard() {
 }
 
 function WebhookReveal({
+  devices,
   reveal,
   onDismiss,
 }: {
+  devices: DeviceDto[];
   reveal: ServiceCreatedResponse & { kind: "created" | "rotated" };
   onDismiss: () => void;
 }) {
@@ -224,7 +304,7 @@ function WebhookReveal({
 
   const copyAgentPrompt = async () => {
     try {
-      await navigator.clipboard.writeText(agentPrompt(reveal.webhookUrl));
+      await navigator.clipboard.writeText(agentPrompt(reveal.webhookUrl, devices));
       setAgentPromptCopied(true);
     } catch {
       // Clipboard access can be unavailable outside a secure context.
@@ -262,6 +342,157 @@ function WebhookReveal({
           {agentPromptCopied ? "Agent prompt copied" : "Copy agent prompt"}
         </button>
       </div>
+    </section>
+  );
+}
+
+function BillingCard({ billing, activating }: { billing: BillingDto | null; activating: boolean }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const redirectToBilling = async (kind: "checkout" | "portal") => {
+    setBusy(true);
+    setError(null);
+    try {
+      const response =
+        kind === "checkout" ? await api.startCheckout() : await api.openBillingPortal();
+      window.location.assign(response.url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open billing");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mb-10 rounded-2xl border border-neutral-200 bg-white p-5 shadow-xs">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold">
+              {billing?.plan === "pro" ? "Hark Pro" : "Hark Free"}
+            </h2>
+            {billing?.plan === "pro" ? (
+              <span className="bg-accent-soft text-accent rounded-full px-2 py-0.5 text-[11px] font-medium">
+                Active
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 max-w-xl text-xs leading-5 text-neutral-500">
+            {activating
+              ? "Payment received. Activating your Pro entitlements…"
+              : billing?.plan === "pro"
+                ? "Multiple iPhones, targeted device routing, and 5× higher per-minute limits."
+                : billing?.configured === false
+                  ? "Billing is temporarily unavailable. Your Free features continue to work."
+                  : "One iPhone, 10,000 notifications each month, and generous basic rate limits."}
+          </p>
+          {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+        </div>
+        <button
+          type="button"
+          disabled={busy || billing === null || !billing.configured || activating}
+          onClick={() => void redirectToBilling(billing?.plan === "pro" ? "portal" : "checkout")}
+          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium text-white transition disabled:opacity-50 sm:self-auto"
+        >
+          {busy
+            ? "Opening…"
+            : activating
+              ? "Activating…"
+              : billing?.configured === false
+                ? "Billing unavailable"
+                : billing?.plan === "pro"
+                  ? "Manage billing"
+                  : "Upgrade · $8/month"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function Devices({
+  devices,
+  billing,
+  onRemoved,
+}: {
+  devices: DeviceDto[] | null;
+  billing: BillingDto | null;
+  onRemoved: () => void;
+}) {
+  const activeDevices = devices?.filter((device) => device.active) ?? [];
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const remove = async (device: DeviceDto) => {
+    if (!window.confirm(`Remove ${device.deviceName ?? "this iPhone"} from Hark?`)) return;
+    setBusyId(device.id);
+    setError(null);
+    try {
+      await api.removeDevice(device.id);
+      onRemoved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove this device");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <section className="mt-16" aria-labelledby="devices-heading">
+      <div className="mb-4">
+        <h2 id="devices-heading" className="text-lg font-semibold">
+          Devices
+        </h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Omit <code className="font-mono text-xs text-neutral-700">deviceIds</code> to notify all
+          active devices. Pro can route a webhook to specific IDs.
+        </p>
+      </div>
+      {devices === null ? <p className="py-6 text-sm text-neutral-400">Loading devices…</p> : null}
+      {devices?.length === 0 ? (
+        <p className="border-y border-neutral-200 py-8 text-sm text-neutral-400">
+          No iPhones registered yet.
+        </p>
+      ) : null}
+      {devices && devices.length > 0 ? (
+        <ul className="divide-y divide-neutral-200 border-y border-neutral-200">
+          {devices.map((device) => (
+            <li className="flex items-center justify-between gap-4 py-3" key={device.id}>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {device.deviceName ?? "iPhone"}
+                  {!device.active ? (
+                    <span className="ml-2 text-xs text-neutral-400">Inactive</span>
+                  ) : null}
+                </p>
+                <p className="truncate font-mono text-[11px] text-neutral-400">{device.id}</p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void navigator.clipboard.writeText(device.id)}
+                  className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-50"
+                >
+                  Copy ID
+                </button>
+                <button
+                  type="button"
+                  disabled={busyId === device.id}
+                  onClick={() => void remove(device)}
+                  className="rounded-full border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {billing?.plan === "free" && activeDevices.length >= 1 ? (
+        <p className="mt-3 text-xs text-neutral-400">
+          Free includes one active iPhone. Upgrade to Pro before registering another.
+        </p>
+      ) : null}
+      {error ? <p className="mt-3 text-xs text-red-600">{error}</p> : null}
     </section>
   );
 }

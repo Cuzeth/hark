@@ -75,6 +75,10 @@ export function Privacy() {
             Device information needed for delivery, including Expo and APNs push tokens, device
             name, platform, and last registration time.
           </li>
+          <li>
+            Subscription status and billing identifiers when you choose a paid plan. Payment-card
+            details are collected and handled by Stripe, not stored by Hark.
+          </li>
           <li>Limited technical logs used to secure, operate, and troubleshoot the service.</li>
         </ul>
       </Section>
@@ -90,9 +94,9 @@ export function Privacy() {
       <Section title="Service providers">
         <p>
           Hark relies on Google for authentication, Expo and Apple for push delivery and app
-          distribution, and hosting infrastructure for the website, API, and database. These
-          providers process information only as needed to provide their services and under their own
-          privacy terms.
+          distribution, Autumn and Stripe for optional web billing, and hosting infrastructure for
+          the website, API, and database. These providers process information only as needed to
+          provide their services and under their own privacy terms.
         </p>
       </Section>
 
@@ -175,11 +179,23 @@ export function Terms() {
         </p>
       </Section>
 
+      <Section title="Paid plans">
+        <p>
+          Hark Pro is an optional subscription purchased on the Hark website and billed in advance
+          through Autumn and Stripe. The current price and billing interval are shown before
+          checkout. Subscriptions renew automatically until canceled. You can manage or cancel a
+          subscription from the web dashboard; cancellation takes effect at the end of the current
+          paid period unless stated otherwise. Fees are non-refundable except where required by law.
+          We may change future pricing with advance notice, but changes do not apply retroactively
+          to an already-paid period.
+        </p>
+      </Section>
+
       <Section title="Third-party services">
         <p>
-          Hark depends on services provided by Google, Expo, Apple, and hosting providers. Their
-          availability and terms are outside Hark's control, and integrations may stop working if
-          those services change.
+          Hark depends on services provided by Google, Expo, Apple, Autumn, Stripe, and hosting
+          providers. Their availability and terms are outside Hark's control, and integrations may
+          stop working if those services change.
         </p>
       </Section>
 
