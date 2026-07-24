@@ -19,11 +19,11 @@ COPY apps/website/package.json apps/website/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/website-runtime/package.json packages/website-runtime/
 RUN pnpm install --frozen-lockfile --filter hark --filter @hark/website --filter @hark/contracts --filter @hark/website-runtime
-# Cache the small external dependency set independently from application source.
-RUN pnpm --filter @hark/website-runtime deploy --prod --legacy /out
 COPY packages ./packages
 COPY apps/website ./apps/website
 RUN pnpm --filter @hark/website build
+# Legacy deploy switches the workspace to production-only, so it must run after compilation.
+RUN pnpm --filter @hark/website-runtime deploy --prod --legacy /out
 
 # ---------------------------------------------------------------------------
 # Runtime: single process serving the API and the static SPA.
