@@ -43,6 +43,32 @@ export interface BuildPushInput {
   resolved: ResolvedNotification;
 }
 
+const WELCOME_AVATAR_URL =
+  "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg";
+const WELCOME_PROFILE_URL = "https://x.com/ryanvogel";
+
+export function buildWelcomePushMessage(to: string): ExpoPushMessage {
+  const data: PushData = {
+    v: PUSH_SCHEMA_VERSION,
+    eventId: "hark-welcome",
+    serviceId: "hark-welcome",
+    sourceId: "ryan",
+    sourceName: "Ryan",
+    avatarUrl: WELCOME_AVATAR_URL,
+    url: WELCOME_PROFILE_URL,
+    conversationId: "hark-welcome-ryan",
+  };
+  return {
+    to,
+    title: "Ryan",
+    body: "hey! my name is ryan and I made hark!",
+    priority: "high",
+    mutableContent: true,
+    richContent: { image: WELCOME_AVATAR_URL },
+    data,
+  };
+}
+
 export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
   const { to, eventId, serviceId, resolved } = input;
   const data: PushData = {

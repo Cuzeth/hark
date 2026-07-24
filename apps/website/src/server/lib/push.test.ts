@@ -1,11 +1,39 @@
 import { describe, expect, it } from "vitest";
-import { buildInteractionPushMessages, buildPushMessages, resolveNotification } from "./push";
+import {
+  buildInteractionPushMessages,
+  buildPushMessages,
+  buildWelcomePushMessage,
+  resolveNotification,
+} from "./push";
 
 const service = {
   title: "Acme CRM",
   imageUrl: "https://example.com/default.png",
   url: "https://example.com/app",
 };
+
+describe("buildWelcomePushMessage", () => {
+  it("uses Ryan's communication identity and profile link", () => {
+    expect(buildWelcomePushMessage("ExponentPushToken[a]")).toMatchObject({
+      to: "ExponentPushToken[a]",
+      title: "Ryan",
+      body: "hey! my name is ryan and I made hark!",
+      priority: "high",
+      mutableContent: true,
+      richContent: {
+        image: "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg",
+      },
+      data: {
+        v: 1,
+        sourceId: "ryan",
+        sourceName: "Ryan",
+        avatarUrl: "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg",
+        url: "https://x.com/ryanvogel",
+        conversationId: "hark-welcome-ryan",
+      },
+    });
+  });
+});
 
 describe("resolveNotification", () => {
   it("falls back to service defaults", () => {

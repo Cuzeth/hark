@@ -9,9 +9,10 @@ import {
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
-import { device, liveActivity, liveActivityDelivery } from "../db/schema";
+import { device, liveActivity, liveActivityDelivery, user as userTable } from "../db/schema";
 import { getBilling } from "../lib/billing";
 import { newId } from "../lib/id";
+import { buildWelcomePushMessage, sendPushMessages } from "../lib/push";
 import { encryptLiveActivityToken } from "../lib/token";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
@@ -204,7 +205,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
       return c.json({ error: "This account has reached its active device limit." }, 402);
     }
     const now = new Date();
-    const row = db.transaction((tx) => {
+    const registration = db.transaction((tx) => {
       const previous = tx
         .select({ id: device.id, userId: device.userId })
         .from(device)
@@ -261,12 +262,30 @@ export const devicesRoute = new Hono<AuthedEnv>()
           )
           .run();
       }
-      return registered;
+      const welcomeClaim = tx
+        .update(userTable)
+        .set({ welcomeNotificationSentAt: now })
+        .where(and(eq(userTable.id, user.id), isNull(userTable.welcomeNotificationSentAt)))
+        .returning({ id: userTable.id })
+        .get();
+      return { row: registered, shouldSendWelcome: Boolean(welcomeClaim) };
     });
+    const { row, shouldSendWelcome } = registration;
     if (!row) {
       return c.json({ error: "Failed to register device" }, 500);
     }
-    return c.json({ device: toDto(row) }, 201);
+    let responseRow = row;
+    if (shouldSendWelcome) {
+      const result = await sendPushMessages([buildWelcomePushMessage(parsed.data.expoPushToken)]);
+      if (result.staleTokens.length > 0) {
+        await db
+          .update(device)
+          .set({ active: false, lastSeenAt: now })
+          .where(eq(device.id, row.id));
+        responseRow = { ...row, active: false };
+      }
+    }
+    return c.json({ device: toDto(responseRow) }, 201);
   })
   .delete("/:id", async (c) => {
     const user = c.get("user");
