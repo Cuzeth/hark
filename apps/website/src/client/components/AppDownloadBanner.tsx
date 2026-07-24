@@ -1,9 +1,4 @@
-/**
- * Where the banner sends people to install Hark for iPhone.
- * Replace with the public TestFlight URL once one exists.
- */
-const IOS_APP_DOWNLOAD_URL =
-  "https://expo.dev/accounts/ryanvogel/projects/hark/builds/3030724a-1c89-4591-9635-bfabc1de6b82";
+const IOS_APP_DOWNLOAD_URL = "https://testflight.apple.com/join/PjCnKETB";
 
 export function AppDownloadBanner() {
   return (
