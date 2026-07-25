@@ -302,6 +302,10 @@ export const activityHooksRoute = new Hono()
         );
       }
     }
+    const billing = await getBilling(owner, true);
+    if (billing.plan !== "pro") {
+      return c.json({ ok: false, error: "Live Activities require Hark Pro" }, 402);
+    }
     const limited = await enforceRateLimit(service, owner);
     if (limited) {
       c.header("Retry-After", "60");

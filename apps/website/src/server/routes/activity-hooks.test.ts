@@ -5,6 +5,7 @@ process.env.DATABASE_URL = ":memory:";
 
 const authState = vi.hoisted(() => ({ userId: "hook_activity_user" as string | null }));
 const apnsCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const billingState = vi.hoisted(() => ({ pro: true }));
 
 vi.mock("../auth", () => ({
   auth: {
@@ -27,9 +28,13 @@ vi.mock("../auth", () => ({
 
 vi.mock("../lib/billing", () => ({
   getBilling: async () => ({
-    plan: "pro",
-    features: { deviceRouting: true },
-    limits: { devices: null, servicePerMinute: 1000, accountPerMinute: 1000 },
+    plan: billingState.pro ? "pro" : "free",
+    features: { deviceRouting: billingState.pro },
+    limits: {
+      devices: billingState.pro ? null : 1,
+      servicePerMinute: 1000,
+      accountPerMinute: 1000,
+    },
   }),
   checkNotificationAllowance: async () => true,
   trackNotification: async () => undefined,
@@ -113,6 +118,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   authState.userId = "hook_activity_user";
   apnsCalls.length = 0;
+  billingState.pro = true;
   await db.delete(schema.liveActivity);
 });
 
@@ -303,6 +309,17 @@ describe("Live Activity webhook routes", () => {
       code: "ACTIVE_ACTIVITY_CONFLICT",
       activityId: firstBody.activityId,
     });
+  });
+
+  it("requires Pro to start a Live Activity", async () => {
+    billingState.pro = false;
+    const response = await start();
+    expect(response.status).toBe(402);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "Live Activities require Hark Pro",
+    });
+    expect(apnsCalls).toHaveLength(0);
   });
 
   it("keeps webhook services isolated", async () => {
