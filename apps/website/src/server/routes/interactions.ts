@@ -635,7 +635,9 @@ export const interactionCredentialResponseRoute = new Hono().post("/:id/respond"
       ? "approved"
       : parsed.data.action === "deny"
         ? "denied"
-        : parsed.data.action;
+        : parsed.data.action === "reply"
+          ? "replied"
+          : parsed.data.action;
   const response = parsed.data.action === "reply" ? parsed.data.response : parsed.data.action;
   const now = new Date();
   const [row] = await db

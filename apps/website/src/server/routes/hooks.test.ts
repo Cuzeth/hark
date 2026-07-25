@@ -282,6 +282,34 @@ describe("POST /hooks/:token", () => {
     });
   });
 
+  it("records credential text responses as replied", async () => {
+    billingTestState.pro = true;
+    sent.length = 0;
+    const created = await post(TOKEN, {
+      body: "Reply?",
+      deviceIds: ["dev_1"],
+      response: { type: "text" },
+    });
+    billingTestState.pro = false;
+    const createdBody = (await created.json()) as { eventId: string };
+    const data = sent[0]?.data as { interactionId: string; responseToken: string };
+    const response = await app.request(`/api/interaction-responses/${data.interactionId}/respond`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "reply",
+        response: "Build 11 works",
+        deviceId: "dev_1",
+        responseToken: data.responseToken,
+      }),
+    });
+    expect(response.status).toBe(200);
+    const status = await app.request(`/hooks/${TOKEN}/events/${createdBody.eventId}`);
+    expect(await status.json()).toMatchObject({
+      event: { response: { status: "replied", action: "reply", text: "Build 11 works" } },
+    });
+  });
+
   it("requires Pro for targeted device routing", async () => {
     const res = await post(TOKEN, { body: "Only A", deviceIds: ["dev_1"] });
     expect(res.status).toBe(402);
