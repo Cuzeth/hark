@@ -98,6 +98,33 @@ describe("webhookRequestSchema", () => {
   it("rejects an empty device routing list", () => {
     expect(webhookRequestSchema.safeParse({ body: "Targeted", deviceIds: [] }).success).toBe(false);
   });
+
+  it("accepts fixed interactive response types and validates callbacks", () => {
+    expect(
+      webhookRequestSchema.parse({
+        body: "Deploy?",
+        response: {
+          type: "approval",
+          callback: { url: "https://ci.example.com/hark", token: "x".repeat(32) },
+        },
+      }).response,
+    ).toMatchObject({ type: "approval", expiresInSeconds: 900 });
+    expect(
+      webhookRequestSchema.safeParse({ body: "Reply?", response: { type: "text" } }).success,
+    ).toBe(true);
+    expect(
+      webhookRequestSchema.safeParse({ body: "No", response: { type: "custom" } }).success,
+    ).toBe(false);
+    expect(
+      webhookRequestSchema.safeParse({
+        body: "No",
+        response: {
+          type: "yes_no",
+          callback: { url: "http://localhost/callback", token: "x".repeat(32) },
+        },
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("interaction schemas", () => {

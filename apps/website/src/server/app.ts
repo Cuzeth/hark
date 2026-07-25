@@ -10,7 +10,11 @@ import { deviceAuthorizationRoute } from "./routes/device-authorization";
 import { devicesRoute } from "./routes/devices";
 import { eventsRoute } from "./routes/events";
 import { hooksRoute } from "./routes/hooks";
-import { agentRoute, interactionResponseRoute } from "./routes/interactions";
+import {
+  agentRoute,
+  interactionCredentialResponseRoute,
+  interactionResponseRoute,
+} from "./routes/interactions";
 import { liveActivityRegistrationRoute } from "./routes/live-activity-registration";
 import { servicesRoute } from "./routes/services";
 
@@ -46,6 +50,7 @@ app.route("/api/agent/activities", activitiesAgentRoute);
 app.route("/api/agent", agentRoute);
 app.route("/api/activities", activitiesSessionRoute);
 app.route("/api/interactions", interactionResponseRoute);
+app.route("/api/interaction-responses", interactionCredentialResponseRoute);
 app.route("/api/live-activity", liveActivityRegistrationRoute);
 app.route("/api/billing", billingRoute);
 app.route("/api/devices", devicesRoute);

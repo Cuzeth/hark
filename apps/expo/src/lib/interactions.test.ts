@@ -41,6 +41,10 @@ vi.mock("./api", () => ({
       state.submissions.push({ id, input });
       return state.submit?.(id, input);
     },
+    respondToInteractionWithToken: async (id: string, input: Record<string, unknown>) => {
+      state.submissions.push({ id, input });
+      return state.submit?.(id, input);
+    },
   },
 }));
 
@@ -63,6 +67,19 @@ function approvalResponse(interactionId: string) {
   } as never;
 }
 
+function credentialResponse(interactionId: string) {
+  return {
+    actionIdentifier: "HARK_APPROVE",
+    notification: {
+      request: {
+        content: {
+          data: { interactionId, actionDigest: DIGEST, responseToken: "r".repeat(43) },
+        },
+      },
+    },
+  } as never;
+}
+
 afterEach(async () => {
   state.cookie = "session";
   state.submit = undefined;
@@ -72,6 +89,22 @@ afterEach(async () => {
 });
 
 describe("interaction response queue", () => {
+  it("submits with a response credential without a login cookie", async () => {
+    state.cookie = undefined;
+    state.store.set(DEVICE_ID_KEY, "dev_1");
+    await handleNotificationResponse(credentialResponse("int_credential"));
+    expect(state.submissions).toEqual([
+      {
+        id: "int_credential",
+        input: {
+          action: "approve",
+          actionDigest: DIGEST,
+          responseToken: "r".repeat(43),
+          deviceId: "dev_1",
+        },
+      },
+    ]);
+  });
   it("preserves a response until registration provides a device ID", async () => {
     await handleNotificationResponse(approvalResponse("int_upgrade"));
     expect(state.submissions).toHaveLength(0);

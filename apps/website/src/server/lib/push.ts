@@ -1,6 +1,7 @@
 import {
   HARK_APPROVAL_CATEGORY_ID,
   HARK_REPLY_CATEGORY_ID,
+  HARK_YES_NO_CATEGORY_ID,
   type InteractionKind,
   type InteractionPushData,
   PUSH_SCHEMA_VERSION,
@@ -115,19 +116,30 @@ export interface BuildInteractionPushInput {
   title: string;
   prompt: string;
   actionDigest: string;
+  responseToken?: string;
+  eventId?: string;
+  imageUrl?: string;
   url?: string;
 }
 
 export function buildInteractionPushMessages(input: BuildInteractionPushInput): ExpoPushMessage[] {
-  const categoryId = input.kind === "approval" ? HARK_APPROVAL_CATEGORY_ID : HARK_REPLY_CATEGORY_ID;
+  const categoryId =
+    input.kind === "approval"
+      ? HARK_APPROVAL_CATEGORY_ID
+      : input.kind === "yes_no"
+        ? HARK_YES_NO_CATEGORY_ID
+        : HARK_REPLY_CATEGORY_ID;
   const data: InteractionPushData = {
     v: PUSH_SCHEMA_VERSION,
     interactionId: input.interactionId,
+    ...(input.eventId ? { eventId: input.eventId } : {}),
     interactionKind: input.kind,
     sourceName: input.title,
     conversationId: `hark-interaction-${input.interactionId}`,
     categoryId,
     actionDigest: input.actionDigest,
+    ...(input.responseToken ? { responseToken: input.responseToken } : {}),
+    ...(input.imageUrl ? { avatarUrl: input.imageUrl } : {}),
     ...(input.url ? { url: input.url } : {}),
   };
   return input.to.map((to) => ({
@@ -137,6 +149,7 @@ export function buildInteractionPushMessages(input: BuildInteractionPushInput): 
     categoryId,
     priority: "high",
     mutableContent: true,
+    ...(input.imageUrl ? { richContent: { image: input.imageUrl } } : {}),
     data,
   }));
 }

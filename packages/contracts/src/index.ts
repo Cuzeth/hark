@@ -118,6 +118,32 @@ export interface ServiceCreatedResponse {
 // Webhook ingestion
 // ---------------------------------------------------------------------------
 
+const webhookCallbackSchema = z.object({
+  url: publicHttpsUrlSchema,
+  token: z.string().min(16).max(512),
+});
+
+const webhookResponseRequestSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("approval"),
+    expiresInSeconds: z.number().int().min(30).max(86_400).default(900),
+    correlationId: z.string().trim().min(1).max(100).optional(),
+    callback: webhookCallbackSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("yes_no"),
+    expiresInSeconds: z.number().int().min(30).max(86_400).default(900),
+    correlationId: z.string().trim().min(1).max(100).optional(),
+    callback: webhookCallbackSchema.optional(),
+  }),
+  z.object({
+    type: z.literal("text"),
+    expiresInSeconds: z.number().int().min(30).max(86_400).default(900),
+    correlationId: z.string().trim().min(1).max(100).optional(),
+    callback: webhookCallbackSchema.optional(),
+  }),
+]);
+
 export const webhookRequestSchema = z.object({
   body: z.string().trim().min(1, "body is required").max(2000),
   title: z.string().trim().min(1).max(80).optional(),
@@ -129,6 +155,7 @@ export const webhookRequestSchema = z.object({
     .max(50)
     .transform((ids) => [...new Set(ids)].sort())
     .optional(),
+  response: webhookResponseRequestSchema.optional(),
 });
 export type WebhookRequest = z.infer<typeof webhookRequestSchema>;
 
@@ -137,6 +164,7 @@ export type WebhookResponse =
       ok: true;
       eventId: string;
       delivered: number;
+      response?: { status: "pending"; expiresAt: string };
       idempotent?: boolean;
       message?: string;
     }
@@ -165,6 +193,7 @@ export const deviceRegisterSchema = z.object({
   apnsToken: z.string().min(1).max(400).optional(),
   platform: z.literal("ios"),
   deviceName: z.string().trim().max(80).optional(),
+  interactionSchemaVersion: z.literal(1).optional(),
 });
 export type DeviceRegisterInput = z.infer<typeof deviceRegisterSchema>;
 
@@ -439,7 +468,7 @@ export interface DeviceAuthorizationTokenResponse {
   token: ApiTokenDto;
 }
 
-export const INTERACTION_KINDS = ["approval", "reply"] as const;
+export const INTERACTION_KINDS = ["approval", "yes_no", "reply"] as const;
 export const interactionKindSchema = z.enum(INTERACTION_KINDS);
 export type InteractionKind = z.infer<typeof interactionKindSchema>;
 
@@ -447,6 +476,8 @@ export const INTERACTION_STATUSES = [
   "pending",
   "approved",
   "denied",
+  "yes",
+  "no",
   "replied",
   "canceled",
   "expired",
@@ -456,9 +487,12 @@ export type InteractionStatus = z.infer<typeof interactionStatusSchema>;
 
 export const HARK_APPROVAL_CATEGORY_ID = "HARK_APPROVAL_V1" as const;
 export const HARK_REPLY_CATEGORY_ID = "HARK_REPLY_V1" as const;
+export const HARK_YES_NO_CATEGORY_ID = "HARK_YES_NO_V1" as const;
 export const HARK_APPROVE_ACTION_ID = "HARK_APPROVE" as const;
 export const HARK_DENY_ACTION_ID = "HARK_DENY" as const;
 export const HARK_REPLY_ACTION_ID = "HARK_REPLY" as const;
+export const HARK_YES_ACTION_ID = "HARK_YES" as const;
+export const HARK_NO_ACTION_ID = "HARK_NO" as const;
 
 export const interactionCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),
@@ -482,6 +516,11 @@ export const interactionResponseSchema = z.discriminatedUnion("action", [
     actionDigest: z.string().regex(/^[a-f0-9]{64}$/),
   }),
   z.object({
+    action: z.enum(["yes", "no"]),
+    deviceId: z.string().trim().min(1).max(100),
+    actionDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  }),
+  z.object({
     action: z.literal("reply"),
     response: z.string().trim().min(1, "Reply is required").max(4000),
     deviceId: z.string().trim().min(1).max(100),
@@ -489,6 +528,23 @@ export const interactionResponseSchema = z.discriminatedUnion("action", [
   }),
 ]);
 export type InteractionResponseInput = z.infer<typeof interactionResponseSchema>;
+
+export const interactionCredentialResponseSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.enum(["approve", "deny", "yes", "no"]),
+    deviceId: z.string().trim().min(1).max(100),
+    responseToken: z.string().regex(/^[a-zA-Z0-9_-]{43}$/),
+  }),
+  z.object({
+    action: z.literal("reply"),
+    response: z.string().trim().min(1).max(4000),
+    deviceId: z.string().trim().min(1).max(100),
+    responseToken: z.string().regex(/^[a-zA-Z0-9_-]{43}$/),
+  }),
+]);
+export type InteractionCredentialResponseInput = z.infer<
+  typeof interactionCredentialResponseSchema
+>;
 
 export interface InteractionDto {
   id: string;
@@ -562,11 +618,17 @@ export const webhookPushDataSchema = z.object({
 export const interactionPushDataSchema = z.object({
   v: z.literal(PUSH_SCHEMA_VERSION),
   interactionId: z.string(),
+  eventId: z.string().optional(),
   interactionKind: interactionKindSchema,
   sourceName: z.string(),
   conversationId: z.string(),
-  categoryId: z.enum([HARK_APPROVAL_CATEGORY_ID, HARK_REPLY_CATEGORY_ID]),
+  categoryId: z.enum([HARK_APPROVAL_CATEGORY_ID, HARK_YES_NO_CATEGORY_ID, HARK_REPLY_CATEGORY_ID]),
   actionDigest: z.string().regex(/^[a-f0-9]{64}$/),
+  responseToken: z
+    .string()
+    .regex(/^[a-zA-Z0-9_-]{43}$/)
+    .optional(),
+  avatarUrl: z.url().optional(),
   url: z.url().optional(),
 });
 export const pushDataSchema = z.union([webhookPushDataSchema, interactionPushDataSchema]);

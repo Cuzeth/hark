@@ -94,6 +94,7 @@ export const device = sqliteTable("device", {
   liveActivityTokenEnvironment: text("live_activity_token_environment"),
   liveActivitySchemaVersion: integer("live_activity_schema_version"),
   liveActivityTokenUpdatedAt: integer("live_activity_token_updated_at", { mode: "timestamp_ms" }),
+  interactionSchemaVersion: integer("interaction_schema_version"),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   lastSeenAt: integer("last_seen_at", { mode: "timestamp_ms" }).notNull(),
 });
@@ -180,9 +181,13 @@ export const interaction = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    requesterTokenId: text("requester_token_id")
-      .notNull()
-      .references(() => apiToken.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id").references(() => apiToken.id, {
+      onDelete: "cascade",
+    }),
+    requesterServiceId: text("requester_service_id").references(() => service.id, {
+      onDelete: "cascade",
+    }),
+    eventId: text("event_id").references(() => event.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     prompt: text("prompt").notNull(),
     kind: text("kind").notNull(),
@@ -190,10 +195,20 @@ export const interaction = sqliteTable(
     choices: text("choices", { mode: "json" }).$type<string[]>().notNull(),
     response: text("response"),
     url: text("url"),
+    imageUrl: text("image_url"),
+    correlationId: text("correlation_id"),
     /** Digest echoed by the notification action to bind responses to the exact interaction. */
     actionDigest: text("action_digest").notNull(),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
+    responseTokenHash: text("response_token_hash"),
+    callbackUrl: text("callback_url"),
+    callbackTokenCiphertext: text("callback_token_ciphertext"),
+    callbackStatus: text("callback_status"),
+    callbackAttempts: integer("callback_attempts").notNull().default(0),
+    callbackNextAttemptAt: integer("callback_next_attempt_at", { mode: "timestamp_ms" }),
+    callbackLastError: text("callback_last_error"),
+    callbackDeliveredAt: integer("callback_delivered_at", { mode: "timestamp_ms" }),
     acceptedCount: integer("accepted_count").notNull().default(0),
     respondingDeviceId: text("responding_device_id").references(() => device.id, {
       onDelete: "set null",
@@ -204,11 +219,22 @@ export const interaction = sqliteTable(
     canceledAt: integer("canceled_at", { mode: "timestamp_ms" }),
   },
   (table) => [
+    check(
+      "interaction_requester_check",
+      sql`("requester_token_id" is not null) != ("requester_service_id" is not null)`,
+    ),
     uniqueIndex("interaction_token_idempotency_unique").on(
       table.requesterTokenId,
       table.idempotencyKey,
     ),
     index("interaction_token_created_at_idx").on(table.requesterTokenId, table.createdAt),
+    uniqueIndex("interaction_service_idempotency_unique").on(
+      table.requesterServiceId,
+      table.idempotencyKey,
+    ),
+    uniqueIndex("interaction_event_unique").on(table.eventId),
+    index("interaction_service_created_at_idx").on(table.requesterServiceId, table.createdAt),
+    index("interaction_callback_due_idx").on(table.callbackStatus, table.callbackNextAttemptAt),
     index("interaction_user_status_expiry_idx").on(table.userId, table.status, table.expiresAt),
   ],
 );

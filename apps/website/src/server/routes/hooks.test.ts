@@ -133,6 +133,7 @@ describe("POST /hooks/:token", () => {
       expoPushToken: "ExponentPushToken[a]",
       platform: "ios",
       active: true,
+      interactionSchemaVersion: 1,
       createdAt: now,
       lastSeenAt: now,
     });
@@ -169,6 +170,7 @@ describe("POST /hooks/:token", () => {
       expoPushToken: "ExponentPushToken[b]",
       platform: "ios",
       active: true,
+      interactionSchemaVersion: 1,
       createdAt: now,
       lastSeenAt: now,
     });
@@ -196,6 +198,88 @@ describe("POST /hooks/:token", () => {
     expect(await res.json()).toMatchObject({ ok: true, delivered: 1 });
     expect(sent).toHaveLength(1);
     expect(sent[0]?.to).toBe("ExponentPushToken[a]");
+  });
+
+  it("creates and resolves a Pro approval through the webhook event", async () => {
+    billingTestState.pro = true;
+    sent.length = 0;
+    const created = await post(TOKEN, {
+      body: "Deploy production?",
+      title: "CI",
+      imageUrl: "https://example.com/ci.png",
+      deviceIds: ["dev_1"],
+      response: {
+        type: "approval",
+        correlationId: "deploy-184",
+        expiresInSeconds: 900,
+        callback: {
+          url: "https://ci.example.com/hark-response",
+          token: "private-callback-token",
+        },
+      },
+    });
+    billingTestState.pro = false;
+    expect(created.status).toBe(200);
+    const createdBody = (await created.json()) as { eventId: string };
+    expect(createdBody).toMatchObject({
+      ok: true,
+      delivered: 1,
+      response: { status: "pending" },
+    });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      categoryId: "HARK_APPROVAL_V1",
+      richContent: { image: "https://example.com/ci.png" },
+    });
+    const data = sent[0]?.data as {
+      interactionId: string;
+      responseToken: string;
+      avatarUrl: string;
+    };
+    expect(data.avatarUrl).toBe("https://example.com/ci.png");
+
+    const callbackFetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    const response = await app.request(`/api/interaction-responses/${data.interactionId}/respond`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "approve",
+        deviceId: "dev_1",
+        responseToken: data.responseToken,
+      }),
+    });
+    expect(response.status).toBe(200);
+    await vi.waitFor(() => expect(callbackFetch).toHaveBeenCalledOnce());
+    const callbackCall = callbackFetch.mock.calls[0];
+    if (!callbackCall) throw new Error("Expected callback request");
+    if (!callbackCall[1]) throw new Error("Expected callback request options");
+    expect(callbackCall[0]).toBe("https://ci.example.com/hark-response");
+    expect((callbackCall[1].headers as Record<string, string>).authorization).toBe(
+      "Bearer private-callback-token",
+    );
+    callbackFetch.mockRestore();
+    const status = await app.request(`/hooks/${TOKEN}/events/${createdBody.eventId}`);
+    expect(await status.json()).toMatchObject({
+      ok: true,
+      event: {
+        id: createdBody.eventId,
+        response: { status: "approved", action: "approve", correlationId: "deploy-184" },
+      },
+    });
+  });
+
+  it("requires Pro for webhook responses", async () => {
+    const response = await post(TOKEN, {
+      body: "Deploy?",
+      response: { type: "approval" },
+    });
+    expect(response.status).toBe(402);
+    expect(await response.json()).toMatchObject({
+      ok: false,
+      error: "Interactive responses require Hark Pro",
+    });
   });
 
   it("requires Pro for targeted device routing", async () => {

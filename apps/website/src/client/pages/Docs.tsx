@@ -78,6 +78,10 @@ export function Docs() {
                   field="deviceIds"
                   description="Pro: one or more device IDs from the dashboard. Omit to notify all active devices."
                 />
+                <PayloadRow
+                  field="response"
+                  description="Pro: request Approve/Deny, Yes/No, or a text reply with an optional callback."
+                />
               </tbody>
             </table>
           </div>
@@ -130,6 +134,35 @@ export function Docs() {
           <p className="mt-3 text-sm leading-relaxed text-ink-subtle">
             Delivered is the number of push requests accepted by Expo. Use the dashboard activity
             log to inspect failures and devices that are no longer registered.
+          </p>
+        </DocSection>
+
+        <DocSection title="Interactive responses">
+          <p className="mb-4 text-sm leading-relaxed text-ink-subtle">
+            Hark Pro can add a fixed response type to the normal webhook. The returned event ID is
+            used to read or cancel the pending response. If a callback is configured, Hark sends the
+            terminal response with its token as a Bearer authorization header.
+          </p>
+          <CodeBlock
+            language="json"
+            code={`{
+  "title": "Production deploy",
+  "body": "Deploy commit 8e7fc2a?",
+  "imageUrl": "https://example.com/ci.png",
+  "response": {
+    "type": "approval",
+    "expiresInSeconds": 900,
+    "correlationId": "deploy-184",
+    "callback": {
+      "url": "https://ci.example.com/hark-response",
+      "token": "private-callback-token"
+    }
+  }
+}`}
+          />
+          <p className="mt-4 text-sm leading-relaxed text-ink-subtle">
+            Supported types are <InlineCode>approval</InlineCode>, <InlineCode>yes_no</InlineCode>,
+            and <InlineCode>text</InlineCode>.
           </p>
         </DocSection>
 

@@ -8,6 +8,7 @@ import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import { useSession } from "../src/lib/auth";
 import {
   flushInteractionResponses,
@@ -55,7 +56,15 @@ export default function RootLayout() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       void handleNotificationResponse(response);
     });
-    return () => subscription.remove();
+    const appState = AppState.addEventListener("change", (state) => {
+      if (state === "active") void flushInteractionResponses();
+    });
+    const retryTimer = setInterval(() => void flushInteractionResponses(), 30_000);
+    return () => {
+      subscription.remove();
+      appState.remove();
+      clearInterval(retryTimer);
+    };
   }, []);
 
   useEffect(() => {

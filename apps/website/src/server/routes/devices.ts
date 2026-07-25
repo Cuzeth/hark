@@ -225,6 +225,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
           apnsToken: parsed.data.apnsToken ?? null,
           platform: "ios",
           deviceName: parsed.data.deviceName ?? null,
+          interactionSchemaVersion: parsed.data.interactionSchemaVersion ?? null,
           active: true,
           createdAt: now,
           lastSeenAt: now,
@@ -235,6 +236,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
             userId: user.id,
             apnsToken: parsed.data.apnsToken ?? null,
             deviceName: parsed.data.deviceName ?? null,
+            interactionSchemaVersion: parsed.data.interactionSchemaVersion ?? null,
             active: true,
             lastSeenAt: now,
             ...(ownerChanged

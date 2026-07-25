@@ -2,8 +2,11 @@ import {
   HARK_APPROVAL_CATEGORY_ID,
   HARK_APPROVE_ACTION_ID,
   HARK_DENY_ACTION_ID,
+  HARK_NO_ACTION_ID,
   HARK_REPLY_ACTION_ID,
   HARK_REPLY_CATEGORY_ID,
+  HARK_YES_ACTION_ID,
+  HARK_YES_NO_CATEGORY_ID,
   type InteractionResponseInput,
 } from "@hark/contracts";
 import * as Notifications from "expo-notifications";
@@ -17,12 +20,13 @@ const RETRY_QUEUE_KEY = "hark.interaction.responseQueue.v1";
 const MAX_QUEUED_RESPONSES = 20;
 
 type QueuedInput =
-  | { action: "approve" | "deny"; actionDigest: string }
+  | { action: "approve" | "deny" | "yes" | "no"; actionDigest: string }
   | { action: "reply"; response: string; actionDigest: string };
 
 interface QueuedResponse {
   interactionId: string;
   input: QueuedInput;
+  responseToken?: string;
 }
 
 let queueMutation = Promise.resolve();
@@ -96,7 +100,6 @@ export async function flushInteractionResponses(): Promise<void> {
   const task = (async () => {
     while (true) {
       flushRequested = false;
-      if (!getCookie()) return;
       const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
       if (!deviceId) return;
       const queue = await withQueueLock(readQueue);
@@ -106,9 +109,18 @@ export async function flushInteractionResponses(): Promise<void> {
       }
       const completed = new Set<string>();
       for (const response of queue) {
-        const input: InteractionResponseInput = { ...response.input, deviceId };
         try {
-          await api.respondToInteraction(response.interactionId, input);
+          if (response.responseToken) {
+            await api.respondToInteractionWithToken(response.interactionId, {
+              ...response.input,
+              responseToken: response.responseToken,
+              deviceId,
+            });
+          } else {
+            if (!getCookie()) continue;
+            const input: InteractionResponseInput = { ...response.input, deviceId };
+            await api.respondToInteraction(response.interactionId, input);
+          }
           completed.add(response.interactionId);
         } catch (error) {
           if (isTerminalApiError(error)) completed.add(response.interactionId);
@@ -162,6 +174,18 @@ export async function registerInteractionCategories(): Promise<void> {
         options: opensAuthenticatedApp,
       },
     ]),
+    Notifications.setNotificationCategoryAsync(HARK_YES_NO_CATEGORY_ID, [
+      {
+        identifier: HARK_YES_ACTION_ID,
+        buttonTitle: "Yes",
+        options: opensAuthenticatedApp,
+      },
+      {
+        identifier: HARK_NO_ACTION_ID,
+        buttonTitle: "No",
+        options: { ...opensAuthenticatedApp, isDestructive: true },
+      },
+    ]),
   ]);
 }
 
@@ -169,7 +193,7 @@ export async function handleNotificationResponse(
   response: Notifications.NotificationResponse,
 ): Promise<void> {
   const data = response.notification.request.content.data as
-    | { interactionId?: string; actionDigest?: string; url?: string }
+    | { interactionId?: string; actionDigest?: string; responseToken?: string; url?: string }
     | undefined;
   if (response.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER) {
     if (data?.url) await Linking.openURL(data.url).catch(() => {});
@@ -188,6 +212,16 @@ export async function handleNotificationResponse(
       response: response.userText.trim(),
       actionDigest: data.actionDigest,
     };
+  } else if (response.actionIdentifier === HARK_YES_ACTION_ID) {
+    input = { action: "yes", actionDigest: data.actionDigest };
+  } else if (response.actionIdentifier === HARK_NO_ACTION_ID) {
+    input = { action: "no", actionDigest: data.actionDigest };
   }
-  if (input) await submitOrQueue({ interactionId: data.interactionId, input });
+  if (input) {
+    await submitOrQueue({
+      interactionId: data.interactionId,
+      input,
+      ...(data.responseToken ? { responseToken: data.responseToken } : {}),
+    });
+  }
 }

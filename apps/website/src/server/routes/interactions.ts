@@ -4,6 +4,7 @@ import {
   type InteractionKind,
   type InteractionStatus,
   interactionCreateSchema,
+  interactionCredentialResponseSchema,
   interactionResponseSchema,
 } from "@hark/contracts";
 import { and, count, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
@@ -22,7 +23,9 @@ import {
 import { failureBucket, track } from "../lib/analytics";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
+import { deliverInteractionCallbacks } from "../lib/interaction-callbacks";
 import { buildInteractionPushMessages, sendPushMessages } from "../lib/push";
+import { hashInteractionResponseToken } from "../lib/token";
 import {
   type AgentEnv,
   type AuthedEnv,
@@ -532,7 +535,8 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
       return c.json({ error: "Interaction action digest mismatch" }, 409);
     }
     if (
-      (current.kind === "approval" && parsed.data.action === "reply") ||
+      (current.kind === "approval" && !["approve", "deny"].includes(parsed.data.action)) ||
+      (current.kind === "yes_no" && !["yes", "no"].includes(parsed.data.action)) ||
       (current.kind === "reply" && parsed.data.action !== "reply")
     ) {
       return c.json({ error: `This interaction requires a ${current.kind} response` }, 400);
@@ -544,7 +548,11 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
         ? "approved"
         : parsed.data.action === "deny"
           ? "denied"
-          : "replied";
+          : parsed.data.action === "yes"
+            ? "yes"
+            : parsed.data.action === "no"
+              ? "no"
+              : "replied";
     const response = parsed.data.action === "reply" ? parsed.data.response : parsed.data.action;
     const [row] = await db
       .update(interaction)
@@ -571,6 +579,7 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
         outcome: parsed.data.action,
         metadata: { kind: current.kind },
       });
+      void deliverInteractionCallbacks();
       return c.json({ interaction: toDto(row) });
     }
 
@@ -585,3 +594,68 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
       409,
     );
   });
+
+export const interactionCredentialResponseRoute = new Hono().post("/:id/respond", async (c) => {
+  const parsed = interactionCredentialResponseSchema.safeParse(
+    await c.req.json().catch(() => null),
+  );
+  if (!parsed.success) return c.json({ error: "Invalid interaction response" }, 400);
+  const [current] = await db
+    .select()
+    .from(interaction)
+    .where(
+      and(
+        eq(interaction.id, c.req.param("id")),
+        eq(interaction.responseTokenHash, hashInteractionResponseToken(parsed.data.responseToken)),
+      ),
+    )
+    .limit(1);
+  if (!current) return c.json({ error: "Interaction not found" }, 404);
+  const [registeredDevice] = await db
+    .select({ id: device.id })
+    .from(device)
+    .where(
+      and(
+        eq(device.id, parsed.data.deviceId),
+        eq(device.userId, current.userId),
+        eq(device.active, true),
+      ),
+    )
+    .limit(1);
+  if (!registeredDevice) return c.json({ error: "Device not found" }, 404);
+  if (
+    (current.kind === "approval" && !["approve", "deny"].includes(parsed.data.action)) ||
+    (current.kind === "yes_no" && !["yes", "no"].includes(parsed.data.action)) ||
+    (current.kind === "reply" && parsed.data.action !== "reply")
+  ) {
+    return c.json({ error: "Invalid response type" }, 400);
+  }
+  const status =
+    parsed.data.action === "approve"
+      ? "approved"
+      : parsed.data.action === "deny"
+        ? "denied"
+        : parsed.data.action;
+  const response = parsed.data.action === "reply" ? parsed.data.response : parsed.data.action;
+  const now = new Date();
+  const [row] = await db
+    .update(interaction)
+    .set({
+      status,
+      response,
+      respondingDeviceId: registeredDevice.id,
+      respondedAt: now,
+      callbackNextAttemptAt: now,
+    })
+    .where(
+      and(
+        eq(interaction.id, current.id),
+        eq(interaction.status, "pending"),
+        gt(interaction.expiresAt, now),
+      ),
+    )
+    .returning();
+  if (!row) return c.json({ error: "Interaction is already terminal" }, 409);
+  void deliverInteractionCallbacks();
+  return c.json({ ok: true, status: row.status });
+});

@@ -9,6 +9,7 @@ const {
 
 const sceneDelegate = `internal import Expo
 import React
+import UserNotifications
 
 /** Compatibility shim for Expo SDK 57 when building with Xcode 27. */
 @objc(SceneDelegate)
@@ -30,6 +31,10 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     self.window = window
     appDelegate.window = window
     factory.startReactNative(withModuleName: "main", in: window, launchOptions: nil)
+
+    if let notificationResponse = connectionOptions.notificationResponse {
+      forward(notificationResponse)
+    }
 
     for context in connectionOptions.urlContexts {
       route(context, through: appDelegate)
@@ -56,6 +61,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
     for context in URLContexts {
       route(context, through: appDelegate)
+    }
+  }
+
+  private func forward(_ response: UNNotificationResponse, attempt: Int = 0) {
+    let center = UNUserNotificationCenter.current()
+    if let delegate = center.delegate {
+      delegate.userNotificationCenter?(center, didReceive: response, withCompletionHandler: {})
+      return
+    }
+    guard attempt < 20 else { return }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+      self?.forward(response, attempt: attempt + 1)
     }
   }
 

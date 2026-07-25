@@ -14,6 +14,7 @@ import {
   clearInteractionResponses,
   DEVICE_ID_KEY,
   flushInteractionResponses,
+  registerInteractionCategories,
 } from "../src/lib/interactions";
 import { refreshLiveActivityTokenSync } from "../src/lib/live-activities";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
@@ -85,11 +86,13 @@ export default function HomeScreen() {
         // APNs token is optional; delivery uses the Expo push token.
       }
 
+      await registerInteractionCategories();
       const registered = await api.registerDevice({
         expoPushToken: expoToken,
         ...(apns ? { apnsToken: apns } : {}),
         platform: "ios",
         deviceName: Device.deviceName ?? undefined,
+        interactionSchemaVersion: 1,
       });
 
       await SecureStore.setItemAsync(EXPO_TOKEN_KEY, expoToken);

@@ -3,14 +3,16 @@ import { env } from "../env";
 
 const ENCRYPTION_VERSION = "v1";
 
-function encryptionKey(purpose: "webhook-token" | "live-activity-token"): Buffer {
+type EncryptionPurpose = "webhook-token" | "live-activity-token" | "callback-token";
+
+function encryptionKey(purpose: EncryptionPurpose): Buffer {
   return createHash("sha256")
     .update(`hark:${purpose}:v1\0`, "utf8")
     .update(env.BETTER_AUTH_SECRET, "utf8")
     .digest();
 }
 
-function encryptToken(token: string, purpose: "webhook-token" | "live-activity-token"): string {
+function encryptToken(token: string, purpose: EncryptionPurpose): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(purpose), iv);
   const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
@@ -23,7 +25,7 @@ function encryptToken(token: string, purpose: "webhook-token" | "live-activity-t
   ].join(".");
 }
 
-function decryptToken(value: string, purpose: "webhook-token" | "live-activity-token"): string {
+function decryptToken(value: string, purpose: EncryptionPurpose): string {
   const [version, iv, tag, ciphertext, extra] = value.split(".");
   if (version !== ENCRYPTION_VERSION || !iv || !tag || !ciphertext || extra) {
     throw new Error("Invalid encrypted token");
@@ -115,4 +117,23 @@ export function encryptLiveActivityToken(token: string): string {
 
 export function decryptLiveActivityToken(value: string): string {
   return decryptToken(value, "live-activity-token");
+}
+
+export function encryptCallbackToken(token: string): string {
+  return encryptToken(token, "callback-token");
+}
+
+export function decryptCallbackToken(value: string): string {
+  return decryptToken(value, "callback-token");
+}
+
+export function generateInteractionResponseToken(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function hashInteractionResponseToken(token: string): string {
+  return createHash("sha256")
+    .update("hark:interaction-response:v1\0", "utf8")
+    .update(token, "utf8")
+    .digest("hex");
 }

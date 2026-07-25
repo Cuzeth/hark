@@ -7,11 +7,13 @@ import { sqlite } from "./db";
 import { runMigrations } from "./db/migrate";
 import { assertRuntimeEnv, env } from "./env";
 import { pruneAnalytics } from "./lib/analytics";
+import { startInteractionCallbackWorker } from "./lib/interaction-callbacks";
 
 assertRuntimeEnv();
 runMigrations();
 // Bounds the analytics log at startup; long-running processes prune opportunistically.
 pruneAnalytics();
+startInteractionCallbackWorker();
 
 // In production the same process serves the built SPA with a history fallback.
 const clientDir = resolve(process.cwd(), "dist/client");

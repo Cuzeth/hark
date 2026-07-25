@@ -2,6 +2,7 @@ import type {
   DeviceRegisterInput,
   DeviceUnregisterInput,
   EventDto,
+  InteractionCredentialResponseInput,
   InteractionDto,
   InteractionResponseInput,
   LiveActivityPushToStartTokenInput,
@@ -59,6 +60,11 @@ export const api = {
   listEvents: (limit = 20) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
   respondToInteraction: (id: string, input: InteractionResponseInput) =>
     request<{ interaction: InteractionDto }>(`/api/interactions/${id}/respond`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  respondToInteractionWithToken: (id: string, input: InteractionCredentialResponseInput) =>
+    request<{ ok: true; status: string }>(`/api/interaction-responses/${id}/respond`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
