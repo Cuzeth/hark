@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 import { GoogleButton } from "../components/GoogleButton";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { signInWithGoogle, useSession } from "../lib/auth";
 
 export function Landing() {
@@ -24,7 +23,6 @@ export function Landing() {
               Open dashboard
             </Link>
           ) : null}
-          <ThemeToggle />
         </nav>
       </header>
 

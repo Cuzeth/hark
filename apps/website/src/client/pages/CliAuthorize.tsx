@@ -2,7 +2,6 @@ import type { DeviceAuthorizationRequestDto } from "@hark/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { GoogleButton } from "../components/GoogleButton";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { api } from "../lib/api";
 import { signInWithGoogle, useSession } from "../lib/auth";
 
@@ -74,7 +73,6 @@ export function CliAuthorize() {
           {session ? (
             <span className="text-ink-faint max-w-48 truncate text-xs">{session.user.email}</span>
           ) : null}
-          <ThemeToggle />
         </div>
       </header>
 

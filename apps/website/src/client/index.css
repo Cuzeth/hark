@@ -1,16 +1,13 @@
 @import "tailwindcss";
 
 /*
- * Dark mode is class-based so a stored user preference can override the OS
- * setting. `<html>` gets the `dark` class from the blocking script in
- * index.html before first paint, and from applyTheme() afterwards.
- */
-@custom-variant dark (&:where(.dark, .dark *));
-
-/*
- * Semantic tokens. Light values live here; :root.dark below remaps the same
- * custom properties, so utilities such as `bg-surface` or `text-ink-subtle`
- * need no `dark:` counterpart.
+ * The theme mirrors the OS setting and is deliberately not configurable, so
+ * there is no class on `<html>` and no stored preference. `dark:` therefore
+ * uses Tailwind's default `prefers-color-scheme` variant.
+ *
+ * Semantic tokens. Light values live here; the dark media query below remaps
+ * the same custom properties, so utilities such as `bg-surface` or
+ * `text-ink-subtle` need no `dark:` counterpart.
  *
  * Surfaces get *lighter* as they rise in dark mode and darker in light mode,
  * so elevation reads correctly in both directions. `field` is the exception:
@@ -77,55 +74,57 @@
   --hark-panel-shadow: 0 24px 70px oklch(0.21 0.02 260 / 0.15);
 }
 
-:root.dark {
-  color-scheme: dark;
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
 
-  --color-paper: oklch(0.178 0.008 260);
-  --color-surface: oklch(0.228 0.009 260);
-  --color-surface-muted: oklch(0.262 0.01 260);
-  --color-surface-hover: oklch(0.3 0.011 260);
-  --color-field: oklch(0.2 0.009 260);
+    --color-paper: oklch(0.178 0.008 260);
+    --color-surface: oklch(0.228 0.009 260);
+    --color-surface-muted: oklch(0.262 0.01 260);
+    --color-surface-hover: oklch(0.3 0.011 260);
+    --color-field: oklch(0.2 0.009 260);
 
-  --color-ink: oklch(0.958 0.003 260);
-  --color-ink-muted: oklch(0.82 0.008 260);
-  --color-ink-subtle: oklch(0.755 0.009 260);
-  --color-ink-faint: oklch(0.7 0.01 260);
-  --color-ink-disabled: oklch(0.46 0.012 260);
+    --color-ink: oklch(0.958 0.003 260);
+    --color-ink-muted: oklch(0.82 0.008 260);
+    --color-ink-subtle: oklch(0.755 0.009 260);
+    --color-ink-faint: oklch(0.7 0.01 260);
+    --color-ink-disabled: oklch(0.46 0.012 260);
 
-  --color-line: oklch(0.31 0.011 260);
-  --color-line-strong: oklch(0.53 0.013 260);
-  --color-media-line: oklch(1 0 0 / 0.1);
+    --color-line: oklch(0.31 0.011 260);
+    --color-line-strong: oklch(0.53 0.013 260);
+    --color-media-line: oklch(1 0 0 / 0.1);
 
-  --color-accent: oklch(0.735 0.12 170);
-  --color-accent-hover: oklch(0.8 0.115 170);
-  --color-accent-text: oklch(0.8 0.11 170);
-  --color-on-accent: oklch(0.19 0.032 173);
-  --color-accent-soft: oklch(0.3 0.038 172);
-  --color-accent-wash: oklch(0.735 0.12 170 / 0.07);
+    --color-accent: oklch(0.735 0.12 170);
+    --color-accent-hover: oklch(0.8 0.115 170);
+    --color-accent-text: oklch(0.8 0.11 170);
+    --color-on-accent: oklch(0.19 0.032 173);
+    --color-accent-soft: oklch(0.3 0.038 172);
+    --color-accent-wash: oklch(0.735 0.12 170 / 0.07);
 
-  --color-danger: oklch(0.76 0.13 25);
-  --color-danger-strong: oklch(0.7 0.17 25);
-  --color-danger-soft: oklch(0.29 0.06 25);
-  --color-danger-line: oklch(0.42 0.09 25);
-  --color-warn: oklch(0.8 0.15 75);
-  --color-info: oklch(0.7 0.16 259);
-  --color-idle: oklch(0.45 0.012 260);
+    --color-danger: oklch(0.76 0.13 25);
+    --color-danger-strong: oklch(0.7 0.17 25);
+    --color-danger-soft: oklch(0.29 0.06 25);
+    --color-danger-line: oklch(0.42 0.09 25);
+    --color-warn: oklch(0.8 0.15 75);
+    --color-info: oklch(0.7 0.16 259);
+    --color-idle: oklch(0.45 0.012 260);
 
-  --color-code: oklch(0.145 0.008 260);
-  --color-code-ink: oklch(0.9 0.004 260);
+    --color-code: oklch(0.145 0.008 260);
+    --color-code-ink: oklch(0.9 0.004 260);
 
-  --color-brand-blue: oklch(0.75 0.13 253);
+    --color-brand-blue: oklch(0.75 0.13 253);
 
-  --hark-edge-tint: oklch(0.735 0.12 170 / 0.1);
-  /* `multiply` has nothing to darken on a dark page, so the grain flips to
+    --hark-edge-tint: oklch(0.735 0.12 170 / 0.1);
+    /* `multiply` has nothing to darken on a dark page, so the grain flips to
      `screen` and drops in opacity to stay a texture rather than a haze. */
-  --hark-noise-opacity: 0.055;
-  --hark-noise-blend: screen;
-  --hark-backdrop: oklch(0.12 0.006 260 / 0.6);
-  /* Large soft shadows read as smudges on dark surfaces, so elevation comes
+    --hark-noise-opacity: 0.055;
+    --hark-noise-blend: screen;
+    --hark-backdrop: oklch(0.12 0.006 260 / 0.6);
+    /* Large soft shadows read as smudges on dark surfaces, so elevation comes
      from a light hairline ring plus a tight, deep shadow. */
-  --hark-panel-border: oklch(1 0 0 / 0.1);
-  --hark-panel-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04), 0 16px 50px oklch(0 0 0 / 0.55);
+    --hark-panel-border: oklch(1 0 0 / 0.1);
+    --hark-panel-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04), 0 16px 50px oklch(0 0 0 / 0.55);
+  }
 }
 
 html {

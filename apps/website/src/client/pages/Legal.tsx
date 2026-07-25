@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import { ThemeToggle } from "../components/ThemeToggle";
 
 const updated = "July 24, 2026";
 
@@ -26,7 +25,6 @@ function LegalLayout({
             <Link className="transition hover:text-ink" to="/">
               Home
             </Link>
-            <ThemeToggle />
           </nav>
         </div>
       </header>

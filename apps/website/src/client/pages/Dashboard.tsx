@@ -10,7 +10,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
 import { CopyField } from "../components/CopyField";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { api } from "../lib/api";
 import { signOut, useSession } from "../lib/auth";
 
@@ -210,14 +209,6 @@ export function Dashboard() {
             Hark
           </Link>
           <div className="flex items-center gap-3">
-            {/*
-              The dashboard header is the densest on the site — the overlapping
-              Upgrade/Sign out pair alone is ~150px — so the toggle appears from
-              `sm` up, the same way the account email does. Below `sm` the OS
-              preference applies and the toggle is one tap away on any other
-              page.
-            */}
-            <ThemeToggle className="hidden sm:inline-flex" />
             <Link className="text-ink-subtle hover:text-ink text-sm transition" to="/docs">
               Docs
             </Link>

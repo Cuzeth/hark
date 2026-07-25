@@ -1,5 +1,4 @@
 import { Link } from "react-router";
-import { ThemeToggle } from "../components/ThemeToggle";
 
 const exampleEndpoint = "https://hark.ryan.ceo/hooks/whk_your_token";
 
@@ -18,7 +17,6 @@ export function Docs() {
             <Link className="hover:text-ink transition" to="/dashboard">
               Dashboard
             </Link>
-            <ThemeToggle />
           </nav>
         </div>
       </header>
