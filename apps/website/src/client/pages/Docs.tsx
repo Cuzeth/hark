@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { CodeBlock } from "../components/CodeBlock";
 
 const exampleEndpoint = "https://hark.ryan.ceo/hooks/whk_your_token";
 
@@ -31,7 +32,9 @@ export function Docs() {
         </p>
 
         <DocSection title="Request">
-          <Code>{`curl -X POST ${exampleEndpoint} \\
+          <CodeBlock
+            language="bash"
+            code={`curl -X POST ${exampleEndpoint} \\
   -H 'Content-Type: application/json' \\
   -H 'Idempotency-Key: deploy-184-production' \\
   -d '{
@@ -39,7 +42,8 @@ export function Docs() {
     "title": "GitHub",
     "imageUrl": "https://github.com/github.png",
     "url": "https://github.com/acme/app/actions"
-  }'`}</Code>
+  }'`}
+          />
         </DocSection>
 
         <DocSection title="Payload">
@@ -95,10 +99,13 @@ export function Docs() {
             <InlineCode>400</InlineCode>; inactive targets are skipped.
           </p>
           <div className="mt-4">
-            <Code>{`{
+            <CodeBlock
+              language="json"
+              code={`{
   "body": "The production deploy needs attention.",
   "deviceIds": ["dev_your_iphone_id"]
-}`}</Code>
+}`}
+            />
           </div>
         </DocSection>
 
@@ -112,11 +119,14 @@ export function Docs() {
         </DocSection>
 
         <DocSection title="Response">
-          <Code>{`{
+          <CodeBlock
+            language="json"
+            code={`{
   "ok": true,
   "eventId": "evt_Cxns2IdbF4H0TJYq",
   "delivered": 1
-}`}</Code>
+}`}
+          />
           <p className="mt-3 text-sm leading-relaxed text-ink-subtle">
             Delivered is the number of push requests accepted by Expo. Use the dashboard activity
             log to inspect failures and devices that are no longer registered.
@@ -151,14 +161,6 @@ function PayloadRow({
       <td className="py-3 pr-5 text-xs text-ink-faint">{required ? "Yes" : "No"}</td>
       <td className="py-3 text-sm text-ink-subtle">{description}</td>
     </tr>
-  );
-}
-
-function Code({ children }: { children: string }) {
-  return (
-    <pre className="overflow-x-auto rounded-xl bg-code p-4 font-mono text-xs leading-relaxed text-code-ink">
-      {children}
-    </pre>
   );
 }
 
