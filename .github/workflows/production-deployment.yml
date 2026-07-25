@@ -1,13 +1,7 @@
 name: Production Deployment
 
 on:
-  workflow_dispatch:
-    inputs:
-      what_to_test:
-        description: TestFlight “What to Test” notes
-        required: false
-        default: Verify Google sign-in, device registration, communication notification avatars, activity history, and destination links.
-        type: string
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -67,7 +61,6 @@ jobs:
           --platform ios
           --profile production
           --auto-submit-with-profile production
-          --what-to-test "${{ inputs.what_to_test }}"
           --message "Production deployment from ${{ github.sha }}"
           --non-interactive
           --no-wait
