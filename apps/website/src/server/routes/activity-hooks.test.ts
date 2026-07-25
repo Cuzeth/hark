@@ -212,7 +212,7 @@ describe("Live Activity webhook routes", () => {
       });
       expect(apnsCalls.at(-1)).toMatchObject({
         token: updateToken,
-        priority: 5,
+        priority: 10,
         input: { event: "update", staleDate: 1_784_998_800 },
       });
 

@@ -404,7 +404,7 @@ describe("Live Activity agent routes", () => {
         props: { status: "Testing", progress: 0.5, accentColor: "#64D2FF" },
       },
     });
-    expect(apnsCalls[0]).toMatchObject({ token: "ee".repeat(32), priority: 5 });
+    expect(apnsCalls[0]).toMatchObject({ token: "ee".repeat(32), priority: 10 });
 
     const stale = await agent(`/${startBody.activity.id}`, WRITE_SECRET, {
       method: "PATCH",

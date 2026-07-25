@@ -274,7 +274,7 @@ export async function dispatchLiveActivity(
                 ? { dismissalDate: Math.floor(row.dismissalAt.getTime() / 1000) }
                 : {}),
             },
-            eventName === "update" ? 5 : 10,
+            10,
           );
         } catch (error) {
           result = {
