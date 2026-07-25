@@ -87,29 +87,14 @@ export function Landing() {
         <hr className="border-line mt-20 border-t" />
 
         <section className="pt-14" aria-labelledby="how-it-works">
-          <p className="text-accent-text mb-3 text-xs font-medium uppercase">How it works</p>
-          <h2 id="how-it-works" className="text-2xl font-semibold text-balance">
-            One POST, no SDK
+          <h2 id="how-it-works" className="text-2xl font-semibold">
+            How it works
           </h2>
-          <p className="text-ink-subtle mt-4 max-w-xl text-base leading-relaxed text-pretty">
-            Hark is a single endpoint. Create a service, POST JSON to its secret URL, and it arrives
-            on your iPhone branded as the sender.
+          <p className="text-ink-subtle mt-3 max-w-xl text-base leading-relaxed">
+            POST JSON to a service's webhook URL. Only <InlineCode>body</InlineCode> is required.
           </p>
 
-          <ol className="mt-8 grid gap-4 sm:grid-cols-3">
-            <Step step={1} title="Create a service">
-              Give it a name and an avatar, then copy its secret webhook URL.
-            </Step>
-            <Step step={2} title="POST some JSON">
-              Only <InlineCode>body</InlineCode> is required. Omitted fields fall back to the
-              service defaults.
-            </Step>
-            <Step step={3} title="Get notified">
-              It reaches every registered iPhone as a communication notification.
-            </Step>
-          </ol>
-
-          <h3 className="mt-12 mb-3 text-sm font-semibold">Request</h3>
+          <h3 className="mt-10 mb-3 text-sm font-semibold">Request</h3>
           <CodeBlock language="bash" code={requestExample} />
 
           <h3 className="mt-8 mb-3 text-sm font-semibold">Payload</h3>
@@ -147,26 +132,6 @@ export function Landing() {
         </nav>
       </footer>
     </div>
-  );
-}
-
-function Step({
-  step,
-  title,
-  children,
-}: {
-  step: number;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="border-line bg-surface rounded-2xl border p-4">
-      <span className="bg-accent-soft text-accent-text flex size-6 items-center justify-center rounded-full text-xs font-semibold">
-        {step}
-      </span>
-      <h3 className="mt-3 text-sm font-semibold">{title}</h3>
-      <p className="text-ink-subtle mt-1 text-sm leading-relaxed">{children}</p>
-    </li>
   );
 }
 
