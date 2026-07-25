@@ -216,6 +216,7 @@ async function activeConflict(deviceIds: string[], now: Date) {
       deliveryId: liveActivityDelivery.id,
       activityId: liveActivity.id,
       requesterServiceId: liveActivity.requesterServiceId,
+      activityStatus: liveActivity.status,
       expiresAt: liveActivity.expiresAt,
     })
     .from(liveActivityDelivery)
@@ -226,14 +227,24 @@ async function activeConflict(deviceIds: string[], now: Date) {
         inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
       ),
     );
-  const expired = occupied.filter((item) => item.expiresAt <= now).map((item) => item.deliveryId);
+  const expired = occupied
+    .filter(
+      (item) =>
+        item.expiresAt <= now || !["starting", "active", "partial"].includes(item.activityStatus),
+    )
+    .map((item) => item.deliveryId);
   if (expired.length > 0) {
     await db
       .update(liveActivityDelivery)
       .set({ status: "ended", endedAt: now, updatedAt: now })
       .where(inArray(liveActivityDelivery.id, expired));
   }
-  return occupied.find((item) => item.expiresAt > now) ?? null;
+  return (
+    occupied.find(
+      (item) =>
+        item.expiresAt > now && ["starting", "active", "partial"].includes(item.activityStatus),
+    ) ?? null
+  );
 }
 
 async function deliveriesFor(activityId: string): Promise<DeliveryRow[]> {

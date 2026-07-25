@@ -199,13 +199,14 @@ async function recordDelivery(
       .run();
     tx.update(liveActivityDelivery)
       .set({
-        status: result.accepted
-          ? eventName === "end"
+        status:
+          eventName === "end"
             ? "ended"
-            : "accepted"
-          : eventName === "start"
-            ? "failed"
-            : delivery.status,
+            : result.accepted
+              ? "accepted"
+              : eventName === "start"
+                ? "failed"
+                : delivery.status,
         lastEvent: eventName,
         lastSequence: sequence,
         lastApnsStatus: result.status || null,
@@ -213,7 +214,7 @@ async function recordDelivery(
         lastApnsId: result.apnsId,
         lastAttemptAt: now,
         updatedAt: now,
-        endedAt: result.accepted && eventName === "end" ? now : null,
+        endedAt: eventName === "end" ? now : null,
         ...(invalid ? { updateTokenCiphertext: null, updateTokenUpdatedAt: null } : {}),
       })
       .where(eq(liveActivityDelivery.id, delivery.id))
@@ -498,6 +499,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
         .select({
           deliveryId: liveActivityDelivery.id,
           activityId: liveActivity.id,
+          activityStatus: liveActivity.status,
           expiresAt: liveActivity.expiresAt,
         })
         .from(liveActivityDelivery)
@@ -512,7 +514,11 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
           ),
         );
       const expiredDeliveryIds = occupied
-        .filter((item) => item.expiresAt <= now)
+        .filter(
+          (item) =>
+            item.expiresAt <= now ||
+            !["starting", "active", "partial"].includes(item.activityStatus),
+        )
         .map((item) => item.deliveryId);
       if (expiredDeliveryIds.length > 0) {
         await db
@@ -520,7 +526,10 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
           .set({ status: "ended", endedAt: now, updatedAt: now })
           .where(inArray(liveActivityDelivery.id, expiredDeliveryIds));
       }
-      const conflict = occupied.find((item) => item.expiresAt > now);
+      const conflict = occupied.find(
+        (item) =>
+          item.expiresAt > now && ["starting", "active", "partial"].includes(item.activityStatus),
+      );
       if (conflict) {
         return c.json(
           {

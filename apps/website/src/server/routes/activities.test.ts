@@ -5,6 +5,7 @@ process.env.DATABASE_URL = ":memory:";
 
 const authState = vi.hoisted(() => ({ userId: "activity_user_1" as string | null }));
 const apnsCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const apnsState = vi.hoisted(() => ({ rejectEvent: null as string | null }));
 const billingState = vi.hoisted(() => ({ pro: true, serviceRate: 1000, accountRate: 1000 }));
 
 vi.mock("../auth", () => ({
@@ -53,6 +54,9 @@ vi.mock("../lib/apns", () => ({
     priority: number,
   ) => {
     apnsCalls.push({ token, environment, input, priority });
+    if (input.event === apnsState.rejectEvent) {
+      return { status: 503, apnsId: null, reason: "Unavailable", accepted: false };
+    }
     return { status: 200, apnsId: `apns-${apnsCalls.length}`, reason: null, accepted: true };
   },
 }));
@@ -174,6 +178,7 @@ beforeEach(async () => {
   billingState.serviceRate = 1000;
   billingState.accountRate = 1000;
   apnsCalls.length = 0;
+  apnsState.rejectEvent = null;
   await db.delete(schema.liveActivity);
   const { eq } = await import("drizzle-orm");
   await db
@@ -540,6 +545,33 @@ describe("Live Activity agent routes", () => {
         })
       ).status,
     ).toBe(409);
+  });
+
+  it("releases the device lock when an end push is rejected", async () => {
+    const created = await start({
+      title: "Dismissed",
+      status: "Running",
+      deviceIds: ["activity_dev_1"],
+    });
+    const body = (await created.json()) as { activity: { id: string } };
+    await registerUpdateToken(body.activity.id, "native-dismissed", "cd".repeat(32));
+    apnsState.rejectEvent = "end";
+    const ended = await agent(`/${body.activity.id}/end`, WRITE_SECRET, {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+    expect(await ended.json()).toMatchObject({
+      accepted: 0,
+      failed: 1,
+      activity: { status: "ended" },
+    });
+    apnsState.rejectEvent = null;
+    const replacement = await start({
+      title: "Replacement",
+      status: "Starting",
+      deviceIds: ["activity_dev_1"],
+    });
+    expect(replacement.status).toBe(201);
   });
 
   it("revokes Live Activity capability atomically when device ownership changes", async () => {
