@@ -35,6 +35,7 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+app.get("/oss", (c) => c.redirect("https://github.com/R44VC0RP/hark/"));
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
