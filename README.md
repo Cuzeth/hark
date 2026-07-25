@@ -81,7 +81,9 @@ POST  /hooks/:token/live-activities/:activityId/end
 ```
 
 Updates accept partial state such as `status`, `detail`, `progress`, `symbol`, and `accentColor`.
-Hark allows one active Hark Live Activity per device.
+Hark allows one active Hark Live Activity per device. Starting an activity may alert the user, but
+progress updates are silent by default. High-priority updates control delivery speed, not sound or
+haptics.
 
 ## Agent Workflows
 

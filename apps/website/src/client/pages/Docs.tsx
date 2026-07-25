@@ -199,7 +199,9 @@ curl -X POST ${exampleEndpoint}/live-activities/act_your_activity_id/end \\
           <p className="mt-4 text-sm leading-relaxed text-ink-subtle">
             Activities expire after eight hours by default. Their content becomes stale after four
             hours without an update; every update rolls that stale deadline forward. Stale content
-            remains visible and updateable. Starting another activity on an occupied device returns{" "}
+            remains visible and updateable. Starts may alert the user, while progress updates are
+            silent by default; high priority affects delivery speed, not sound or haptics. Starting
+            another activity on an occupied device returns{" "}
             <InlineCode>409 ACTIVE_ACTIVITY_CONFLICT</InlineCode>.
           </p>
         </DocSection>
