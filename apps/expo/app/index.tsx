@@ -57,10 +57,7 @@ export default function SignInScreen() {
             {busy ? (
               <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <>
-                <Text style={styles.googleGlyph}>G</Text>
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
-              </>
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
             )}
           </Pressable>
         )}
@@ -140,12 +137,6 @@ const styles = StyleSheet.create({
   googleButtonPressed: {
     backgroundColor: colors.accentPressed,
     transform: [{ scale: 0.98 }],
-  },
-  googleGlyph: {
-    color: "#FFFFFF",
-    fontFamily: fonts.semibold,
-    fontSize: 15,
-    letterSpacing: tightTracking(15),
   },
   googleButtonText: {
     color: "#FFFFFF",

@@ -168,12 +168,34 @@ beforeAll(async () => {
   ]);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   authState.userId = "activity_user_1";
   billingState.pro = true;
   billingState.serviceRate = 1000;
   billingState.accountRate = 1000;
   apnsCalls.length = 0;
+  await db.delete(schema.liveActivity);
+  const { eq } = await import("drizzle-orm");
+  await db
+    .update(schema.device)
+    .set({
+      userId: "activity_user_1",
+      active: true,
+      liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("aa".repeat(32)),
+      liveActivityTokenEnvironment: "sandbox",
+      liveActivitySchemaVersion: 1,
+    })
+    .where(eq(schema.device.id, "activity_dev_1"));
+  await db
+    .update(schema.device)
+    .set({
+      userId: "activity_user_1",
+      active: true,
+      liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("bb".repeat(32)),
+      liveActivityTokenEnvironment: "sandbox",
+      liveActivitySchemaVersion: 1,
+    })
+    .where(eq(schema.device.id, "activity_dev_2"));
 });
 
 function agent(path: string, token = WRITE_SECRET, init?: RequestInit) {
@@ -232,7 +254,13 @@ describe("Live Activity agent routes", () => {
 
   it("starts with exact expo-widgets content and is idempotent", async () => {
     const first = await start(
-      { title: "Release", status: "Building", progress: 0.2, key: "release-main" },
+      {
+        title: "Release",
+        status: "Building",
+        progress: 0.2,
+        key: "release-main",
+        accentColor: "#FF9F0A",
+      },
       "start-release",
     );
     expect(first.status).toBe(201);
@@ -249,11 +277,18 @@ describe("Live Activity agent routes", () => {
           title: "Release",
           status: "Building",
           progress: 0.2,
+          accentColor: "#FF9F0A",
         },
       },
     });
     const replay = await start(
-      { title: "Release", status: "Building", progress: 0.2, key: "release-main" },
+      {
+        title: "Release",
+        status: "Building",
+        progress: 0.2,
+        key: "release-main",
+        accentColor: "#FF9F0A",
+      },
       "start-release",
     );
     expect(await replay.json()).toMatchObject({
@@ -355,11 +390,19 @@ describe("Live Activity agent routes", () => {
     const updated = await agent(`/${startBody.activity.id}`, WRITE_SECRET, {
       method: "PATCH",
       headers: { "Idempotency-Key": "sequence-update" },
-      body: JSON.stringify({ status: "Testing", progress: 0.5, ifSequence: 0 }),
+      body: JSON.stringify({
+        status: "Testing",
+        progress: 0.5,
+        accentColor: "#64D2FF",
+        ifSequence: 0,
+      }),
     });
     expect(await updated.json()).toMatchObject({
       accepted: 1,
-      activity: { sequence: 1, props: { status: "Testing", progress: 0.5 } },
+      activity: {
+        sequence: 1,
+        props: { status: "Testing", progress: 0.5, accentColor: "#64D2FF" },
+      },
     });
     expect(apnsCalls[0]).toMatchObject({ token: "ee".repeat(32), priority: 5 });
 
@@ -395,32 +438,23 @@ describe("Live Activity agent routes", () => {
     expect(decryptLiveActivityToken(delivery?.token ?? "")).toBe("34".repeat(32));
   });
 
-  it("prefers an exact native activity match when another delivery is pending", async () => {
-    const associated = await start({
+  it("rejects a second active Hark activity on the same device", async () => {
+    const first = await start({
       title: "Associated",
       status: "Starting",
       deviceIds: ["activity_dev_1"],
     });
-    const associatedBody = (await associated.json()) as { activity: { id: string } };
-    await registerUpdateToken(associatedBody.activity.id, "native-exact", "56".repeat(32));
-    const pending = await start({
+    const firstBody = (await first.json()) as { activity: { id: string } };
+    const second = await start({
       title: "Pending",
       status: "Starting",
       deviceIds: ["activity_dev_1"],
     });
-    const pendingBody = (await pending.json()) as { activity: { id: string } };
-
-    const rotated = await registerUpdateToken(undefined, "native-exact", "78".repeat(32));
-    expect(await rotated.json()).toMatchObject({ activityId: associatedBody.activity.id });
-
-    const { eq } = await import("drizzle-orm");
-    const pendingDelivery = db
-      .select()
-      .from(schema.liveActivityDelivery)
-      .where(eq(schema.liveActivityDelivery.activityId, pendingBody.activity.id))
-      .get();
-    expect(pendingDelivery?.nativeActivityId).toBeNull();
-    expect(pendingDelivery?.updateTokenCiphertext).toBeNull();
+    expect(second.status).toBe(409);
+    expect(await second.json()).toMatchObject({
+      code: "ACTIVE_ACTIVITY_CONFLICT",
+      activityId: firstBody.activity.id,
+    });
   });
 
   it("uses strictly increasing APNs timestamps for same-second updates", async () => {
@@ -451,7 +485,7 @@ describe("Live Activity agent routes", () => {
     expect(timestamps[1]).toBe((timestamps[0] ?? 0) + 1);
   });
 
-  it("marks a zero-acceptance update failed rather than partial", async () => {
+  it("keeps a zero-acceptance update retryable and the device occupied", async () => {
     const created = await start({
       title: "No update token",
       status: "Starting",
@@ -465,8 +499,14 @@ describe("Live Activity agent routes", () => {
     expect(await response.json()).toMatchObject({
       accepted: 0,
       failed: 1,
-      activity: { status: "failed" },
+      activity: { status: "active" },
     });
+    const conflicting = await start({
+      title: "Still occupied",
+      status: "Starting",
+      deviceIds: ["activity_dev_2"],
+    });
+    expect(conflicting.status).toBe(409);
   });
 
   it("ends terminally with optimistic sequencing", async () => {

@@ -139,21 +139,39 @@ accepted for processing, not that it reached or was seen on a device.
 
 ## Agent task Live Activities
 
-`harkctl` can start, update, inspect, and end a finite agent task on the Lock Screen and Dynamic
-Island. The app ships one fixed `HarkAgentActivity` template built with `expo-widgets@57.0.6` and
-`@expo/ui`; activity props are bounded text/progress values with no remote images or agent-defined
-layout. Browser login requests `activities:read` and `activities:write` explicitly alongside the
-existing default scopes.
+`harkctl` and service webhook URLs can start, update, inspect, and end a finite agent task on the
+Lock Screen and Dynamic Island. The app ships one fixed `HarkAgentActivity` template built with
+`expo-widgets@57.0.6` and `@expo/ui`; activity props are bounded text/progress values with no remote
+images or agent-defined layout. The accent can be set to a validated six-digit hex color while the
+dark surface and text colors remain fixed for contrast. Browser login requests `activities:read`
+and `activities:write` explicitly alongside the existing default scopes.
 
 ```sh
 harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 \
-  --stale-after 20m --idempotency-key release-start
-harkctl activity update release-main --status "Testing" --progress 0.7 --if-sequence 0
+  --accent-color '#FF9F0A' --idempotency-key release-start
+harkctl activity update release-main --status "Testing" --progress 0.7 \
+  --accent-color '#64D2FF' --if-sequence 0
 harkctl activity get release-main
 harkctl activity list
 harkctl activity end release-main --status "Complete" --progress 1 --if-sequence 1 \
   --dismiss-after 30s
 ```
+
+The same service token used for ordinary notifications exposes a stateful webhook lifecycle:
+
+```text
+POST  /hooks/:token/live-activities
+GET   /hooks/:token/live-activities/:activityId
+PATCH /hooks/:token/live-activities/:activityId
+POST  /hooks/:token/live-activities/:activityId/end
+```
+
+Start returns `activityId`; update accepts partial state, and end is terminal. The default expiry is
+eight hours and the default stale window is four hours. Each update rolls the stale deadline forward
+without extending the absolute expiry. Hark enforces one active Hark Live Activity per device and
+returns `409 ACTIVE_ACTIVITY_CONFLICT` instead of silently replacing an existing activity. Webhook
+ownership is scoped to the service, so another service token on the same account cannot read or
+mutate the activity.
 
 The server sends ActivityKit notifications directly to APNs with token-based ES256 authentication.
 Set `APNS_KEY_ID`, `APPLE_TEAM_ID`, `APNS_PRIVATE_KEY`, `APNS_BUNDLE_ID`, and `APNS_ENVIRONMENT` only
@@ -168,8 +186,8 @@ end deliveries still count toward usage tracking.
 SDK 57's official `expo-widgets` API does not expose IDs or props from `getInstances()`. Its 57.0.6
 wrapper does retain the native activity as a normal runtime property, so Hark uses one guarded,
 version-pinned helper to read that object's ActivityKit ID. Existing ID associations rotate safely;
-a new association is made only when exactly one delivery for that device is waiting. Ambiguous
-concurrent remote starts remain unassociated rather than risking an update to the wrong activity.
+a new association is made only for the delivery waiting on that device. Concurrent remote starts
+are rejected before APNs delivery.
 Push-to-start/update-token rotation and the `input-push-token` iOS 18 path still require verification
 on a signed physical device.
 

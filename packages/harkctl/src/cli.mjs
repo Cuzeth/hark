@@ -34,6 +34,13 @@ export function parseDuration(value) {
   return Math.round(amount * multiplier);
 }
 
+function parseAccentColor(value) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(String(value))) {
+    throw new UsageError("--accent-color must use #RRGGBB format");
+  }
+  return String(value);
+}
+
 export function parseArgs(argv) {
   const positionals = [];
   const options = { device: [], scope: [] };
@@ -52,6 +59,7 @@ export function parseArgs(argv) {
     "progress",
     "symbol",
     "privacy",
+    "accent-color",
     "stale-after",
     "dismiss-after",
     "if-sequence",
@@ -338,6 +346,7 @@ function help() {
   harkctl interaction get <id>
   harkctl interaction wait <id> [--timeout <duration>]
   harkctl activity start --title <title> --status <status> [--progress <0..1>] [--key <key>]
+                         [--accent-color <#RRGGBB>]
   harkctl activity update <id|key> [--status <status>] [--detail <text>] [--progress <0..1>]
                             [--if-sequence <n>] [--idempotency-key <key>]
   harkctl activity end <id|key> [--status <status>] [--dismiss-after <duration>]
@@ -436,6 +445,9 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(progress !== undefined ? { progress } : {}),
       ...(options.symbol ? { symbol: options.symbol } : {}),
       ...(options.privacy ? { privacyMode: options.privacy } : {}),
+      ...(options["accent-color"]
+        ? { accentColor: parseAccentColor(options["accent-color"]) }
+        : {}),
       ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
       ...(options["expires-in"] ? { expiresInSeconds: parseDuration(options["expires-in"]) } : {}),
       ...(options["stale-after"]
@@ -478,6 +490,9 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(progress !== undefined ? { progress } : {}),
       ...(options.symbol ? { symbol: options.symbol } : {}),
       ...(options.privacy ? { privacyMode: options.privacy } : {}),
+      ...(options["accent-color"]
+        ? { accentColor: parseAccentColor(options["accent-color"]) }
+        : {}),
       ...(options["stale-after"]
         ? { staleAfterSeconds: parseDuration(options["stale-after"]) }
         : {}),
@@ -509,6 +524,9 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(options.detail ? { detail: options.detail } : {}),
       ...(options.progress !== undefined ? { progress: Number(options.progress) } : {}),
       ...(options.symbol ? { symbol: options.symbol } : {}),
+      ...(options["accent-color"]
+        ? { accentColor: parseAccentColor(options["accent-color"]) }
+        : {}),
       ...(options["dismiss-after"]
         ? { dismissAfterSeconds: parseDuration(options["dismiss-after"]) }
         : {}),

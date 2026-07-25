@@ -3,6 +3,7 @@ import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
 import { activitiesAgentRoute, activitiesSessionRoute } from "./routes/activities";
+import { activityHooksRoute } from "./routes/activity-hooks";
 import { apiTokensRoute } from "./routes/api-tokens";
 import { billingRoute } from "./routes/billing";
 import { deviceAuthorizationRoute } from "./routes/device-authorization";
@@ -46,6 +47,7 @@ app.route("/api/interactions", interactionResponseRoute);
 app.route("/api/billing", billingRoute);
 app.route("/api/devices", devicesRoute);
 app.route("/api/events", eventsRoute);
+app.route("/hooks", activityHooksRoute);
 app.route("/hooks", hooksRoute);
 
 app.notFound((c) => {

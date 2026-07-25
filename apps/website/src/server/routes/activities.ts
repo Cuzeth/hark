@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS,
   LIVE_ACTIVITY_SCHEMA_VERSION,
   type LiveActivityDto,
   type LiveActivityMutationResponse,
@@ -41,8 +42,11 @@ import {
   requireScopes,
 } from "../middleware";
 
-type ActivityRow = typeof liveActivity.$inferSelect;
-type DeliveryRow = typeof liveActivityDelivery.$inferSelect;
+export type ActivityRow = typeof liveActivity.$inferSelect;
+export type DeliveryRow = typeof liveActivityDelivery.$inferSelect;
+export type ActivityRequester =
+  | { requesterTokenId: string; requesterServiceId?: never }
+  | { requesterTokenId?: never; requesterServiceId: string };
 
 function hash(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -54,7 +58,7 @@ function idempotencyKey(value: string | undefined): string | undefined | null {
   return normalized && normalized.length <= 200 ? normalized : null;
 }
 
-function toDto(row: ActivityRow): LiveActivityDto {
+export function toLiveActivityDto(row: ActivityRow): LiveActivityDto {
   return {
     id: row.id,
     key: row.key,
@@ -70,7 +74,7 @@ function toDto(row: ActivityRow): LiveActivityDto {
   };
 }
 
-async function expire(row: ActivityRow): Promise<ActivityRow> {
+export async function expireLiveActivity(row: ActivityRow): Promise<ActivityRow> {
   if (!["starting", "active", "partial"].includes(row.status) || row.expiresAt > new Date()) {
     return row;
   }
@@ -103,7 +107,7 @@ async function ownedActivity(
       ),
     )
     .limit(1);
-  return row ? expire(row) : undefined;
+  return row ? expireLiveActivity(row) : undefined;
 }
 
 async function enforceActivityRateLimit(
@@ -166,7 +170,7 @@ async function enforceActivityRateLimit(
 
 async function recordDelivery(
   operationId: string,
-  tokenId: string,
+  requester: ActivityRequester,
   activityId: string,
   delivery: DeliveryRow,
   eventName: LiveActivityApnsEvent,
@@ -182,7 +186,7 @@ async function recordDelivery(
         activityId,
         deliveryId: delivery.id,
         operationId,
-        requesterTokenId: tokenId,
+        ...requester,
         event: eventName,
         sequence,
         apnsStatus: result.status || null,
@@ -193,7 +197,13 @@ async function recordDelivery(
       .run();
     tx.update(liveActivityDelivery)
       .set({
-        status: result.accepted ? (eventName === "end" ? "ended" : "accepted") : "failed",
+        status: result.accepted
+          ? eventName === "end"
+            ? "ended"
+            : "accepted"
+          : eventName === "start"
+            ? "failed"
+            : delivery.status,
         lastEvent: eventName,
         lastSequence: sequence,
         lastApnsStatus: result.status || null,
@@ -220,12 +230,12 @@ async function recordDelivery(
   });
 }
 
-async function dispatch(
+export async function dispatchLiveActivity(
   row: ActivityRow,
   deliveries: DeliveryRow[],
   operationId: string,
   eventName: LiveActivityApnsEvent,
-  tokenId: string,
+  requester: ActivityRequester,
 ): Promise<{ accepted: number; failed: number; errors: string[] }> {
   const props = liveActivityPropsSchema.parse(row.props);
   const timestamp = row.apnsTimestamp;
@@ -275,7 +285,15 @@ async function dispatch(
           };
         }
       }
-      await recordDelivery(operationId, tokenId, row.id, delivery, eventName, row.sequence, result);
+      await recordDelivery(
+        operationId,
+        requester,
+        row.id,
+        delivery,
+        eventName,
+        row.sequence,
+        result,
+      );
       return result;
     }),
   );
@@ -287,7 +305,7 @@ async function dispatch(
 }
 
 /** Records the outcome of one Live Activity operation without touching task content. */
-function trackActivityOutcome(
+export function trackActivityOutcome(
   name: Extract<
     AnalyticsEventName,
     "live_activity_started" | "live_activity_updated" | "live_activity_ended"
@@ -295,6 +313,7 @@ function trackActivityOutcome(
   userId: string,
   targets: number,
   result: { accepted: number; failed: number; errors: string[] },
+  serviceId?: string,
 ): void {
   const outcome =
     result.accepted > 0
@@ -307,6 +326,7 @@ function trackActivityOutcome(
   track({
     name,
     userId,
+    serviceId,
     outcome,
     value: result.accepted,
     metadata: { failed: result.failed, targets },
@@ -315,6 +335,7 @@ function trackActivityOutcome(
     track({
       name: "notification_sent",
       userId,
+      serviceId,
       outcome: "live_activity",
       value: result.accepted,
     });
@@ -323,6 +344,7 @@ function trackActivityOutcome(
   track({
     name: "live_activity_failed",
     userId,
+    serviceId,
     outcome,
     metadata: { event: name.replace("live_activity_", ""), targets },
   });
@@ -370,7 +392,9 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .orderBy(desc(liveActivity.createdAt))
       .limit(limit);
     return c.json({
-      activities: await Promise.all(rows.map(expire)).then((items) => items.map(toDto)),
+      activities: await Promise.all(rows.map(expireLiveActivity)).then((items) =>
+        items.map(toLiveActivityDto),
+      ),
     });
   })
   .post("/", requireScopes("activities:write"), async (c) => {
@@ -400,7 +424,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
           );
         }
         return c.json<LiveActivityMutationResponse>({
-          activity: toDto(await expire(existing)),
+          activity: toLiveActivityDto(await expireLiveActivity(existing)),
           accepted: existing.acceptedCount,
           failed: existing.failedCount,
           idempotent: true,
@@ -454,6 +478,46 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     );
 
     const now = new Date();
+    if (targets.length > 0) {
+      const occupied = await db
+        .select({
+          deliveryId: liveActivityDelivery.id,
+          activityId: liveActivity.id,
+          expiresAt: liveActivity.expiresAt,
+        })
+        .from(liveActivityDelivery)
+        .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
+        .where(
+          and(
+            inArray(
+              liveActivityDelivery.deviceId,
+              targets.map((target) => target.id),
+            ),
+            inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
+          ),
+        );
+      const expiredDeliveryIds = occupied
+        .filter((item) => item.expiresAt <= now)
+        .map((item) => item.deliveryId);
+      if (expiredDeliveryIds.length > 0) {
+        await db
+          .update(liveActivityDelivery)
+          .set({ status: "ended", endedAt: now, updatedAt: now })
+          .where(inArray(liveActivityDelivery.id, expiredDeliveryIds));
+      }
+      const conflict = occupied.find((item) => item.expiresAt > now);
+      if (conflict) {
+        return c.json(
+          {
+            error: "A Live Activity is already active on a target device",
+            code: "ACTIVE_ACTIVITY_CONFLICT",
+            activityId: conflict.activityId,
+          },
+          409,
+        );
+      }
+    }
+
     const apnsTimestamp = Math.floor(now.getTime() / 1000);
     const activityId = newId("act");
     const props: LiveActivityProps = {
@@ -466,6 +530,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       updatedAt: now.toISOString(),
       symbol: parsed.data.symbol,
       privacyMode: parsed.data.privacyMode,
+      accentColor: parsed.data.accentColor,
     };
     const values: typeof liveActivity.$inferInsert = {
       id: activityId,
@@ -480,10 +545,12 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       idempotencyKey: key ?? null,
       requestHash: key ? requestHash : null,
       expiresAt: new Date(now.getTime() + parsed.data.expiresInSeconds * 1000),
-      staleAt:
-        parsed.data.staleAfterSeconds !== undefined
-          ? new Date(now.getTime() + parsed.data.staleAfterSeconds * 1000)
-          : null,
+      staleAt: new Date(
+        Math.min(
+          now.getTime() + parsed.data.staleAfterSeconds * 1000,
+          now.getTime() + parsed.data.expiresInSeconds * 1000,
+        ),
+      ),
       createdAt: now,
       updatedAt: now,
     };
@@ -501,7 +568,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
           .limit(1);
         if (existing?.requestHash === requestHash) {
           return c.json<LiveActivityMutationResponse>({
-            activity: toDto(existing),
+            activity: toLiveActivityDto(existing),
             accepted: existing.acceptedCount,
             failed: existing.failedCount,
             idempotent: true,
@@ -547,7 +614,9 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
               })),
             )
             .returning();
-    const result = await dispatch(row, deliveries, operationId, "start", token.id);
+    const result = await dispatchLiveActivity(row, deliveries, operationId, "start", {
+      requesterTokenId: token.id,
+    });
     const status = result.accepted === 0 ? "failed" : result.failed > 0 ? "partial" : "active";
     const [updatedRow] = await db
       .update(liveActivity)
@@ -563,7 +632,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>(
       {
-        activity: toDto(row),
+        activity: toLiveActivityDto(row),
         accepted: result.accepted,
         failed: result.failed,
         ...(result.accepted === 0
@@ -580,7 +649,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
   .get("/:identifier", requireScopes("activities:read"), async (c) => {
     const row = await ownedActivity(c.get("apiToken").id, c.req.param("identifier"));
     if (!row) return c.json({ error: "Live Activity not found" }, 404);
-    return c.json({ activity: toDto(row) });
+    return c.json({ activity: toLiveActivityDto(row) });
   })
   .patch("/:identifier", requireScopes("activities:write"), async (c) => {
     const token = c.get("apiToken");
@@ -597,7 +666,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     }
     if (replay && !replay.conflict) {
       return c.json<LiveActivityMutationResponse>({
-        activity: toDto(replay.row),
+        activity: toLiveActivityDto(replay.row),
         accepted: replay.operation.acceptedCount,
         failed: replay.operation.failedCount,
         idempotent: true,
@@ -606,10 +675,13 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     const current = await ownedActivity(token.id, c.req.param("identifier"));
     if (!current) return c.json({ error: "Live Activity not found" }, 404);
     if (!["starting", "active", "partial"].includes(current.status)) {
-      return c.json({ error: "Live Activity is already terminal", activity: toDto(current) }, 409);
+      return c.json(
+        { error: "Live Activity is already terminal", activity: toLiveActivityDto(current) },
+        409,
+      );
     }
     if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
-      return c.json({ error: "Sequence conflict", activity: toDto(current) }, 409);
+      return c.json({ error: "Sequence conflict", activity: toLiveActivityDto(current) }, 409);
     }
     const [owner] = await db
       .select()
@@ -640,11 +712,20 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
         : {}),
       ...(parsed.data.symbol !== undefined ? { symbol: parsed.data.symbol } : {}),
       ...(parsed.data.privacyMode !== undefined ? { privacyMode: parsed.data.privacyMode } : {}),
+      ...(parsed.data.accentColor !== undefined ? { accentColor: parsed.data.accentColor } : {}),
       updatedAt: now.toISOString(),
     };
     if (parsed.data.detail === null) delete nextProps.detail;
     if (parsed.data.progress === null) delete nextProps.progress;
     const props = liveActivityPropsSchema.parse(nextProps);
+    const staleAfterSeconds =
+      parsed.data.staleAfterSeconds ??
+      (current.staleAt
+        ? Math.max(0, Math.round((current.staleAt.getTime() - current.updatedAt.getTime()) / 1000))
+        : LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS);
+    const staleAt = new Date(
+      Math.min(now.getTime() + staleAfterSeconds * 1000, current.expiresAt.getTime()),
+    );
     const operationId = newId("lao");
     let row: ActivityRow | undefined;
     try {
@@ -656,9 +737,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
             sequence: current.sequence + 1,
             apnsTimestamp,
             updatedAt: now,
-            ...(parsed.data.staleAfterSeconds !== undefined
-              ? { staleAt: new Date(now.getTime() + parsed.data.staleAfterSeconds * 1000) }
-              : {}),
+            staleAt,
           })
           .where(
             and(
@@ -691,7 +770,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       }
       if (raced && !raced.conflict) {
         return c.json<LiveActivityMutationResponse>({
-          activity: toDto(raced.row),
+          activity: toLiveActivityDto(raced.row),
           accepted: raced.operation.acceptedCount,
           failed: raced.operation.failedCount,
           idempotent: true,
@@ -704,12 +783,24 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .select()
       .from(liveActivityDelivery)
       .where(eq(liveActivityDelivery.activityId, row.id));
-    const result = await dispatch(row, deliveries, operationId, "update", token.id);
+    const result = await dispatchLiveActivity(row, deliveries, operationId, "update", {
+      requesterTokenId: token.id,
+    });
     trackActivityOutcome("live_activity_updated", token.userId, deliveries.length, result);
+    const retryable = deliveries.some((delivery) =>
+      ["pending", "accepted", "active"].includes(delivery.status),
+    );
     const [updated] = await db
       .update(liveActivity)
       .set({
-        status: result.accepted === 0 ? "failed" : result.failed > 0 ? "partial" : "active",
+        status:
+          result.accepted === 0
+            ? retryable
+              ? row.status
+              : "failed"
+            : result.failed > 0
+              ? "partial"
+              : "active",
         acceptedCount: result.accepted,
         failedCount: result.failed,
       })
@@ -721,7 +812,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(liveActivityOperation.id, operationId));
     if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>({
-      activity: toDto(updated ?? row),
+      activity: toLiveActivityDto(updated ?? row),
       accepted: result.accepted,
       failed: result.failed,
       ...(result.errors.length ? { message: result.errors.join("; ") } : {}),
@@ -742,7 +833,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     }
     if (replay && !replay.conflict) {
       return c.json<LiveActivityMutationResponse>({
-        activity: toDto(replay.row),
+        activity: toLiveActivityDto(replay.row),
         accepted: replay.operation.acceptedCount,
         failed: replay.operation.failedCount,
         idempotent: true,
@@ -751,10 +842,13 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     const current = await ownedActivity(token.id, c.req.param("identifier"));
     if (!current) return c.json({ error: "Live Activity not found" }, 404);
     if (!["starting", "active", "partial"].includes(current.status)) {
-      return c.json({ error: "Live Activity is already terminal", activity: toDto(current) }, 409);
+      return c.json(
+        { error: "Live Activity is already terminal", activity: toLiveActivityDto(current) },
+        409,
+      );
     }
     if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
-      return c.json({ error: "Sequence conflict", activity: toDto(current) }, 409);
+      return c.json({ error: "Sequence conflict", activity: toLiveActivityDto(current) }, 409);
     }
     const [owner] = await db
       .select()
@@ -775,6 +869,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       ...previous,
       status: parsed.data.status,
       symbol: parsed.data.symbol,
+      ...(parsed.data.accentColor !== undefined ? { accentColor: parsed.data.accentColor } : {}),
       ...(parsed.data.detail !== null && parsed.data.detail !== undefined
         ? { detail: parsed.data.detail }
         : {}),
@@ -832,7 +927,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       }
       if (raced && !raced.conflict) {
         return c.json<LiveActivityMutationResponse>({
-          activity: toDto(raced.row),
+          activity: toLiveActivityDto(raced.row),
           accepted: raced.operation.acceptedCount,
           failed: raced.operation.failedCount,
           idempotent: true,
@@ -845,7 +940,9 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .select()
       .from(liveActivityDelivery)
       .where(eq(liveActivityDelivery.activityId, row.id));
-    const result = await dispatch(row, deliveries, operationId, "end", token.id);
+    const result = await dispatchLiveActivity(row, deliveries, operationId, "end", {
+      requesterTokenId: token.id,
+    });
     trackActivityOutcome("live_activity_ended", token.userId, deliveries.length, result);
     const [updated] = await db
       .update(liveActivity)
@@ -858,7 +955,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(liveActivityOperation.id, operationId));
     if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>({
-      activity: toDto(updated ?? row),
+      activity: toLiveActivityDto(updated ?? row),
       accepted: result.accepted,
       failed: result.failed,
       ...(result.errors.length ? { message: result.errors.join("; ") } : {}),
@@ -880,6 +977,8 @@ export const activitiesSessionRoute = new Hono<AuthedEnv>()
       .orderBy(desc(liveActivity.updatedAt))
       .limit(20);
     return c.json({
-      activities: await Promise.all(rows.map(expire)).then((items) => items.map(toDto)),
+      activities: await Promise.all(rows.map(expireLiveActivity)).then((items) =>
+        items.map(toLiveActivityDto),
+      ),
     });
   });

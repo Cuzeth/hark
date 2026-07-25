@@ -26,6 +26,7 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     },
   },
   plugins: [
+    "./plugins/with-ios-scene-delegate",
     "expo-router",
     "expo-secure-store",
     "expo-notifications",

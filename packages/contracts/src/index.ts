@@ -197,6 +197,12 @@ export type LiveActivitySymbol = z.infer<typeof liveActivitySymbolSchema>;
 export const LIVE_ACTIVITY_PRIVACY_MODES = ["standard", "private"] as const;
 export const liveActivityPrivacyModeSchema = z.enum(LIVE_ACTIVITY_PRIVACY_MODES);
 export type LiveActivityPrivacyMode = z.infer<typeof liveActivityPrivacyModeSchema>;
+export const LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR = "#5ED8B7" as const;
+export const LIVE_ACTIVITY_DEFAULT_EXPIRES_IN_SECONDS = 28_800 as const;
+export const LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS = 14_400 as const;
+export const liveActivityAccentColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/, "Accent color must use #RRGGBB format");
 
 export const liveActivityPropsSchema = z.object({
   schemaVersion: z.literal(LIVE_ACTIVITY_SCHEMA_VERSION),
@@ -208,6 +214,7 @@ export const liveActivityPropsSchema = z.object({
   updatedAt: z.iso.datetime(),
   symbol: liveActivitySymbolSchema,
   privacyMode: liveActivityPrivacyModeSchema,
+  accentColor: liveActivityAccentColorSchema.optional(),
 });
 export type LiveActivityProps = z.infer<typeof liveActivityPropsSchema>;
 
@@ -226,9 +233,20 @@ export const liveActivityStartSchema = z.object({
   progress: z.number().min(0).max(1).optional(),
   symbol: liveActivitySymbolSchema.default("terminal"),
   privacyMode: liveActivityPrivacyModeSchema.default("standard"),
+  accentColor: liveActivityAccentColorSchema.default(LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR),
   deviceIds: deviceIdsSchema,
-  expiresInSeconds: z.number().int().min(60).max(28_800).default(3600),
-  staleAfterSeconds: z.number().int().min(0).max(28_800).optional(),
+  expiresInSeconds: z
+    .number()
+    .int()
+    .min(60)
+    .max(28_800)
+    .default(LIVE_ACTIVITY_DEFAULT_EXPIRES_IN_SECONDS),
+  staleAfterSeconds: z
+    .number()
+    .int()
+    .min(0)
+    .max(28_800)
+    .default(LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS),
 });
 export type LiveActivityStartInput = z.infer<typeof liveActivityStartSchema>;
 
@@ -240,6 +258,7 @@ export const liveActivityUpdateSchema = z
     progress: z.number().min(0).max(1).nullable().optional(),
     symbol: liveActivitySymbolSchema.optional(),
     privacyMode: liveActivityPrivacyModeSchema.optional(),
+    accentColor: liveActivityAccentColorSchema.optional(),
     staleAfterSeconds: z.number().int().min(0).max(28_800).optional(),
     ifSequence: z.number().int().nonnegative().optional(),
   })
@@ -254,6 +273,7 @@ export const liveActivityEndSchema = z.object({
   detail: z.string().trim().min(1).max(240).nullable().optional(),
   progress: z.number().min(0).max(1).nullable().optional(),
   symbol: liveActivitySymbolSchema.default("success"),
+  accentColor: liveActivityAccentColorSchema.optional(),
   dismissAfterSeconds: z.number().int().min(0).max(14_400).default(0),
   ifSequence: z.number().int().nonnegative().optional(),
 });
@@ -311,6 +331,30 @@ export interface LiveActivityMutationResponse {
   idempotent?: boolean;
   message?: string;
 }
+
+export type LiveActivityWebhookResponse =
+  | {
+      ok: true;
+      activityId: string;
+      sequence: number;
+      status: LiveActivityStatus;
+      accepted: number;
+      failed: number;
+      state: LiveActivityProps;
+      expiresAt: string;
+      staleAt: string | null;
+      endedAt: string | null;
+      idempotent?: boolean;
+      message?: string;
+    }
+  | {
+      ok: false;
+      error: string;
+      code?: "ACTIVE_ACTIVITY_CONFLICT";
+      activityId?: string;
+      issues?: unknown;
+      retryAfterSeconds?: number;
+    };
 
 // ---------------------------------------------------------------------------
 // Agent access and interactions

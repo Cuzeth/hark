@@ -164,7 +164,24 @@ describe("Live Activity schemas", () => {
       deviceIds: ["dev_b", "dev_a", "dev_b"],
     });
     expect(start.deviceIds).toEqual(["dev_a", "dev_b"]);
-    expect(start.expiresInSeconds).toBe(3600);
+    expect(start).toMatchObject({
+      accentColor: "#5ED8B7",
+      expiresInSeconds: 28_800,
+      staleAfterSeconds: 14_400,
+    });
+    expect(
+      liveActivityStartSchema.safeParse({
+        title: "Task",
+        status: "Starting",
+        accentColor: "#aBc123",
+      }).success,
+    ).toBe(true);
+    for (const accentColor of ["5ED8B7", "#fff", "#5ED8B7CC", "#GGGGGG"]) {
+      expect(
+        liveActivityStartSchema.safeParse({ title: "Task", status: "Starting", accentColor })
+          .success,
+      ).toBe(false);
+    }
     expect(liveActivityUpdateSchema.safeParse({ ifSequence: 0 }).success).toBe(false);
     expect(liveActivityUpdateSchema.safeParse({ progress: null, ifSequence: 2 }).success).toBe(
       true,

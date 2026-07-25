@@ -10,8 +10,10 @@ npx harkctl auth login
 harkctl auth status
 harkctl ask "Deploy production?" --approval --wait --timeout 15m --json
 harkctl ask "What should the release note say?" --reply --device dev_... --wait
-harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1
-harkctl activity update release-main --status "Testing" --progress 0.7 --if-sequence 0
+harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 \
+  --accent-color '#FF9F0A'
+harkctl activity update release-main --status "Testing" --progress 0.7 \
+  --accent-color '#64D2FF' --if-sequence 0
 harkctl activity end release-main --status "Complete" --progress 1 --if-sequence 1
 harkctl auth logout
 ```
@@ -40,7 +42,9 @@ Approval notifications always offer both Approve and Deny. Older scripts may use
 
 Activity commands accept flags or `--stdin` JSON. Use `activity get <id|key>` and `activity list` to
 inspect state, `--idempotency-key` for retries, and `--if-sequence` to reject stale updates. Progress
-is a number from 0 to 1. Repeated `--device` targeting requires Hark Pro.
+is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. Activities default to an eight-hour
+expiry and become stale after four hours without an update. Repeated `--device` targeting requires
+Hark Pro, and Hark permits one active activity per device.
 
 Exit codes: `0` success/approved/replied, `1` API error, `2` usage error, `3` authentication or
 scope error, `4` timeout/canceled/expired, `5` denied, `6` network error, `7` no push accepted.

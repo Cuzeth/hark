@@ -132,6 +132,44 @@ export function Docs() {
             log to inspect failures and devices that are no longer registered.
           </p>
         </DocSection>
+
+        <DocSection title="Live Activities">
+          <p className="mb-4 text-sm leading-relaxed text-ink-subtle">
+            A service webhook can start one stateful Live Activity per target device. The response
+            returns an <InlineCode>activityId</InlineCode> used for partial updates and the final
+            end request. Progress is a number from 0 to 1; accent colors use six-digit hex.
+          </p>
+          <CodeBlock
+            language="bash"
+            code={`# Start
+curl -X POST ${exampleEndpoint}/live-activities \\
+  -H 'Content-Type: application/json' \\
+  -H 'Idempotency-Key: deploy-184-start' \\
+  -d '{
+    "title": "Deploy #184",
+    "status": "Building",
+    "progress": 0,
+    "symbol": "build",
+    "accentColor": "#FF9F0A"
+  }'
+
+# Update with the activityId returned above
+curl -X PATCH ${exampleEndpoint}/live-activities/act_your_activity_id \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "status": "Testing", "progress": 0.6, "accentColor": "#64D2FF" }'
+
+# End
+curl -X POST ${exampleEndpoint}/live-activities/act_your_activity_id/end \\
+  -H 'Content-Type: application/json' \\
+  -d '{ "status": "Deployed", "progress": 1, "symbol": "success" }'`}
+          />
+          <p className="mt-4 text-sm leading-relaxed text-ink-subtle">
+            Activities expire after eight hours by default. Their content becomes stale after four
+            hours without an update; every update rolls that stale deadline forward. Stale content
+            remains visible and updateable. Starting another activity on an occupied device returns{" "}
+            <InlineCode>409 ACTIVE_ACTIVITY_CONFLICT</InlineCode>.
+          </p>
+        </DocSection>
       </main>
     </div>
   );

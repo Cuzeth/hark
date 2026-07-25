@@ -461,6 +461,7 @@ test("activity start sends normalized finite progress and routing", async () => 
       progress: 0.25,
       symbol: "build",
       privacyMode: "private",
+      accentColor: "#FF9F0A",
       deviceIds: ["dev_a", "dev_b"],
       expiresInSeconds: 3600,
       staleAfterSeconds: 300,
@@ -486,6 +487,8 @@ test("activity start sends normalized finite progress and routing", async () => 
         "build",
         "--privacy",
         "private",
+        "--accent-color",
+        "#FF9F0A",
         "--device",
         "dev_a",
         "--device",
@@ -529,6 +532,8 @@ test("activity update and end send sequence preconditions", async () => {
         "0.7",
         "--if-sequence",
         "2",
+        "--accent-color",
+        "#64D2FF",
       ],
       { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
     );
@@ -546,18 +551,22 @@ test("activity update and end send sequence preconditions", async () => {
         "30s",
         "--if-sequence",
         "3",
+        "--accent-color",
+        "#5ED8B7",
       ],
       { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
     );
     assert.deepEqual(JSON.parse(calls[0].init.body), {
       status: "Testing",
       progress: 0.7,
+      accentColor: "#64D2FF",
       ifSequence: 2,
     });
     assert.equal(calls[0].init.method, "PATCH");
     assert.deepEqual(JSON.parse(calls[1].init.body), {
       status: "Complete",
       progress: 1,
+      accentColor: "#5ED8B7",
       dismissAfterSeconds: 30,
       ifSequence: 3,
     });
@@ -573,6 +582,13 @@ test("activity CLI rejects invalid progress and preserves no-delivery exit behav
       HARK_TOKEN: "hark_test",
     }),
     /progress/,
+  );
+  await assert.rejects(
+    execute(
+      ["activity", "start", "--title", "Task", "--status", "Run", "--accent-color", "orange"],
+      { HARK_TOKEN: "hark_test" },
+    ),
+    /accent-color/,
   );
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>

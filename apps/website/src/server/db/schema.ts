@@ -1,4 +1,5 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import { check, index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 // ---------------------------------------------------------------------------
 // Better Auth core tables
@@ -219,9 +220,12 @@ export const liveActivity = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    requesterTokenId: text("requester_token_id")
-      .notNull()
-      .references(() => apiToken.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id").references(() => apiToken.id, {
+      onDelete: "cascade",
+    }),
+    requesterServiceId: text("requester_service_id").references(() => service.id, {
+      onDelete: "cascade",
+    }),
     key: text("key"),
     schemaVersion: integer("schema_version").notNull(),
     props: text("props", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
@@ -240,13 +244,23 @@ export const liveActivity = sqliteTable(
     endedAt: integer("ended_at", { mode: "timestamp_ms" }),
   },
   (table) => [
+    check(
+      "live_activity_requester_check",
+      sql`("requester_token_id" is not null) != ("requester_service_id" is not null)`,
+    ),
     uniqueIndex("live_activity_token_idempotency_unique").on(
       table.requesterTokenId,
       table.idempotencyKey,
     ),
+    uniqueIndex("live_activity_service_idempotency_unique").on(
+      table.requesterServiceId,
+      table.idempotencyKey,
+    ),
     uniqueIndex("live_activity_token_key_unique").on(table.requesterTokenId, table.key),
+    uniqueIndex("live_activity_service_key_unique").on(table.requesterServiceId, table.key),
     index("live_activity_user_status_updated_idx").on(table.userId, table.status, table.updatedAt),
     index("live_activity_token_created_idx").on(table.requesterTokenId, table.createdAt),
+    index("live_activity_service_created_idx").on(table.requesterServiceId, table.createdAt),
   ],
 );
 
@@ -282,6 +296,9 @@ export const liveActivityDelivery = sqliteTable(
       table.deviceId,
     ),
     index("live_activity_delivery_device_status_idx").on(table.deviceId, table.status),
+    uniqueIndex("live_activity_delivery_one_active_per_device_unique")
+      .on(table.deviceId)
+      .where(sql`${table.status} in ('pending', 'accepted', 'active')`),
     index("live_activity_delivery_native_id_idx").on(table.nativeActivityId),
   ],
 );
@@ -293,9 +310,12 @@ export const liveActivityOperation = sqliteTable(
     activityId: text("activity_id")
       .notNull()
       .references(() => liveActivity.id, { onDelete: "cascade" }),
-    requesterTokenId: text("requester_token_id")
-      .notNull()
-      .references(() => apiToken.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id").references(() => apiToken.id, {
+      onDelete: "cascade",
+    }),
+    requesterServiceId: text("requester_service_id").references(() => service.id, {
+      onDelete: "cascade",
+    }),
     event: text("event").notNull(),
     sequence: integer("sequence").notNull(),
     idempotencyKey: text("idempotency_key"),
@@ -305,11 +325,23 @@ export const liveActivityOperation = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
+    check(
+      "live_activity_operation_requester_check",
+      sql`("requester_token_id" is not null) != ("requester_service_id" is not null)`,
+    ),
     uniqueIndex("live_activity_operation_token_idempotency_unique").on(
       table.requesterTokenId,
       table.idempotencyKey,
     ),
+    uniqueIndex("live_activity_operation_service_idempotency_unique").on(
+      table.requesterServiceId,
+      table.idempotencyKey,
+    ),
     index("live_activity_operation_token_created_idx").on(table.requesterTokenId, table.createdAt),
+    index("live_activity_operation_service_created_idx").on(
+      table.requesterServiceId,
+      table.createdAt,
+    ),
     index("live_activity_operation_activity_created_idx").on(table.activityId, table.createdAt),
   ],
 );
@@ -327,9 +359,12 @@ export const liveActivityDeliveryAttempt = sqliteTable(
     operationId: text("operation_id")
       .notNull()
       .references(() => liveActivityOperation.id, { onDelete: "cascade" }),
-    requesterTokenId: text("requester_token_id")
-      .notNull()
-      .references(() => apiToken.id, { onDelete: "cascade" }),
+    requesterTokenId: text("requester_token_id").references(() => apiToken.id, {
+      onDelete: "cascade",
+    }),
+    requesterServiceId: text("requester_service_id").references(() => service.id, {
+      onDelete: "cascade",
+    }),
     event: text("event").notNull(),
     sequence: integer("sequence").notNull(),
     apnsStatus: integer("apns_status"),
@@ -338,6 +373,10 @@ export const liveActivityDeliveryAttempt = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [
+    check(
+      "live_activity_attempt_requester_check",
+      sql`("requester_token_id" is not null) != ("requester_service_id" is not null)`,
+    ),
     index("live_activity_attempt_token_created_idx").on(table.requesterTokenId, table.createdAt),
     index("live_activity_attempt_activity_created_idx").on(table.activityId, table.createdAt),
   ],
