@@ -102,6 +102,17 @@ describe("Live Activity APNs payloads", () => {
     });
   });
 
+  it("includes background token registration attributes on remote starts", () => {
+    const attributes = {
+      tokenRegistrationURL: "https://hark.example/api/live-activity/update-token",
+      tokenRegistrationToken: "x".repeat(43),
+      deliveryId: "lad_1",
+    };
+    expect(
+      buildLiveActivityPayload({ event: "start", props, timestamp: 100, attributes }),
+    ).toMatchObject({ aps: { event: "start", attributes } });
+  });
+
   it("adds dismissal only to terminal payloads and enforces APNs size", () => {
     const end = buildLiveActivityPayload({
       event: "end",

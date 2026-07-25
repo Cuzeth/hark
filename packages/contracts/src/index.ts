@@ -300,6 +300,14 @@ export const liveActivityUpdateTokenSchema = z.object({
 });
 export type LiveActivityUpdateTokenInput = z.infer<typeof liveActivityUpdateTokenSchema>;
 
+export const liveActivityBackgroundTokenSchema = z.object({
+  deliveryId: z.string().trim().min(1).max(100),
+  registrationToken: z.string().regex(/^[a-zA-Z0-9_-]{43}$/),
+  nativeActivityId: z.string().trim().min(1).max(200),
+  updateToken: z.string().regex(/^[a-fA-F0-9]{32,512}$/),
+});
+export type LiveActivityBackgroundTokenInput = z.infer<typeof liveActivityBackgroundTokenSchema>;
+
 export const LIVE_ACTIVITY_STATUSES = [
   "starting",
   "active",

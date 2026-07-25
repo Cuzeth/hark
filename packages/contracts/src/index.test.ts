@@ -4,6 +4,7 @@ import {
   interactionCreateSchema,
   interactionResponseSchema,
   LIVE_ACTIVITY_SCHEMA_VERSION,
+  liveActivityBackgroundTokenSchema,
   liveActivityEndSchema,
   liveActivityPropsSchema,
   liveActivityStartSchema,
@@ -187,6 +188,19 @@ describe("Live Activity schemas", () => {
       true,
     );
     expect(liveActivityEndSchema.parse({}).dismissAfterSeconds).toBe(0);
+  });
+
+  it("validates background update-token registration", () => {
+    const input = {
+      deliveryId: "lad_1",
+      registrationToken: "a".repeat(43),
+      nativeActivityId: "native_1",
+      updateToken: "ab".repeat(32),
+    };
+    expect(liveActivityBackgroundTokenSchema.safeParse(input).success).toBe(true);
+    expect(
+      liveActivityBackgroundTokenSchema.safeParse({ ...input, registrationToken: "short" }).success,
+    ).toBe(false);
   });
 });
 

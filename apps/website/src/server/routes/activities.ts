@@ -25,6 +25,7 @@ import {
   service,
   user as userTable,
 } from "../db/schema";
+import { env } from "../env";
 import { type AnalyticsEventName, failureBucket, track } from "../lib/analytics";
 import {
   isInvalidApnsTokenReason,
@@ -33,6 +34,7 @@ import {
 } from "../lib/apns";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
+import { createLiveActivityRegistrationToken } from "../lib/live-activity-registration";
 import { decryptLiveActivityToken } from "../lib/token";
 import {
   type AgentEnv,
@@ -269,6 +271,19 @@ export async function dispatchLiveActivity(
               event: eventName,
               props,
               timestamp,
+              ...(eventName === "start"
+                ? {
+                    attributes: {
+                      tokenRegistrationURL: `${env.APP_URL.replace(/\/$/, "")}/api/live-activity/update-token`,
+                      tokenRegistrationToken: createLiveActivityRegistrationToken(
+                        delivery.id,
+                        row.id,
+                        row.expiresAt,
+                      ),
+                      deliveryId: delivery.id,
+                    },
+                  }
+                : {}),
               ...(row.staleAt ? { staleDate: Math.floor(row.staleAt.getTime() / 1000) } : {}),
               ...(row.dismissalAt
                 ? { dismissalDate: Math.floor(row.dismissalAt.getTime() / 1000) }

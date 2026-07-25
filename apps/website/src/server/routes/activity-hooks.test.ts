@@ -175,21 +175,45 @@ describe("Live Activity webhook routes", () => {
           event: "start",
           staleDate: 1_784_995_200,
           props: { activityId: startBody.activityId, accentColor: "#FF9F0A" },
+          attributes: {
+            tokenRegistrationURL: "http://localhost:5173/api/live-activity/update-token",
+          },
         },
       });
 
       const updateToken = "bb".repeat(32);
+      const startCall = apnsCalls.at(-1);
+      if (!startCall) throw new Error("Expected a Live Activity start call");
+      const attributes = (
+        startCall.input as {
+          attributes: { deliveryId: string; tokenRegistrationToken: string };
+        }
+      ).attributes;
+      const wrongRegistrationToken = `${attributes.tokenRegistrationToken.slice(0, -1)}${
+        attributes.tokenRegistrationToken.endsWith("A") ? "B" : "A"
+      }`;
+      authState.userId = null;
+      const invalidRegistration = await app.request("/api/live-activity/update-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          deliveryId: attributes.deliveryId,
+          registrationToken: wrongRegistrationToken,
+          nativeActivityId: "native-background",
+          updateToken,
+        }),
+      });
+      expect(invalidRegistration.status).toBe(404);
       expect(
         (
-          await app.request("/api/devices/live-activity/update-token", {
+          await app.request("/api/live-activity/update-token", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
-              deviceId: "hook_activity_device",
-              activityId: startBody.activityId,
+              deliveryId: attributes.deliveryId,
+              registrationToken: attributes.tokenRegistrationToken,
+              nativeActivityId: "native-background",
               updateToken,
-              environment: "sandbox",
-              schemaVersion: 1,
             }),
           })
         ).status,
@@ -242,6 +266,20 @@ describe("Live Activity webhook routes", () => {
         priority: 10,
         input: { event: "end", dismissalDate: 1_784_984_430 },
       });
+      expect(
+        (
+          await app.request("/api/live-activity/update-token", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              deliveryId: attributes.deliveryId,
+              registrationToken: attributes.tokenRegistrationToken,
+              nativeActivityId: "native-background",
+              updateToken: "cc".repeat(32),
+            }),
+          })
+        ).status,
+      ).toBe(404);
     } finally {
       vi.useRealTimers();
     }

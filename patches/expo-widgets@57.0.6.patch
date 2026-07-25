@@ -1,0 +1,117 @@
+diff --git a/ios/HarkLiveActivityTokenRegistrar.swift b/ios/HarkLiveActivityTokenRegistrar.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..90f1cc52fcbadc1d64d1d2859223a457c899fcf8
+--- /dev/null
++++ b/ios/HarkLiveActivityTokenRegistrar.swift
+@@ -0,0 +1,89 @@
++import ActivityKit
++import Foundation
++
++public enum HarkLiveActivityTokenRegistrar {
++  public static func start() {
++    guard #available(iOS 17.2, *) else { return }
++    Task {
++      await HarkLiveActivityTokenCoordinator.shared.start()
++    }
++  }
++}
++
++@available(iOS 17.2, *)
++private actor HarkLiveActivityTokenCoordinator {
++  static let shared = HarkLiveActivityTokenCoordinator()
++
++  private var activityObserver: Task<Void, Never>?
++  private var tokenObservers: [String: Task<Void, Never>] = [:]
++  private var uploadedTokens: [String: String] = [:]
++
++  func start() {
++    guard activityObserver == nil else { return }
++
++    for activity in Activity<LiveActivityAttributes>.activities {
++      observe(activity)
++    }
++
++    activityObserver = Task {
++      for await activity in Activity<LiveActivityAttributes>.activityUpdates {
++        observe(activity)
++      }
++    }
++  }
++
++  private func observe(_ activity: Activity<LiveActivityAttributes>) {
++    guard tokenObservers[activity.id] == nil else { return }
++
++    tokenObservers[activity.id] = Task {
++      if let token = activity.pushToken {
++        await register(token, for: activity)
++      }
++      for await token in activity.pushTokenUpdates {
++        await register(token, for: activity)
++      }
++    }
++  }
++
++  private func register(
++    _ tokenData: Data,
++    for activity: Activity<LiveActivityAttributes>
++  ) async {
++    let token = tokenData.map { String(format: "%02x", $0) }.joined()
++    guard uploadedTokens[activity.id] != token else { return }
++    guard
++      let urlString = activity.attributes.tokenRegistrationURL,
++      let url = URL(string: urlString),
++      let registrationToken = activity.attributes.tokenRegistrationToken,
++      let deliveryId = activity.attributes.deliveryId
++    else { return }
++
++    let payload = [
++      "deliveryId": deliveryId,
++      "registrationToken": registrationToken,
++      "nativeActivityId": activity.id,
++      "updateToken": token,
++    ]
++    guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return }
++
++    var request = URLRequest(url: url)
++    request.httpMethod = "POST"
++    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
++    request.httpBody = body
++
++    for attempt in 0..<5 {
++      do {
++        let (_, response) = try await URLSession.shared.data(for: request)
++        if let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) {
++          uploadedTokens[activity.id] = token
++          return
++        }
++      } catch {
++        // Retry within the background runtime ActivityKit grants for token delivery.
++      }
++
++      let delay = UInt64(1 << attempt) * 500_000_000
++      try? await Task.sleep(nanoseconds: delay)
++    }
++  }
++}
+diff --git a/ios/Widgets/WidgetLiveActivity.swift b/ios/Widgets/WidgetLiveActivity.swift
+index 3e192e10b9bc6d76f0f27cc268fbbf8e48a4b870..55a89a004107b77d76e87b3f3ae26ae911434deb 100644
+--- a/ios/Widgets/WidgetLiveActivity.swift
++++ b/ios/Widgets/WidgetLiveActivity.swift
+@@ -7,3 +7,17 @@ struct LiveActivityAttributes: ActivityAttributes {
++  var tokenRegistrationURL: String?
++  var tokenRegistrationToken: String?
++  var deliveryId: String?
++
++  init(
++    tokenRegistrationURL: String? = nil,
++    tokenRegistrationToken: String? = nil,
++    deliveryId: String? = nil
++  ) {
++    self.tokenRegistrationURL = tokenRegistrationURL
++    self.tokenRegistrationToken = tokenRegistrationToken
++    self.deliveryId = deliveryId
++  }
++
+   public struct ContentState: Codable, Hashable {
+     var name: String
+     var props: String

@@ -23,6 +23,11 @@ export interface LiveActivityPayloadInput {
   timestamp: number;
   staleDate?: number;
   dismissalDate?: number;
+  attributes?: {
+    tokenRegistrationURL: string;
+    tokenRegistrationToken: string;
+    deliveryId: string;
+  };
 }
 
 export interface ApnsResult {
@@ -71,7 +76,7 @@ export function buildLiveActivityPayload(input: LiveActivityPayloadInput): Recor
   };
   if (input.event === "start") {
     aps["attributes-type"] = "LiveActivityAttributes";
-    aps.attributes = {};
+    aps.attributes = input.attributes ?? {};
     aps.alert = {
       title: input.props.privacyMode === "private" ? "Agent task started" : input.props.title,
       body:

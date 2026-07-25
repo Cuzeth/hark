@@ -82,6 +82,18 @@ module.exports = function withIosSceneDelegate(config) {
     if (startPattern.test(mod.modResults.contents)) {
       mod.modResults.contents = mod.modResults.contents.replace(startPattern, "\n");
     }
+    if (!mod.modResults.contents.includes("internal import ExpoWidgets")) {
+      mod.modResults.contents = mod.modResults.contents.replace(
+        "internal import Expo\n",
+        "internal import Expo\ninternal import ExpoWidgets\n",
+      );
+    }
+    if (!mod.modResults.contents.includes("HarkLiveActivityTokenRegistrar.start()")) {
+      mod.modResults.contents = mod.modResults.contents.replace(
+        "    reactNativeFactory = factory\n",
+        "    reactNativeFactory = factory\n\n    HarkLiveActivityTokenRegistrar.start()\n",
+      );
+    }
     mod.modResults.contents = mod.modResults.contents.replace(
       /\n#if os\(iOS\) \|\| os\(tvOS\)\n\s*window = UIWindow\(frame: UIScreen\.main\.bounds\)\n#endif\n/,
       "\n",
