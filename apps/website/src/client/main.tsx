@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router";
 import "./index.css";
 import { CliAuthorize } from "./pages/CliAuthorize";
@@ -11,7 +11,7 @@ import { Privacy, Terms } from "./pages/Legal";
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing #root element");
 
-createRoot(root).render(
+const tree = (
   <StrictMode>
     <BrowserRouter>
       <Routes>
@@ -23,5 +23,13 @@ createRoot(root).render(
         <Route path="/terms" element={<Terms />} />
       </Routes>
     </BrowserRouter>
-  </StrictMode>,
+  </StrictMode>
 );
+
+// `/docs` ships prerendered markup (see scripts/prerender-docs.tsx), so adopt it
+// instead of throwing it away. Every other route gets the empty shell.
+if (root.firstChild) {
+  hydrateRoot(root, tree);
+} else {
+  createRoot(root).render(tree);
+}

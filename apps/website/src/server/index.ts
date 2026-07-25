@@ -18,6 +18,12 @@ startInteractionCallbackWorker();
 // In production the same process serves the built SPA with a history fallback.
 const clientDir = resolve(process.cwd(), "dist/client");
 if (existsSync(clientDir)) {
+  // `/docs` is prerendered at build time so its content is in the initial HTML
+  // response; the client bundle hydrates it. Registered explicitly because the
+  // history fallback below would otherwise hand back the empty shell.
+  if (existsSync(resolve(clientDir, "docs/index.html"))) {
+    app.get("/docs", serveStatic({ path: "./dist/client/docs/index.html" }));
+  }
   app.use("*", serveStatic({ root: "./dist/client" }));
   app.get("*", serveStatic({ path: "./dist/client/index.html" }));
 }

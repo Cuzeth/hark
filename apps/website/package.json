@@ -7,7 +7,7 @@
     "dev": "concurrently -n api,web -c blue,magenta \"NODE_ENV=development PORT=8788 node --env-file=../../.env --import tsx --watch src/server/index.ts\" \"vite\"",
     "dev:api": "NODE_ENV=development PORT=8788 node --env-file=../../.env --import tsx --watch src/server/index.ts",
     "dev:web": "vite",
-    "build": "vite build && node scripts/build-server.mjs",
+    "build": "vite build && node --import tsx scripts/prerender-docs.tsx && node scripts/build-server.mjs",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

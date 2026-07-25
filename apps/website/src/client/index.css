@@ -138,6 +138,20 @@
   }
 }
 
+/* Anchor navigation on the docs page relies on native smooth scrolling rather
+   than JavaScript, so sidebar links stay real links. Scoped to that page so the
+   rest of the site keeps instant jumps. */
+:root:has(.hark-docs) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 6rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:has(.hark-docs) {
+    scroll-behavior: auto;
+  }
+}
+
 html {
   overflow-y: scroll;
   scrollbar-gutter: stable;

@@ -8,6 +8,7 @@ import { apiTokensRoute } from "./routes/api-tokens";
 import { billingRoute } from "./routes/billing";
 import { deviceAuthorizationRoute } from "./routes/device-authorization";
 import { devicesRoute } from "./routes/devices";
+import { docsTextRoute } from "./routes/docs";
 import { eventsRoute } from "./routes/events";
 import { hooksRoute } from "./routes/hooks";
 import {
@@ -40,6 +41,10 @@ if (process.env.NODE_ENV !== "test") {
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 app.get("/oss", (c) => c.redirect("https://github.com/R44VC0RP/hark/"));
+
+// Mounted before the static handler in index.ts so the generated markdown wins
+// over anything with the same name in dist/client.
+app.route("/", docsTextRoute);
 
 app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
