@@ -1,14 +1,8 @@
 # Hark
 
-Hark turns any webhook into a source-branded iOS communication notification.
-Sign in with Google, create a **service**, copy its secret webhook URL, and
-every `POST` to it lands on your iPhone as a notification with the service's
-name and avatar — like a message from a contact.
+https://github.com/user-attachments/assets/74fd0670-2106-4af5-93c8-d31f99b33908
 
-Hark supports a generous single-device Free plan and an $8/month Pro plan
-powered by Autumn. Pro unlocks multiple devices, targeted routing, and higher
-rate limits. Android, teams, browser push, transformations, and analytics are
-not currently supported.
+Hark turns any webhook into a clean, beautiful notification.
 
 ## Architecture
 
