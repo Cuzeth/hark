@@ -13,6 +13,7 @@ import {
   PlanTable,
   RouteTable,
   Steps,
+  StylePreviews,
 } from "./primitives";
 
 /** Content-derived identity, so React keys do not depend on array position. */
@@ -28,6 +29,8 @@ function blockKey(block: DocBlock): string {
       return `code:${block.code}`;
     case "copy":
       return `copy:${block.value}`;
+    case "stylePreviews":
+      return `stylePreviews:${block.styles.map((style) => style.name).join("|")}`;
     case "table":
       return `table:${block.caption}`;
   }
@@ -75,6 +78,8 @@ function Block({ block }: { block: DocBlock }) {
           <CopyField label={block.label} value={block.value} />
         </div>
       );
+    case "stylePreviews":
+      return <StylePreviews styles={block.styles} />;
     case "table":
       switch (block.variant) {
         case "field":

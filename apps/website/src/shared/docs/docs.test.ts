@@ -50,6 +50,8 @@ describe("docs content", () => {
               return block.items;
             case "table":
               return block.rows.flatMap((row) => Object.values(row));
+            case "stylePreviews":
+              return block.styles.map((style) => style.description);
             default:
               return [];
           }

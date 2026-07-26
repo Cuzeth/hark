@@ -53,7 +53,14 @@ export type DocBlock =
   | { kind: "code"; language: "bash" | "json"; code: string }
   /** A copyable single-line value, rendered as a code block in markdown. */
   | { kind: "copy"; label: string; value: string }
+  /** Illustrated gallery of the Live Activity layout styles. */
+  | { kind: "stylePreviews"; styles: DocStylePreview[] }
   | DocTableBlock;
+
+export interface DocStylePreview {
+  name: string;
+  description: string;
+}
 
 export interface DocSubsection {
   id: DocItemId;
@@ -674,6 +681,39 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
               },
             ],
           },
+          {
+            kind: "p",
+            text: "The five layouts, rendered with the same state:",
+          },
+          {
+            kind: "stylePreviews",
+            styles: [
+              {
+                name: "standard",
+                description:
+                  "Icon, title over status, trailing percent, linear progress bar. The default.",
+              },
+              {
+                name: "ring",
+                description:
+                  "A determinate capacity gauge with the percent centered; no linear bar.",
+              },
+              {
+                name: "hero",
+                description:
+                  "Status becomes the headline, the title demotes to an eyebrow, and the bar runs edge to edge along the bottom of the card.",
+              },
+              {
+                name: "terminal",
+                description:
+                  "Monospaced prompt treatment: the status lowercased behind a prompt glyph, the detail as a comment line.",
+              },
+              {
+                name: "steps",
+                description: "Progress quantized into five stage pips — phases, not percent.",
+              },
+            ],
+          },
         ],
       },
       {
@@ -730,6 +770,10 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           {
             kind: "p",
             text: "Live Activity operations count against the same per-minute and monthly limits as notifications, so a chatty progress loop consumes the same budget. Throttle to meaningful state changes.",
+          },
+          {
+            kind: "note",
+            text: "iOS also budgets push-to-start deliveries per app. Rapid successive starts to the same device can be silently suppressed: the start still reports `accepted`, but the device never registers an update token, so every later update and end fails with `MissingUpdateToken`. Space fresh starts out by a minute or so — or keep one activity alive and update it, which is cheaper and never hits the budget.",
           },
         ],
       },

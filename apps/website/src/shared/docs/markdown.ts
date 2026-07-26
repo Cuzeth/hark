@@ -66,6 +66,8 @@ function blockToMarkdown(block: DocBlock): string {
       return `\`\`\`${block.language}\n${block.code}\n\`\`\``;
     case "copy":
       return `${block.label}:\n\n\`\`\`text\n${block.value}\n\`\`\``;
+    case "stylePreviews":
+      return block.styles.map((style) => `- \`${style.name}\` — ${style.description}`).join("\n");
     case "table":
       return tableBlock(block);
   }
