@@ -5,8 +5,9 @@ import { join } from "node:path";
 import test from "node:test";
 import { execute, parseArgs, parseDuration, run } from "../src/cli.mjs";
 
-test("parses repeatable devices and ask options", () => {
+test("parses repeatable devices and notify ask options", () => {
   const parsed = parseArgs([
+    "notify",
     "ask",
     "Deploy production?",
     "--approval",
@@ -18,16 +19,39 @@ test("parses repeatable devices and ask options", () => {
     "--wait",
     "--json",
   ]);
-  assert.deepEqual(parsed.positionals, ["ask", "Deploy production?"]);
+  assert.deepEqual(parsed.positionals, ["notify", "ask", "Deploy production?"]);
   assert.deepEqual(parsed.options.device, ["dev_a", "dev_b"]);
   assert.equal(parsed.options.approval, true);
   assert.equal(parsed.options.wait, true);
   assert.equal(parsed.options.json, true);
+  assert.equal(parsed.separatorAt, null);
   assert.equal(parseDuration(parsed.options["expires-in"]), 600);
+});
+
+test("a bare -- separator turns everything after it into positionals", () => {
+  const parsed = parseArgs(["notify", "--", "ask", "--approval"]);
+  assert.deepEqual(parsed.positionals, ["notify", "ask", "--approval"]);
+  assert.equal(parsed.separatorAt, 1);
 });
 
 test("rejects tokens and unknown options on argv", () => {
   assert.throws(() => parseArgs(["auth", "status", "--token", "secret"]), /Unknown option/);
+});
+
+test("removed legacy commands and flags are usage errors", async () => {
+  assert.throws(
+    () => parseArgs(["notify", "ask", "Deploy?", "--reply"]),
+    /Unknown option: --reply/,
+  );
+  assert.throws(
+    () => parseArgs(["notify", "ask", "Deploy?", "--approve", "--deny"]),
+    /Unknown option: --approve/,
+  );
+  assert.throws(() => parseArgs(["notify", "Hi", "--prompt", "P"]), /Unknown option: --prompt/);
+  await assert.rejects(
+    execute(["ask", "Deploy?", "--approval"], { HARK_TOKEN: "hark_test" }),
+    /Unknown command/,
+  );
 });
 
 test("parses duration suffixes", () => {
@@ -323,7 +347,96 @@ test("writes one JSON object to stdout and diagnostics to stderr", async () => {
   }
 });
 
-test("ask sends the normalized approval request body", async () => {
+test("notify sends the normalized notification request body", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(url, "https://example.test/api/agent/notifications");
+    assert.equal(init.method, "POST");
+    assert.equal(init.headers["Idempotency-Key"], "deploy-done-1");
+    assert.deepEqual(JSON.parse(init.body), {
+      body: "Deploy finished",
+      title: "Release",
+      imageUrl: "https://example.com/bot.png",
+      url: "https://example.com/run/1",
+      deviceIds: ["dev_a", "dev_b"],
+    });
+    return Response.json(
+      { accepted: 2, notification: { id: "anot_1", title: "Release", body: "Deploy finished" } },
+      { status: 201 },
+    );
+  };
+  try {
+    const result = await execute(
+      [
+        "notify",
+        "Deploy finished",
+        "--title",
+        "Release",
+        "--image",
+        "https://example.com/bot.png",
+        "--url",
+        "https://example.com/run/1",
+        "--device",
+        "dev_a",
+        "--device",
+        "dev_b",
+        "--idempotency-key",
+        "deploy-done-1",
+      ],
+      { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
+    );
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.body.notification.id, "anot_1");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify merges --stdin JSON under explicit flags and exits 7 when nothing is accepted", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    assert.deepEqual(JSON.parse(init.body), { body: "Anyone there?" });
+    return Response.json(
+      { accepted: 0, notification: { id: "anot_none" }, message: "…" },
+      {
+        status: 201,
+      },
+    );
+  };
+  try {
+    const result = await execute(["notify", "Anyone there?"], { HARK_TOKEN: "hark_test" });
+    assert.equal(result.exitCode, 7);
+    assert.equal(result.body.accepted, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify -- ask sends the literal body ask instead of the subcommand", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    calls.push({ url: String(url), body: JSON.parse(init.body) });
+    return Response.json({ accepted: 1, notification: { id: "anot_ask" } }, { status: 201 });
+  };
+  try {
+    const result = await execute(["notify", "--", "ask"], {
+      HARK_TOKEN: "hark_test",
+      HARK_API_URL: "https://example.test",
+    });
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(calls, [
+      {
+        url: "https://example.test/api/agent/notifications",
+        body: { body: "ask" },
+      },
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify ask sends the normalized approval request body with an image", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
     assert.equal(url, "https://example.test/api/agent/interactions");
@@ -334,6 +447,7 @@ test("ask sends the normalized approval request body", async () => {
       prompt: "Deploy production?",
       kind: "approval",
       expiresInSeconds: 600,
+      imageUrl: "https://example.com/bot.png",
       deviceIds: ["dev_a"],
     });
     return Response.json({
@@ -344,11 +458,14 @@ test("ask sends the normalized approval request body", async () => {
   try {
     const result = await execute(
       [
+        "notify",
         "ask",
         "Deploy production?",
         "--approval",
         "--title",
         "Release",
+        "--image",
+        "https://example.com/bot.png",
         "--device",
         "dev_a",
         "--expires-in",
@@ -365,12 +482,79 @@ test("ask sends the normalized approval request body", async () => {
   }
 });
 
-test("ask without wait preserves JSON body and exits 7 when no push is accepted", async () => {
+test("notify ask --text maps to a reply interaction and defaults the title", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    assert.deepEqual(JSON.parse(init.body), {
+      title: "Hark",
+      prompt: "What should the release note say?",
+      kind: "reply",
+      expiresInSeconds: 900,
+    });
+    return Response.json({ accepted: 1, interaction: { id: "int_text", status: "pending" } });
+  };
+  try {
+    const result = await execute(["notify", "ask", "What should the release note say?", "--text"], {
+      HARK_TOKEN: "hark_test",
+    });
+    assert.equal(result.exitCode, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify ask requires exactly one response type", async () => {
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?"], { HARK_TOKEN: "hark_test" }),
+    /exactly one response type/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--text"], { HARK_TOKEN: "hark_test" }),
+    /exactly one response type/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--yes-no", "--approval"], { HARK_TOKEN: "hark_test" }),
+    /exactly one response type/,
+  );
+});
+
+test("notify ask --yes-no maps to a yes_no interaction and a no answer exits 5", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/api/agent/interactions")) {
+      assert.equal(JSON.parse(init.body).kind, "yes_no");
+      return Response.json({ accepted: 1, interaction: { id: "int_yn", status: "pending" } });
+    }
+    assert.match(String(url), /\/api\/agent\/interactions\/int_yn\/wait\?timeout=/);
+    return Response.json({ interaction: { id: "int_yn", status: "no" } });
+  };
+  try {
+    const result = await execute(
+      ["notify", "ask", "Keep the current color?", "--yes-no", "--wait", "--timeout", "30s"],
+      { HARK_TOKEN: "hark_test" },
+    );
+    assert.equal(result.exitCode, 5);
+    assert.equal(result.body.interaction.status, "no");
+
+    globalThis.fetch = async (url) => {
+      assert.match(String(url), /\/api\/agent\/interactions\/int_yes$/);
+      return Response.json({ interaction: { id: "int_yes", status: "yes" } });
+    };
+    const affirmative = await execute(["interaction", "get", "int_yes"], {
+      HARK_TOKEN: "hark_test",
+    });
+    assert.equal(affirmative.exitCode, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify ask without wait preserves JSON body and exits 7 when no push is accepted", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
     Response.json({ accepted: 0, interaction: { id: "int_none", status: "pending" } });
   try {
-    const result = await execute(["ask", "Anyone there?", "--reply"], {
+    const result = await execute(["notify", "ask", "Anyone there?", "--text"], {
       HARK_TOKEN: "hark_test",
     });
     assert.equal(result.exitCode, 7);
@@ -380,7 +564,7 @@ test("ask without wait preserves JSON body and exits 7 when no push is accepted"
   }
 });
 
-test("ask with wait exits 7 without making a wait request when no push is accepted", async () => {
+test("notify ask with wait exits 7 without making a wait request when no push is accepted", async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async () => {
@@ -388,7 +572,7 @@ test("ask with wait exits 7 without making a wait request when no push is accept
     return Response.json({ accepted: 0, interaction: { id: "int_none_wait", status: "pending" } });
   };
   try {
-    const result = await execute(["ask", "Anyone there?", "--reply", "--wait"], {
+    const result = await execute(["notify", "ask", "Anyone there?", "--text", "--wait"], {
       HARK_TOKEN: "hark_test",
     });
     assert.equal(result.exitCode, 7);
@@ -398,24 +582,69 @@ test("ask with wait exits 7 without making a wait request when no push is accept
   }
 });
 
-test("approval flags are unambiguous with compatible paired legacy flags", async () => {
-  await assert.rejects(
-    execute(["ask", "Deploy?", "--approve"], { HARK_TOKEN: "hark_test" }),
-    /must be used together/,
-  );
+test("notify ask --poll caps the wait at 20 seconds and maps a pending answer to exit 4", async () => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (_url, init) => {
-    assert.equal(JSON.parse(init.body).kind, "approval");
-    return Response.json({ accepted: 1, interaction: { id: "int_legacy", status: "pending" } });
+  const urls = [];
+  globalThis.fetch = async (url) => {
+    urls.push(String(url));
+    if (String(url).endsWith("/api/agent/interactions")) {
+      return Response.json({ accepted: 1, interaction: { id: "int_poll", status: "pending" } });
+    }
+    return Response.json({ interaction: { id: "int_poll", status: "pending" }, timedOut: true });
   };
+  const ticks = [0, 0, 20_001];
   try {
-    const result = await execute(["ask", "Deploy?", "--approve", "--deny"], {
-      HARK_TOKEN: "hark_test",
-    });
-    assert.equal(result.exitCode, 0);
+    const result = await execute(
+      ["notify", "ask", "Deploy?", "--approval", "--poll"],
+      { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
+      { now: () => (ticks.length > 1 ? ticks.shift() : ticks[0]) },
+    );
+    assert.equal(result.exitCode, 4);
+    assert.equal(result.body.timedOut, true);
+    assert.equal(urls.length, 2);
+    assert.match(urls[1], /\/api\/agent\/interactions\/int_poll\/wait\?timeout=20$/);
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("notify ask --poll returns an instant terminal answer with wait exit codes", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) =>
+    String(url).endsWith("/api/agent/interactions")
+      ? Response.json({ accepted: 1, interaction: { id: "int_fast", status: "pending" } })
+      : Response.json({ interaction: { id: "int_fast", status: "denied" }, timedOut: false });
+  try {
+    const result = await execute(["notify", "ask", "Deploy?", "--approval", "--poll"], {
+      HARK_TOKEN: "hark_test",
+    });
+    assert.equal(result.exitCode, 5);
+    assert.equal(result.body.interaction.status, "denied");
+    assert.equal(result.body.timedOut, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify ask rejects --poll combined with --wait or --timeout", async () => {
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--poll", "--wait"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /--poll cannot be combined/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--poll", "--timeout", "5s"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /--poll cannot be combined/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--timeout", "5s"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /--timeout requires --wait/,
+  );
 });
 
 test("wait returns terminal status and timeout zero still returns a defined body", async () => {

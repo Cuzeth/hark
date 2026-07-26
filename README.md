@@ -88,12 +88,13 @@ haptics.
 
 ## Agent Workflows
 
-The [`harkctl`](./packages/harkctl) CLI can send approval prompts, collect short replies, and manage
-Live Activities from scripts or AI agents.
+The [`harkctl`](./packages/harkctl) CLI can send one-shot notifications, ask for approvals or short
+replies, and manage Live Activities from scripts or AI agents.
 
 ```sh
 harkctl auth login
-harkctl ask "Deploy production?" --approval --wait
+harkctl notify "Deploy finished ✅" --title "Deploy bot"
+harkctl notify ask "Deploy production?" --approval --wait
 harkctl activity start --title "Release" --status "Building" --progress 0.1
 ```
 

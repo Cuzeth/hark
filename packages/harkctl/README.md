@@ -1,15 +1,28 @@
 # harkctl
 
-`harkctl` creates Hark approval/text-reply interactions and controls finite agent task Live
-Activities from Node.js 22 or newer.
+`harkctl` sends Hark push notifications, asks approval/text questions, and controls finite agent
+task Live Activities from Node.js 22 or newer.
+
+```
+harkctl
+├─ auth         login · logout · status
+├─ notify       <body>                          one-shot push
+│  └─ ask       <prompt> (--approval | --yes-no | --text)  push that elicits an answer
+├─ interaction  get <id> · wait <id>
+├─ activity     start · update · end · get · list
+├─ devices      list
+└─ services     list
+```
 
 Start a browser authorization flow and approve the requested scopes with your signed-in Hark account:
 
 ```sh
 npx harkctl auth login
 harkctl auth status
-harkctl ask "Deploy production?" --approval --wait --timeout 15m --json
-harkctl ask "What should the release note say?" --reply --device dev_... --wait
+harkctl notify "Deploy finished ✅" --title "Deploy bot" --image https://example.com/bot.png \
+  --url https://example.com/runs/1
+harkctl notify ask "Deploy production?" --approval --wait --timeout 15m --json
+harkctl notify ask "What should the release note say?" --text --device dev_... --poll
 harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 \
   --accent-color '#FF9F0A'
 harkctl activity update release-main --status "Testing" --progress 0.7 \
@@ -20,25 +33,43 @@ harkctl auth logout
 
 Login prints a short code and verification URL to stderr, opens the system browser when interactive,
 polls at the server-provided interval, and atomically writes credentials to a mode-`0600` file. The
-default scopes support asks, Live Activities, and listing devices/services without requesting
-`events:read`. Every requested scope is shown on the browser authorization page before approval.
+default scopes support notifications, asks, Live Activities, and listing devices/services without
+requesting `events:read`. Every requested scope is shown on the browser authorization page before
+approval. Connected tokens appear under **Dashboard > Agent connections**, where they can be revoked.
 
 Use repeatable `--scope`, `--client-name`, and `--expires-in` to narrow or label access. `--no-open`
 suppresses browser launch; `--open` explicitly enables it in non-interactive environments. `--json`
 keeps stdout to one machine-readable object while browser instructions remain on stderr.
 
-As an advanced fallback, create a scoped token under **Dashboard > Agent access** and set
-`HARK_TOKEN`, or put `{ "token": "hark_..." }` in the OS config file with mode `0600`:
+## notify
 
-- macOS: `~/Library/Application Support/hark/config.json`
-- Linux: `${XDG_CONFIG_HOME:-~/.config}/hark/config.json`
-- Windows: `%APPDATA%\hark\config.json`
+`harkctl notify <body>` sends a one-shot push to your registered iPhones. `--title` sets the sender
+name (defaults to “Hark”), `--image` sets the avatar shown with the notification, `--url` is opened
+when the notification is tapped, and repeatable `--device` routes to specific device IDs (Hark Pro).
+Use `--idempotency-key` for safe retries and `--stdin` to merge a JSON payload from stdin under any
+explicit flags. The command exits `7` when no push was accepted.
 
-Use `HARK_API_URL` for a self-hosted API. Tokens are never accepted on the command line or printed to
-stdout. All successful command output is one stable JSON object; diagnostics use stderr.
+`harkctl notify ask <prompt>` sends a push that elicits an answer. Pass exactly one of `--approval`
+(Approve/Deny buttons), `--yes-no` (Yes/No buttons), or `--text` (a short free-form reply). It
+shares the appearance flags above
+plus `--expires-in` (default `15m`). Without a waiting flag it returns the pending interaction
+immediately; read the answer later with `interaction get` or `interaction wait`. With `--wait
+[--timeout <duration>]` it blocks until the answer arrives or the timeout passes. With `--poll` it
+waits at most 20 seconds to catch an instant answer and then returns. A timed-out poll or wait
+does not end the prompt — it stays answerable on the phone until it expires, and
+`harkctl interaction wait <id>` resumes waiting at any time; `--poll` cannot be combined with
+`--wait` or `--timeout`.
 
-Approval notifications always offer both Approve and Deny. Older scripts may use
-`--approve --deny` together; either flag by itself is rejected as ambiguous.
+Inside `notify`, a first positional of exactly `ask` selects the subcommand. Everything after a bare
+`--` separator is treated as positional, so `harkctl notify -- ask` sends the literal body “ask”.
+
+## interaction
+
+`interaction get <id>` prints the current state and maps terminal states to exit codes.
+`interaction wait <id> [--timeout <duration>]` long-polls until the interaction is answered,
+canceled, or expired, or the timeout passes (default `60s`).
+
+## activity
 
 Activity commands accept flags or `--stdin` JSON. Use `activity get <id|key>` and `activity list` to
 inspect state, `--idempotency-key` for retries, and `--if-sequence` to reject stale updates. Progress
@@ -49,5 +80,18 @@ silently end whatever occupies the device and take the slot (the response report
 `replaced`). A `--key` becomes reusable once its activity ends, so `activity start --key deploy
 --replace` works as a fixed-key restart.
 
-Exit codes: `0` success/approved/replied, `1` API error, `2` usage error, `3` authentication or
-scope error, `4` timeout/canceled/expired, `5` denied, `6` network error, `7` no push accepted.
+## Configuration
+
+As an advanced fallback, set `HARK_TOKEN` to a scoped token secret (for example one minted by
+`harkctl auth login` on another machine), or put `{ "token": "hark_..." }` in the OS config file
+with mode `0600`:
+
+- macOS: `~/Library/Application Support/hark/config.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/hark/config.json`
+- Windows: `%APPDATA%\hark\config.json`
+
+Use `HARK_API_URL` for a self-hosted API. Tokens are never accepted on the command line or printed to
+stdout. All successful command output is one stable JSON object; diagnostics use stderr.
+
+Exit codes: `0` success/approved/yes/replied, `1` API error, `2` usage error, `3` authentication or
+scope error, `4` timeout/canceled/expired, `5` denied/no, `6` network error, `7` no push accepted.

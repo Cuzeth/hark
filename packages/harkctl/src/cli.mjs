@@ -14,7 +14,7 @@ const DEFAULT_SCOPES = [
   "devices:read",
   "services:read",
 ];
-const TERMINAL = new Set(["approved", "denied", "replied", "canceled", "expired"]);
+const TERMINAL = new Set(["approved", "denied", "yes", "no", "replied", "canceled", "expired"]);
 
 export class UsageError extends Error {}
 export class RequestError extends Error {
@@ -44,13 +44,16 @@ function parseAccentColor(value) {
 export function parseArgs(argv) {
   const positionals = [];
   const options = { device: [], scope: [] };
+  /** Index in `positionals` where post-`--` arguments start, or null. */
+  let separatorAt = null;
   const valueFlags = new Set([
     "title",
+    "image",
+    "url",
     "device",
     "expires-in",
     "idempotency-key",
     "timeout",
-    "prompt",
     "client-name",
     "scope",
     "key",
@@ -67,11 +70,11 @@ export function parseArgs(argv) {
   ]);
   const booleanFlags = new Set([
     "approval",
-    "approve",
-    "deny",
-    "reply",
-    "replace",
+    "yes-no",
+    "text",
     "wait",
+    "poll",
+    "replace",
     "json",
     "stdin",
     "help",
@@ -80,7 +83,11 @@ export function parseArgs(argv) {
   ]);
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (!argument.startsWith("--")) {
+    if (separatorAt === null && argument === "--") {
+      separatorAt = positionals.length;
+      continue;
+    }
+    if (separatorAt !== null || !argument.startsWith("--")) {
       positionals.push(argument);
       continue;
     }
@@ -96,7 +103,7 @@ export function parseArgs(argv) {
       throw new UsageError(`Unknown option: --${rawName}`);
     }
   }
-  return { positionals, options };
+  return { positionals, options, separatorAt };
 }
 
 export function configPath(env = process.env) {
@@ -318,22 +325,26 @@ async function readStdinJson() {
 }
 
 function interactionExitCode(interaction) {
-  if (interaction.status === "denied") return 5;
+  if (interaction.status === "denied" || interaction.status === "no") return 5;
   if (interaction.status === "canceled" || interaction.status === "expired") return 4;
   return 0;
 }
 
-async function waitForInteraction(config, id, timeoutSeconds) {
-  const deadline = Date.now() + timeoutSeconds * 1000;
+/** `--poll` waits this long at most for an instant answer before returning. */
+const POLL_TIMEOUT_SECONDS = 20;
+
+async function waitForInteraction(config, id, timeoutSeconds, runtime) {
+  const now = runtime?.now ?? (() => Date.now());
+  const deadline = now() + timeoutSeconds * 1000;
   let body;
   while (true) {
-    const remaining = Math.max(0, (deadline - Date.now()) / 1000);
+    const remaining = Math.max(0, (deadline - now()) / 1000);
     body = await request(
       config,
       `/api/agent/interactions/${encodeURIComponent(id)}/wait?timeout=${Math.min(25, remaining)}`,
     );
     if (TERMINAL.has(body.interaction.status)) return body;
-    if (Date.now() >= deadline) return { ...body, timedOut: true };
+    if (now() >= deadline) return { ...body, timedOut: true };
   }
 }
 
@@ -343,7 +354,11 @@ function help() {
                      [--timeout <duration>] [--open|--no-open] [--json]
   harkctl auth logout
   harkctl auth status
-  harkctl ask <prompt> (--approval|--reply) [--title <title>] [--device <id>] [--wait]
+  harkctl notify <body> [--title <name>] [--image <url>] [--url <url>] [--device <id>]
+                 [--idempotency-key <key>] [--stdin]
+  harkctl notify ask <prompt> (--approval|--yes-no|--text) [--title <name>] [--image <url>]
+                 [--url <url>] [--device <id>] [--expires-in <duration>]
+                 [--idempotency-key <key>] [--stdin] [--wait [--timeout <duration>] | --poll]
   harkctl interaction get <id>
   harkctl interaction wait <id> [--timeout <duration>]
   harkctl activity start --title <title> --status <status> [--progress <0..1>] [--key <key>]
@@ -357,12 +372,20 @@ function help() {
   harkctl devices list
   harkctl services list
 
+notify sends a one-shot push; notify ask sends a push that elicits an answer.
+Inside notify, a first positional of exactly "ask" selects the subcommand. Everything
+after a bare "--" is treated as positional, so "harkctl notify -- ask" sends the
+literal body "ask". --wait blocks until the answer or timeout; --poll waits at most
+${POLL_TIMEOUT_SECONDS} seconds to catch an instant answer. A timed-out poll or wait does
+not end the prompt: it stays answerable on the phone until it expires, and
+harkctl interaction wait <id> resumes waiting at any time.
+
 Authentication: run harkctl auth login, or set HARK_TOKEN for an advanced manual setup.
 Tokens are never accepted as command arguments.`;
 }
 
 export async function execute(argv, env = process.env, overrides = {}) {
-  const { positionals, options } = parseArgs(argv);
+  const { positionals, options, separatorAt } = parseArgs(argv);
   if (options.help || positionals.length === 0)
     return { body: { help: help() }, exitCode: 0, text: true };
   const [group, action, id] = positionals;
@@ -553,51 +576,84 @@ export async function execute(argv, env = process.env, overrides = {}) {
   }
   if (group === "interaction" && action === "wait" && id) {
     const timeout = parseDuration(options.timeout ?? "60s");
-    const body = await waitForInteraction(config, id, timeout);
+    const body = await waitForInteraction(config, id, timeout, runtime);
     return {
       body,
       exitCode: body.timedOut ? 4 : interactionExitCode(body.interaction),
     };
   }
-  if (group === "ask") {
-    const legacyApproval = options.approve && options.deny;
-    if ((options.approve || options.deny) && !legacyApproval) {
-      throw new UsageError("Legacy approval flags must be used together: --approve --deny");
-    }
-    const selectors = [
-      options.approval || legacyApproval ? "approval" : null,
-      options.reply ? "reply" : null,
-    ].filter(Boolean);
-    if (selectors.length !== 1) {
-      throw new UsageError("ask requires exactly one response type: --approval or --reply");
+  if (group === "notify") {
+    // A first positional of exactly `ask` selects the subcommand unless it came
+    // after a bare `--`, which forces it to be the literal notification body.
+    const isAsk = positionals[1] === "ask" && (separatorAt === null || separatorAt > 1);
+    if (isAsk) {
+      const selectors = [
+        options.approval ? "approval" : null,
+        options["yes-no"] ? "yes_no" : null,
+        options.text ? "reply" : null,
+      ].filter(Boolean);
+      if (selectors.length !== 1) {
+        throw new UsageError(
+          "notify ask requires exactly one response type: --approval, --yes-no, or --text",
+        );
+      }
+      if (options.poll && (options.wait || options.timeout !== undefined)) {
+        throw new UsageError("--poll cannot be combined with --wait or --timeout");
+      }
+      if (options.timeout !== undefined && !options.wait) {
+        throw new UsageError("--timeout requires --wait");
+      }
+      const stdin = options.stdin ? await readStdinJson() : {};
+      const prompt = positionals.slice(2).join(" ") || stdin.prompt;
+      if (!prompt) throw new UsageError("notify ask requires a prompt");
+      const expiresInSeconds = parseDuration(options["expires-in"] ?? stdin.expiresIn ?? "15m");
+      const payload = {
+        ...stdin,
+        title: options.title ?? stdin.title ?? "Hark",
+        prompt,
+        kind: selectors[0],
+        expiresInSeconds,
+        ...(options.image ? { imageUrl: options.image } : {}),
+        ...(options.url ? { url: options.url } : {}),
+        ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
+      };
+      const body = await request(config, "/api/agent/interactions", {
+        method: "POST",
+        headers: options["idempotency-key"]
+          ? { "Idempotency-Key": options["idempotency-key"] }
+          : undefined,
+        body: JSON.stringify(payload),
+      });
+      if (body.accepted === 0) return { body, exitCode: 7 };
+      if (!options.wait && !options.poll) return { body, exitCode: 0 };
+      const timeout = options.poll
+        ? POLL_TIMEOUT_SECONDS
+        : parseDuration(options.timeout ?? `${expiresInSeconds}s`);
+      const waited = await waitForInteraction(config, body.interaction.id, timeout, runtime);
+      return {
+        body: { ...body, interaction: waited.interaction, timedOut: waited.timedOut ?? false },
+        exitCode: waited.timedOut ? 4 : interactionExitCode(waited.interaction),
+      };
     }
     const stdin = options.stdin ? await readStdinJson() : {};
-    const prompt = options.prompt ?? (positionals.slice(1).join(" ") || stdin.prompt);
-    if (!prompt) throw new UsageError("ask requires a prompt");
-    const expiresInSeconds = parseDuration(options["expires-in"] ?? stdin.expiresIn ?? "15m");
+    const notificationBody = positionals.slice(1).join(" ") || stdin.body;
+    if (!notificationBody) throw new UsageError("notify requires a message body");
     const payload = {
-      title: options.title ?? stdin.title ?? "Hark",
-      prompt,
-      kind: selectors[0],
-      expiresInSeconds,
+      ...stdin,
+      body: notificationBody,
+      ...(options.title ? { title: options.title } : {}),
+      ...(options.image ? { imageUrl: options.image } : {}),
+      ...(options.url ? { url: options.url } : {}),
       ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
-      ...(stdin.url ? { url: stdin.url } : {}),
     };
-    const body = await request(config, "/api/agent/interactions", {
+    const body = await request(config, "/api/agent/notifications", {
       method: "POST",
       headers: options["idempotency-key"]
         ? { "Idempotency-Key": options["idempotency-key"] }
         : undefined,
       body: JSON.stringify(payload),
     });
-    if (body.accepted === 0) return { body, exitCode: 7 };
-    if (!options.wait) return { body, exitCode: 0 };
-    const timeout = parseDuration(options.timeout ?? `${expiresInSeconds}s`);
-    const waited = await waitForInteraction(config, body.interaction.id, timeout);
-    return {
-      body: { ...body, interaction: waited.interaction, timedOut: waited.timedOut ?? false },
-      exitCode: waited.timedOut ? 4 : interactionExitCode(waited.interaction),
-    };
+    return { body, exitCode: body.accepted === 0 ? 7 : 0 };
   }
   throw new UsageError("Unknown command. Run harkctl --help.");
 }
