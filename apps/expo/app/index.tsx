@@ -1,27 +1,44 @@
+import * as AppleAuthentication from "expo-apple-authentication";
 import { Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { signInWithApple } from "../src/lib/apple-auth";
 import { authClient, useSession } from "../src/lib/auth";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
 
 export default function SignInScreen() {
   const { data: session, isPending } = useSession();
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<"apple" | "google" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  if (session) return <Redirect href="/home" />;
+  // Keep the sign-in screen mounted until the native authorization code is
+  // exchanged and its revocation token is safely stored server-side.
+  if (session && busy !== "apple") return <Redirect href="/home" />;
 
-  const signIn = async () => {
-    setBusy(true);
+  const signInWithGoogle = async () => {
+    setBusy("google");
     setError(null);
     try {
-      await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
+      const result = await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
+      if (result.error) throw new Error(result.error.message ?? "Google sign-in failed");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
-      setBusy(false);
+      setBusy(null);
+    }
+  };
+
+  const continueWithApple = async () => {
+    setBusy("apple");
+    setError(null);
+    try {
+      await signInWithApple();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Apple sign-in failed");
+    } finally {
+      setBusy(null);
     }
   };
 
@@ -45,21 +62,35 @@ export default function SignInScreen() {
         {isPending ? (
           <ActivityIndicator color={colors.accent} />
         ) : (
-          <Pressable
-            accessibilityRole="button"
-            onPress={signIn}
-            disabled={busy}
-            style={({ pressed }) => [
-              styles.googleButton,
-              (pressed || busy) && styles.googleButtonPressed,
-            ]}
-          >
-            {busy ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <Text style={styles.googleButtonText}>Continue with Google</Text>
-            )}
-          </Pressable>
+          <>
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              cornerRadius={26}
+              onPress={() => {
+                if (!busy) void continueWithApple();
+              }}
+              style={[styles.appleButton, busy && styles.buttonDisabled]}
+            />
+            {busy === "apple" ? (
+              <ActivityIndicator color={colors.ink} style={styles.appleSpinner} />
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              onPress={signInWithGoogle}
+              disabled={busy !== null}
+              style={({ pressed }) => [
+                styles.googleButton,
+                (pressed || busy !== null) && styles.googleButtonPressed,
+              ]}
+            >
+              {busy === "google" ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              )}
+            </Pressable>
+          </>
         )}
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </View>
@@ -133,6 +164,18 @@ const styles = StyleSheet.create({
     gap: 10,
     borderRadius: 26,
     backgroundColor: colors.accent,
+  },
+  appleButton: {
+    width: "100%",
+    height: 52,
+  },
+  appleSpinner: {
+    position: "absolute",
+    top: 17,
+    alignSelf: "center",
+  },
+  buttonDisabled: {
+    opacity: 0.55,
   },
   googleButtonPressed: {
     backgroundColor: colors.accentPressed,

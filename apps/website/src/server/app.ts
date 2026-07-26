@@ -5,6 +5,7 @@ import { auth } from "./auth";
 import { activitiesAgentRoute, activitiesSessionRoute } from "./routes/activities";
 import { activityHooksRoute } from "./routes/activity-hooks";
 import { apiTokensRoute } from "./routes/api-tokens";
+import { appleAuthRoute } from "./routes/apple-auth";
 import { billingRoute } from "./routes/billing";
 import { deviceAuthorizationRoute } from "./routes/device-authorization";
 import { devicesRoute } from "./routes/devices";
@@ -50,6 +51,7 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/services", servicesRoute);
 app.route("/api/api-tokens", apiTokensRoute);
+app.route("/api/apple-auth", appleAuthRoute);
 app.route("/api/device-authorization", deviceAuthorizationRoute);
 app.route("/api/agent/activities", activitiesAgentRoute);
 app.route("/api/agent", agentRoute);

@@ -3,7 +3,11 @@ import { env } from "../env";
 
 const ENCRYPTION_VERSION = "v1";
 
-type EncryptionPurpose = "webhook-token" | "live-activity-token" | "callback-token";
+type EncryptionPurpose =
+  | "webhook-token"
+  | "live-activity-token"
+  | "callback-token"
+  | "apple-refresh-token";
 
 function encryptionKey(purpose: EncryptionPurpose): Buffer {
   return createHash("sha256")
@@ -125,6 +129,21 @@ export function encryptCallbackToken(token: string): string {
 
 export function decryptCallbackToken(value: string): string {
   return decryptToken(value, "callback-token");
+}
+
+export function encryptAppleRefreshToken(token: string): string {
+  return encryptToken(token, "apple-refresh-token");
+}
+
+export function decryptAppleRefreshToken(value: string): string {
+  return decryptToken(value, "apple-refresh-token");
+}
+
+export function hashAppleAuthorizationCode(code: string): string {
+  return createHash("sha256")
+    .update("hark:apple-authorization-code:v1\0", "utf8")
+    .update(code, "utf8")
+    .digest("hex");
 }
 
 export function generateInteractionResponseToken(): string {

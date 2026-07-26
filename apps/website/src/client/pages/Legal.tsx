@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-const updated = "July 24, 2026";
+const updated = "July 26, 2026";
 
 function LegalLayout({
   eyebrow,
@@ -62,7 +62,14 @@ export function Privacy() {
 
       <Section title="Information we process">
         <ul className="list-disc space-y-2 pl-5">
-          <li>Your Google account name, email address, and profile image when you sign in.</li>
+          <li>
+            Your Google or Apple account identifier, name, email address, and profile image when
+            provided by the sign-in service. Apple may provide a private relay email address.
+          </li>
+          <li>
+            Encrypted Apple refresh tokens used only to revoke Sign in with Apple authorization when
+            you delete your account.
+          </li>
           <li>
             Service settings you create, including titles, image URLs, destination URLs, secret
             webhook-token hashes, and encrypted webhook tokens.
@@ -114,9 +121,9 @@ export function Privacy() {
 
       <Section title="Service providers">
         <p>
-          Hark relies on Google for authentication, Expo and Apple for push delivery and app
-          distribution, Autumn and Stripe for optional web billing, and hosting infrastructure for
-          the website, API, and database. These providers process information only as needed to
+          Hark relies on Google and Apple for authentication, Expo and Apple for push delivery and
+          app distribution, Autumn and Stripe for optional web billing, and hosting infrastructure
+          for the website, API, and database. These providers process information only as needed to
           provide their services and under their own privacy terms.
         </p>
       </Section>
@@ -126,7 +133,9 @@ export function Privacy() {
           We retain account and service data while your account is active and retain recent webhook
           activity for product operation and troubleshooting. You can permanently delete your
           account inside the Hark app. Deletion removes your services, devices, and activity from
-          the active database; limited backup copies may remain temporarily until rotated.
+          the active database. For accounts using Apple, Hark first asks Apple to revoke stored
+          authorization grants; deletion stops and reports an error if that revocation cannot be
+          confirmed. Limited backup copies may remain temporarily until rotated.
         </p>
       </Section>
 

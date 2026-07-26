@@ -56,6 +56,29 @@ export const verification = sqliteTable("verification", {
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
 
+/** Native Apple grants are separate from Better Auth accounts so refresh tokens stay encrypted. */
+export const appleNativeGrant = sqliteTable(
+  "apple_native_grant",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    appleSubject: text("apple_subject").notNull(),
+    clientId: text("client_id").notNull(),
+    refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
+    /** Domain-separated digest of Apple's single-use authorization code. */
+    authorizationCodeHash: text("authorization_code_hash").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("apple_native_grant_user_unique").on(table.userId),
+    uniqueIndex("apple_native_grant_code_hash_unique").on(table.authorizationCodeHash),
+    index("apple_native_grant_subject_idx").on(table.appleSubject),
+  ],
+);
+
 // ---------------------------------------------------------------------------
 // Hark domain tables
 // ---------------------------------------------------------------------------

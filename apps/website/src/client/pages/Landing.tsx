@@ -1,8 +1,9 @@
 import { Link } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
+import { AppleButton } from "../components/AppleButton";
 import { CodeBlock } from "../components/CodeBlock";
 import { GoogleButton } from "../components/GoogleButton";
-import { signInWithGoogle, useSession } from "../lib/auth";
+import { signInWithApple, signInWithGoogle, useSession } from "../lib/auth";
 
 const requestExample = `curl -X POST https://hark.ryan.ceo/hooks/whk_your_token \\
   -H 'Content-Type: application/json' \\
@@ -82,7 +83,10 @@ export function Landing() {
                 Go to your services
               </Link>
             ) : (
-              <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
+              <div className="flex flex-wrap gap-3">
+                <AppleButton onClick={() => void signInWithApple()} disabled={isPending} />
+                <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
+              </div>
             )}
           </div>
         </section>

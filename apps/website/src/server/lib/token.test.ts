@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   apiTokenPrefix,
+  decryptAppleRefreshToken,
   decryptLiveActivityToken,
   decryptWebhookToken,
+  encryptAppleRefreshToken,
   encryptLiveActivityToken,
   encryptWebhookToken,
   generateApiToken,
@@ -74,6 +76,16 @@ describe("Live Activity token encryption", () => {
     const encrypted = encryptLiveActivityToken(token);
     expect(encrypted).not.toContain(token);
     expect(decryptLiveActivityToken(encrypted)).toBe(token);
+    expect(() => decryptWebhookToken(encrypted)).toThrow();
+  });
+});
+
+describe("Apple refresh token encryption", () => {
+  it("round-trips in a dedicated encryption domain", () => {
+    const token = "apple-refresh-token";
+    const encrypted = encryptAppleRefreshToken(token);
+    expect(encrypted).not.toContain(token);
+    expect(decryptAppleRefreshToken(encrypted)).toBe(token);
     expect(() => decryptWebhookToken(encrypted)).toThrow();
   });
 });

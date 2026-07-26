@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agentNotificationCreateSchema,
+  appleNativeTokenExchangeSchema,
   deviceRegisterSchema,
   interactionCreateSchema,
   interactionResponseSchema,
@@ -14,6 +15,26 @@ import {
   serviceCreateSchema,
   webhookRequestSchema,
 } from "./index";
+
+describe("appleNativeTokenExchangeSchema", () => {
+  it("requires both bounded Apple credentials", () => {
+    expect(
+      appleNativeTokenExchangeSchema.safeParse({
+        authorizationCode: "single-use-code",
+        identityToken: "identity-token",
+      }).success,
+    ).toBe(true);
+    expect(appleNativeTokenExchangeSchema.safeParse({ authorizationCode: "code" }).success).toBe(
+      false,
+    );
+    expect(
+      appleNativeTokenExchangeSchema.safeParse({
+        authorizationCode: "x".repeat(4097),
+        identityToken: "token",
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe("webhookRequestSchema", () => {
   it("accepts a minimal payload", () => {

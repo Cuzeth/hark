@@ -12,6 +12,13 @@ const envSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(16).default(DEV_SECRET),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /** Sign in with Apple Services ID used by the web OAuth flow. */
+  APPLE_SIGN_IN_SERVICE_ID: z.string().optional(),
+  /** Native App ID / bundle identifier. This is also the native token audience. */
+  APPLE_SIGN_IN_BUNDLE_ID: z.string().min(1).default("ceo.ryan.hark"),
+  APPLE_SIGN_IN_KEY_ID: z.string().optional(),
+  /** Sign in with Apple .p8 key. Accepts PEM text (with \n) or base64-encoded PEM. */
+  APPLE_SIGN_IN_PRIVATE_KEY: z.string().optional(),
   /** Optional. Enables authenticated requests to the Expo Push Service. */
   EXPO_ACCESS_TOKEN: z.string().optional(),
   /** Optional direct APNs credentials for Live Activity start/update/end delivery. */
@@ -50,6 +57,16 @@ export function assertRuntimeEnv(): void {
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
     problems.push(
       "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET are not set — Google sign-in will fail until configured.",
+    );
+  }
+  if (
+    !env.APPLE_SIGN_IN_SERVICE_ID ||
+    !env.APPLE_TEAM_ID ||
+    !env.APPLE_SIGN_IN_KEY_ID ||
+    !env.APPLE_SIGN_IN_PRIVATE_KEY
+  ) {
+    problems.push(
+      "APPLE_SIGN_IN_SERVICE_ID / APPLE_SIGN_IN_BUNDLE_ID / APPLE_TEAM_ID / APPLE_SIGN_IN_KEY_ID / APPLE_SIGN_IN_PRIVATE_KEY are not all set — Sign in with Apple will fail until configured.",
     );
   }
   if (env.BETTER_AUTH_SECRET === DEV_SECRET) {

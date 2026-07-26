@@ -192,7 +192,10 @@ export default function HomeScreen() {
             void (async () => {
               try {
                 if (expoPushToken) await api.unregisterDevice({ expoPushToken });
-                await authClient.deleteUser();
+                const result = await authClient.deleteUser();
+                if (result.error) {
+                  throw new Error(result.error.message ?? "Account deletion was not completed");
+                }
                 await Promise.all([
                   SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
                   SecureStore.deleteItemAsync(APNS_TOKEN_KEY),

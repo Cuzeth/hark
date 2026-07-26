@@ -10,3 +10,10 @@ export function signInWithGoogle(callbackURL = "/dashboard"): Promise<unknown> {
     callbackURL,
   });
 }
+
+export function signInWithApple(callbackURL = "/dashboard"): Promise<unknown> {
+  return authClient.signIn.social({
+    provider: "apple",
+    callbackURL,
+  });
+}

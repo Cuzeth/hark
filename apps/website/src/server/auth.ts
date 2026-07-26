@@ -4,6 +4,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
 import * as schema from "./db/schema";
 import { env } from "./env";
+import { appleAuthConfig, generateAppleClientSecret, revokeAppleGrantsForUser } from "./lib/apple";
 
 export const auth = betterAuth({
   appName: "Hark",
@@ -13,9 +14,13 @@ export const auth = betterAuth({
     provider: "sqlite",
     schema,
   }),
+  account: {
+    encryptOAuthTokens: true,
+  },
   user: {
     deleteUser: {
       enabled: true,
+      beforeDelete: async (user) => revokeAppleGrantsForUser(user.id),
     },
   },
   socialProviders: {
@@ -25,9 +30,38 @@ export const auth = betterAuth({
       disableDefaultScope: true,
       scope: ["openid", "email", "profile"],
     },
+    apple: async () => {
+      const clientId = env.APPLE_SIGN_IN_SERVICE_ID ?? "";
+      const configured =
+        clientId && env.APPLE_TEAM_ID && env.APPLE_SIGN_IN_KEY_ID && env.APPLE_SIGN_IN_PRIVATE_KEY;
+      return {
+        clientId,
+        clientSecret: configured
+          ? await generateAppleClientSecret(
+              clientId,
+              appleAuthConfig(),
+              undefined,
+              180 * 24 * 60 * 60,
+            )
+          : "",
+        appBundleIdentifier: env.APPLE_SIGN_IN_BUNDLE_ID,
+        // Better Auth 1.6.25's appBundleIdentifier alone replaces the web audience;
+        // audience explicitly accepts both the Services ID and native App ID.
+        audience: [clientId, env.APPLE_SIGN_IN_BUNDLE_ID],
+      };
+    },
   },
   plugins: [expo()],
-  trustedOrigins: [env.APP_URL, "hark://", "hark://*"],
+  trustedOrigins: [env.APP_URL, "https://appleid.apple.com", "hark://", "hark://*"],
+  advanced: env.APP_URL.startsWith("https://")
+    ? {
+        // Apple returns OAuth callbacks with a cross-site form POST. Better Auth
+        // 1.6.25 still requires its signed state cookie on that request.
+        cookies: {
+          state: { attributes: { sameSite: "none", secure: true } },
+        },
+      }
+    : undefined,
 });
 
 export type Session = typeof auth.$Infer.Session;

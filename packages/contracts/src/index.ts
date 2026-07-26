@@ -202,6 +202,12 @@ export const deviceUnregisterSchema = z.object({
 });
 export type DeviceUnregisterInput = z.infer<typeof deviceUnregisterSchema>;
 
+export const appleNativeTokenExchangeSchema = z.object({
+  authorizationCode: z.string().min(1).max(4096),
+  identityToken: z.string().min(1).max(8192),
+});
+export type AppleNativeTokenExchangeInput = z.infer<typeof appleNativeTokenExchangeSchema>;
+
 export interface DeviceDto {
   id: string;
   platform: "ios";

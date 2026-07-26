@@ -1,9 +1,10 @@
 import type { PricingPlanDto, PricingPlansDto } from "@hark/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { AppleButton } from "../components/AppleButton";
 import { GoogleButton } from "../components/GoogleButton";
 import { api } from "../lib/api";
-import { signInWithGoogle, useSession } from "../lib/auth";
+import { signInWithApple, signInWithGoogle, useSession } from "../lib/auth";
 
 const numberFormat = new Intl.NumberFormat("en-US");
 
@@ -97,7 +98,7 @@ export function Pricing() {
                         Open dashboard
                       </Link>
                     ) : (
-                      <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
+                      <SignInButtons disabled={isPending} />
                     )
                   ) : session ? (
                     <button
@@ -109,7 +110,7 @@ export function Pricing() {
                       {checkoutPending ? "Opening checkout…" : "Upgrade to Pro"}
                     </button>
                   ) : (
-                    <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
+                    <SignInButtons disabled={isPending} />
                   )}
                 </PlanCard>
               ) : (
@@ -139,6 +140,15 @@ export function Pricing() {
           </Link>
         </nav>
       </footer>
+    </div>
+  );
+}
+
+function SignInButtons({ disabled }: { disabled: boolean }) {
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <AppleButton onClick={() => void signInWithApple()} disabled={disabled} />
+      <GoogleButton onClick={() => void signInWithGoogle()} disabled={disabled} />
     </div>
   );
 }

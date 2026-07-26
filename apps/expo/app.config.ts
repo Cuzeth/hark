@@ -11,6 +11,7 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   platforms: ["ios"],
   ios: {
     bundleIdentifier: "ceo.ryan.hark",
+    usesAppleSignIn: true,
     icon: "./assets/icon.png",
     supportsTablet: false,
     // Communication Notifications + SiriKit. `aps-environment` is managed by
@@ -28,6 +29,7 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "./plugins/with-ios-scene-delegate",
     "expo-router",
+    "expo-apple-authentication",
     "expo-secure-store",
     "expo-notifications",
     "expo-web-browser",
