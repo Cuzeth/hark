@@ -1,4 +1,5 @@
 import type {
+  ApiTokenDto,
   BillingDto,
   DeviceDto,
   EventDto,
@@ -9,6 +10,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { AppDownloadBanner } from "../components/AppDownloadBanner";
+import { useConfirm } from "../components/ConfirmDialog";
 import { CopyField } from "../components/CopyField";
 import { api } from "../lib/api";
 import { signOut, useSession } from "../lib/auth";
@@ -102,6 +104,7 @@ export function Dashboard() {
   const [events, setEvents] = useState<EventDto[] | null>(null);
   const [liveActivities, setLiveActivities] = useState<LiveActivityDto[] | null>(null);
   const [devices, setDevices] = useState<DeviceDto[] | null>(null);
+  const [apiTokens, setApiTokens] = useState<ApiTokenDto[] | null>(null);
   const [billing, setBilling] = useState<BillingDto | null>(null);
   const [billingActivating, setBillingActivating] = useState(
     () => new URLSearchParams(window.location.search).get("billing") === "success",
@@ -116,15 +119,17 @@ export function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [svc, dev, activity, liveActivityState, billingState] = await Promise.all([
+      const [svc, dev, tokenState, activity, liveActivityState, billingState] = await Promise.all([
         api.listServices(),
         api.listDevices(),
+        api.listApiTokens(),
         api.listEvents(),
         api.listLiveActivities(),
         api.getBilling(),
       ]);
       setServices(svc.services);
       setDevices(dev.devices);
+      setApiTokens(tokenState.tokens);
       setEvents(activity.events);
       setLiveActivities(liveActivityState.activities);
       setBilling(billingState);
@@ -311,12 +316,16 @@ export function Dashboard() {
 
         <ServiceList
           services={services}
+          tokens={apiTokens}
           onEdit={setEditing}
           onRotated={(response) => {
             setReveal({ ...response, kind: "rotated" });
             void refresh();
           }}
           onDeleted={() => void refresh()}
+          onTokenRevoked={(id) =>
+            setApiTokens((current) => current?.filter((token) => token.id !== id) ?? current)
+          }
         />
 
         <Devices devices={devices} billing={billing} onRemoved={() => void refresh()} />
@@ -596,9 +605,16 @@ function Devices({
   const activeDevices = devices?.filter((device) => device.active) ?? [];
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
 
   const remove = async (device: DeviceDto) => {
-    if (!window.confirm(`Remove ${device.deviceName ?? "this iPhone"} from Hark?`)) return;
+    const confirmed = await confirm({
+      title: "Remove iPhone",
+      message: `Remove ${device.deviceName ?? "this iPhone"} from Hark? It stops receiving notifications until it signs in from the app again.`,
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setBusyId(device.id);
     setError(null);
     try {
@@ -675,8 +691,19 @@ function Devices({
         </p>
       ) : null}
       {error ? <p className="mt-3 text-xs text-danger">{error}</p> : null}
+      {dialog}
     </section>
   );
+}
+
+function relativeTime(iso: string): string {
+  const deltaMinutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (deltaMinutes < 1) return "just now";
+  if (deltaMinutes < 60) return `${deltaMinutes} minute${deltaMinutes === 1 ? "" : "s"} ago`;
+  const hours = Math.floor(deltaMinutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
 function ServiceModal({
@@ -994,22 +1021,29 @@ function activityLabel(activityEvent: EventDto): string {
 
 function ServiceList({
   services,
+  tokens,
   onEdit,
   onRotated,
   onDeleted,
+  onTokenRevoked,
 }: {
   services: ServiceDto[] | null;
+  tokens: ApiTokenDto[] | null;
   onEdit: (service: ServiceDto) => void;
   onRotated: (response: ServiceCreatedResponse) => void;
   onDeleted: () => void;
+  onTokenRevoked: (id: string) => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
+  const activeTokens = tokens?.filter((token) => token.revokedAt === null) ?? [];
 
   if (services === null) {
     return <div className="py-12 text-center text-sm text-ink-faint">Loading…</div>;
   }
-  if (services.length === 0) {
+  if (services.length === 0 && activeTokens.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-line-strong py-14 text-center">
         <p className="text-sm font-medium text-ink-muted">No services yet</p>
@@ -1021,14 +1055,33 @@ function ServiceList({
     );
   }
 
-  const rotate = async (svc: ServiceDto) => {
-    if (
-      !window.confirm(
-        `Rotate the webhook token for “${svc.title}”? The old URL stops working immediately.`,
-      )
-    ) {
-      return;
+  const revokeToken = async (token: ApiTokenDto) => {
+    const confirmed = await confirm({
+      title: "Revoke agent connection",
+      message: `Revoke “${token.name}”? Its token stops working immediately and the agent must sign in again.`,
+      confirmLabel: "Revoke",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setBusyId(token.id);
+    setTokenError(null);
+    try {
+      await api.revokeApiToken(token.id);
+      onTokenRevoked(token.id);
+    } catch (err) {
+      setTokenError(err instanceof Error ? err.message : "Could not revoke this connection");
+    } finally {
+      setBusyId(null);
     }
+  };
+
+  const rotate = async (svc: ServiceDto) => {
+    const confirmed = await confirm({
+      title: "Rotate webhook token",
+      message: `Rotate the webhook token for “${svc.title}”? The old URL stops working immediately.`,
+      confirmLabel: "Rotate token",
+    });
+    if (!confirmed) return;
     setBusyId(svc.id);
     try {
       onRotated(await api.rotateServiceToken(svc.id));
@@ -1038,9 +1091,13 @@ function ServiceList({
   };
 
   const remove = async (svc: ServiceDto) => {
-    if (!window.confirm(`Delete “${svc.title}”? Its webhook URL stops working immediately.`)) {
-      return;
-    }
+    const confirmed = await confirm({
+      title: "Delete service",
+      message: `Delete “${svc.title}”? Its webhook URL stops working immediately and its activity history is removed.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
     setBusyId(svc.id);
     try {
       await api.deleteService(svc.id);
@@ -1065,68 +1122,105 @@ function ServiceList({
   };
 
   return (
-    <ul className="divide-y divide-line border-y border-line">
-      {services.map((svc) => (
-        <li key={svc.id} className="flex items-center gap-3 py-3">
-          {svc.imageUrl ? (
-            <img
-              src={svc.imageUrl}
-              alt=""
-              className="border-media-line size-8 shrink-0 rounded-full border object-cover"
-            />
-          ) : (
-            <div className="bg-accent flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-on-accent">
-              {svc.title.slice(0, 1).toUpperCase()}
+    <>
+      <ul className="divide-y divide-line border-y border-line">
+        {services.map((svc) => (
+          <li key={svc.id} className="flex items-center gap-3 py-3">
+            {svc.imageUrl ? (
+              <img
+                src={svc.imageUrl}
+                alt=""
+                className="border-media-line size-8 shrink-0 rounded-full border object-cover"
+              />
+            ) : (
+              <div className="bg-accent flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-on-accent">
+                {svc.title.slice(0, 1).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{svc.title}</p>
+              <p className="truncate text-xs text-ink-faint">
+                {svc.url ?? "No destination URL"} · created{" "}
+                {new Date(svc.createdAt).toLocaleDateString()}
+              </p>
             </div>
-          )}
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{svc.title}</p>
-            <p className="truncate text-xs text-ink-faint">
-              {svc.url ?? "No destination URL"} · created{" "}
-              {new Date(svc.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
-            <button
-              type="button"
-              disabled={!svc.webhookUrl}
-              title={
-                svc.webhookUrl
-                  ? "Copy webhook URL"
-                  : "Rotate this legacy token once to make its URL copyable"
-              }
-              onClick={() => void copy(svc)}
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-disabled"
-            >
-              {copiedId === svc.id ? "Copied" : "Copy webhook"}
-            </button>
-            <button
-              type="button"
-              disabled={busyId === svc.id}
-              onClick={() => onEdit(svc)}
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              disabled={busyId === svc.id}
-              onClick={() => void rotate(svc)}
-              className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
-            >
-              Rotate token
-            </button>
-            <button
-              type="button"
-              disabled={busyId === svc.id}
-              onClick={() => void remove(svc)}
-              className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
-            >
-              Delete
-            </button>
-          </div>
-        </li>
-      ))}
-    </ul>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={!svc.webhookUrl}
+                title={
+                  svc.webhookUrl
+                    ? "Copy webhook URL"
+                    : "Rotate this legacy token once to make its URL copyable"
+                }
+                onClick={() => void copy(svc)}
+                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-disabled"
+              >
+                {copiedId === svc.id ? "Copied" : "Copy webhook"}
+              </button>
+              <button
+                type="button"
+                disabled={busyId === svc.id}
+                onClick={() => onEdit(svc)}
+                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                disabled={busyId === svc.id}
+                onClick={() => void rotate(svc)}
+                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
+              >
+                Rotate token
+              </button>
+              <button
+                type="button"
+                disabled={busyId === svc.id}
+                onClick={() => void remove(svc)}
+                className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          </li>
+        ))}
+        {activeTokens.map((token) => (
+          <li key={token.id} className="flex items-center gap-3 py-3">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full border border-line bg-surface-muted font-mono text-[11px] font-semibold text-accent-text">
+              ❯_
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-2 text-sm font-semibold">
+                <span className="truncate">{token.name}</span>
+                <span className="shrink-0 rounded-full border border-line bg-surface-muted px-2 py-0.5 text-[10px] font-medium leading-4 text-ink-muted">
+                  Agent
+                </span>
+              </p>
+              <p className="truncate text-xs text-ink-faint" title={token.scopes.join(", ")}>
+                {token.prefix}… · {token.scopes.length}{" "}
+                {token.scopes.length === 1 ? "scope" : "scopes"} · last used{" "}
+                {token.lastUsedAt ? relativeTime(token.lastUsedAt) : "never"}
+                {token.expiresAt
+                  ? ` · expires ${new Date(token.expiresAt).toLocaleDateString()}`
+                  : ""}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                disabled={busyId === token.id}
+                onClick={() => void revokeToken(token)}
+                className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
+              >
+                Revoke
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {tokenError ? <p className="mt-3 text-xs text-danger">{tokenError}</p> : null}
+      {dialog}
+    </>
   );
 }
