@@ -276,6 +276,42 @@ describe("agent token authentication", () => {
     expect(await response.json()).toMatchObject({ error: expect.stringContaining("25") });
   });
 
+  it("lists token metadata needed by the dashboard agent connections section", async () => {
+    const listed = await app.request("/api/api-tokens");
+    expect(listed.status).toBe(200);
+    const body = (await listed.json()) as { tokens: Array<Record<string, unknown>> };
+    const token = body.tokens.find((candidate) => candidate.id === "tok_full");
+    expect(token).toMatchObject({
+      name: "Full",
+      prefix: SECRET.slice(0, 13),
+      scopes: ["notifications:send", "interactions:create", "interactions:read"],
+      revokedAt: null,
+    });
+    expect(typeof token?.createdAt).toBe("string");
+    expect(token).toHaveProperty("lastUsedAt");
+    expect(token).toHaveProperty("expiresAt");
+  });
+
+  it("returns token metadata from auth status for harkctl", async () => {
+    const response = await agent("/auth/status");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      token: Record<string, unknown>;
+    };
+    expect(body).toMatchObject({
+      authenticated: true,
+      token: {
+        id: "tok_full",
+        name: "Full",
+        prefix: SECRET.slice(0, 13),
+        scopes: ["notifications:send", "interactions:create", "interactions:read"],
+        expiresAt: null,
+      },
+    });
+    expect(typeof body.token.createdAt).toBe("string");
+    expect(body.token).toHaveProperty("lastUsedAt");
+  });
+
   it("updates token last-used timestamps at most once per minute", async () => {
     const recent = new Date(Date.now() - 10_000);
     const { eq } = await import("drizzle-orm");
@@ -675,5 +711,223 @@ describe("interactions", () => {
     });
     setTimeout(() => controller.abort(), 10);
     expect((await waiting).status).toBe(499);
+  });
+
+  it("stores an interaction image and forwards it to the DTO and push payload", async () => {
+    sent.length = 0;
+    const created = await createInteraction({
+      title: "Release",
+      prompt: "Ship with art?",
+      kind: "approval",
+      imageUrl: "https://example.com/avatar.png",
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as { interaction: { id: string; imageUrl: string } };
+    expect(body.interaction.imageUrl).toBe("https://example.com/avatar.png");
+
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select({ imageUrl: schema.interaction.imageUrl })
+      .from(schema.interaction)
+      .where(eq(schema.interaction.id, body.interaction.id));
+    expect(row?.imageUrl).toBe("https://example.com/avatar.png");
+
+    expect(sent[0]).toMatchObject({
+      richContent: { image: "https://example.com/avatar.png" },
+      data: { avatarUrl: "https://example.com/avatar.png" },
+    });
+
+    const fetched = await agent(`/interactions/${body.interaction.id}`);
+    expect(await fetched.json()).toMatchObject({
+      interaction: { imageUrl: "https://example.com/avatar.png" },
+    });
+  });
+
+  it("rejects non-public interaction image URLs", async () => {
+    const response = await createInteraction({
+      title: "Release",
+      prompt: "Ship?",
+      kind: "approval",
+      imageUrl: "https://192.168.0.10/avatar.png",
+    });
+    expect(response.status).toBe(400);
+  });
+});
+
+describe("agent notifications", () => {
+  async function createNotification(body: Record<string, unknown>, key?: string, token = SECRET) {
+    return agent("/notifications", token, {
+      method: "POST",
+      headers: key ? { "Idempotency-Key": key } : undefined,
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("sends a one-shot notification with the webhook-style push payload", async () => {
+    sent.length = 0;
+    const response = await createNotification({
+      body: "Deploy finished",
+      title: "Deploy bot",
+      imageUrl: "https://example.com/bot.png",
+      url: "https://example.com/runs/1",
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      notification: Record<string, unknown>;
+      accepted: number;
+      message?: string;
+    };
+    expect(body).toMatchObject({
+      accepted: 2,
+      notification: {
+        title: "Deploy bot",
+        body: "Deploy finished",
+        imageUrl: "https://example.com/bot.png",
+        url: "https://example.com/runs/1",
+      },
+    });
+    expect(body.message).toBeUndefined();
+    expect(String(body.notification.id)).toMatch(/^anot_/);
+    expect(typeof body.notification.createdAt).toBe("string");
+    expect(sent).toHaveLength(2);
+    expect(sent[0]).toMatchObject({
+      title: "Deploy bot",
+      body: "Deploy finished",
+      richContent: { image: "https://example.com/bot.png" },
+      data: {
+        sourceName: "Deploy bot",
+        avatarUrl: "https://example.com/bot.png",
+        url: "https://example.com/runs/1",
+      },
+    });
+    expect(tracked).toHaveLength(1);
+  });
+
+  it("defaults the title to Hark and requires the notifications:send scope", async () => {
+    const defaulted = await createNotification({ body: "Ping" });
+    expect(await defaulted.json()).toMatchObject({ notification: { title: "Hark" } });
+
+    const scoped = await createNotification({ body: "Ping" }, undefined, READ_SECRET);
+    expect(scoped.status).toBe(403);
+    expect(await scoped.json()).toMatchObject({ error: "Insufficient scope" });
+  });
+
+  it("reserves device routing for Pro and caps free delivery at one device", async () => {
+    billingState.pro = false;
+    const targeted = await createNotification({ body: "Routed", deviceIds: ["dev_1"] });
+    expect(targeted.status).toBe(402);
+
+    sent.length = 0;
+    const capped = await createNotification({ body: "Capped" });
+    expect(await capped.json()).toMatchObject({ accepted: 1 });
+    expect(sent).toHaveLength(1);
+
+    billingState.pro = true;
+    sent.length = 0;
+    const routed = await createNotification({ body: "Routed", deviceIds: ["dev_2"] });
+    expect(await routed.json()).toMatchObject({ accepted: 1 });
+    expect(sent[0]).toMatchObject({ to: "ExponentPushToken[b]" });
+  });
+
+  it("returns 429 when the monthly notification allowance is exhausted", async () => {
+    billingState.allowance = false;
+    const response = await createNotification({ body: "Over quota" });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: "Monthly notification limit reached" });
+  });
+
+  it("threads notifications per sender name and enforces the shared per-minute budget", async () => {
+    await db.delete(schema.agentNotification);
+    await db.delete(schema.interaction);
+    await db.delete(schema.liveActivityOperation);
+
+    sent.length = 0;
+    const first = await createNotification({ body: "One", title: "Deploy bot" });
+    expect(first.status).toBe(201);
+    const conversationId = String(
+      (sent[0] as { data: { conversationId: string } }).data.conversationId,
+    );
+    expect(conversationId).toMatch(/^hark-agent-tok_/);
+
+    sent.length = 0;
+    const sameTitle = await createNotification({ body: "Two", title: "Deploy bot" });
+    expect(sameTitle.status).toBe(201);
+    expect((sent[0] as { data: { conversationId: string } }).data.conversationId).toBe(
+      conversationId,
+    );
+
+    sent.length = 0;
+    const otherTitle = await createNotification({ body: "Three", title: "Build bot" });
+    expect(otherTitle.status).toBe(201);
+    expect((sent[0] as { data: { conversationId: string } }).data.conversationId).not.toBe(
+      conversationId,
+    );
+
+    billingState.servicePerMinute = 3;
+    const limited = await createNotification({ body: "Four" });
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
+    expect(await limited.json()).toMatchObject({
+      error: "Requester rate limit exceeded",
+      retryAfterSeconds: 60,
+    });
+
+    billingState.servicePerMinute = 10_000;
+    billingState.accountPerMinute = 3;
+    const accountLimited = await createInteraction({
+      title: "Ship it",
+      prompt: "Ship it?",
+      kind: "approval",
+    });
+    expect(accountLimited.status).toBe(429);
+    expect(await accountLimited.json()).toMatchObject({ error: "Account rate limit exceeded" });
+  });
+
+  it("creates yes/no prompts with the matching choices and push kind", async () => {
+    sent.length = 0;
+    const response = await createInteraction({
+      title: "Hark",
+      prompt: "Keep the current color?",
+      kind: "yes_no",
+    });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { interaction: Record<string, unknown> };
+    expect(body.interaction).toMatchObject({ kind: "yes_no", choices: ["yes", "no"] });
+    expect(sent[0]).toMatchObject({ data: { interactionKind: "yes_no" } });
+  });
+
+  it("replays idempotent requests without a second push and rejects changed payloads", async () => {
+    sent.length = 0;
+    const payload = { body: "Deploy finished", title: "Deploy bot" };
+    const first = await createNotification(payload, "notify-1");
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { notification: { id: string } };
+    expect(sent).toHaveLength(2);
+
+    const replay = await createNotification(payload, "notify-1");
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({
+      idempotent: true,
+      accepted: 2,
+      notification: { id: firstBody.notification.id },
+    });
+    expect(sent).toHaveLength(2);
+
+    const conflict = await createNotification({ ...payload, body: "Different" }, "notify-1");
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({
+      error: "Idempotency-Key was already used with a different payload",
+    });
+  });
+
+  it("reports accepted 0 with a message and skips usage tracking when Expo rejects", async () => {
+    billingState.acceptPush = false;
+    const response = await createNotification({ body: "Rejected" });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      accepted: 0,
+      message: "No notifications were accepted by Expo.",
+    });
+    expect(tracked).toHaveLength(0);
   });
 });

@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import {
+  type AgentNotificationDto,
+  agentNotificationCreateSchema,
   type InteractionDto,
   type InteractionKind,
   type InteractionStatus,
@@ -11,6 +13,7 @@ import { and, count, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm
 import { Hono } from "hono";
 import { db } from "../db";
 import {
+  agentNotification,
   apiToken,
   device,
   event,
@@ -24,7 +27,7 @@ import { failureBucket, track } from "../lib/analytics";
 import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { deliverInteractionCallbacks } from "../lib/interaction-callbacks";
-import { buildInteractionPushMessages, sendPushMessages } from "../lib/push";
+import { buildInteractionPushMessages, buildPushMessages, sendPushMessages } from "../lib/push";
 import { hashInteractionResponseToken } from "../lib/token";
 import {
   type AgentEnv,
@@ -33,6 +36,7 @@ import {
   requireAuth,
   requireScopes,
 } from "../middleware";
+import { enforceAgentRateLimit } from "./activities";
 
 type InteractionRow = typeof interaction.$inferSelect;
 
@@ -49,6 +53,7 @@ function toDto(row: InteractionRow): InteractionDto {
     status: row.status as InteractionStatus,
     choices: row.choices,
     response: row.response,
+    imageUrl: row.imageUrl,
     url: row.url,
     actionDigest: row.actionDigest,
     accepted: row.acceptedCount,
@@ -93,13 +98,68 @@ function idempotencyKeyFrom(value: string | undefined): string | undefined | nul
   return normalized && normalized.length <= 200 ? normalized : null;
 }
 
+type NotificationRow = typeof agentNotification.$inferSelect;
+
+function toNotificationDto(row: NotificationRow): AgentNotificationDto {
+  return {
+    id: row.id,
+    title: row.title,
+    body: row.body,
+    imageUrl: row.imageUrl,
+    url: row.url,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+type NotificationInsertOutcome =
+  | { kind: "inserted"; row: NotificationRow }
+  | { kind: "replayed"; row: NotificationRow }
+  | { kind: "conflict" };
+
+/** Inserts and absorbs idempotency-key races the same way the interaction insert does. */
+async function insertAgentNotification(
+  tokenId: string,
+  requestHash: string,
+  values: typeof agentNotification.$inferInsert,
+): Promise<NotificationInsertOutcome> {
+  try {
+    const [inserted] = await db.insert(agentNotification).values(values).returning();
+    if (!inserted) throw new Error("Failed to create agent notification");
+    return { kind: "inserted", row: inserted };
+  } catch (error) {
+    if (values.idempotencyKey) {
+      const [existing] = await db
+        .select()
+        .from(agentNotification)
+        .where(
+          and(
+            eq(agentNotification.requesterTokenId, tokenId),
+            eq(agentNotification.idempotencyKey, values.idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (existing?.requestHash === requestHash) return { kind: "replayed", row: existing };
+      if (existing) return { kind: "conflict" };
+    }
+    throw error;
+  }
+}
+
 export const agentRoute = new Hono<AgentEnv>()
   .use("*", requireApiToken)
   .get("/auth/status", (c) => {
     const token = c.get("apiToken");
     return c.json({
       authenticated: true,
-      token: { id: token.id, name: token.name, prefix: token.prefix, scopes: token.scopes },
+      token: {
+        id: token.id,
+        name: token.name,
+        prefix: token.prefix,
+        scopes: token.scopes,
+        createdAt: token.createdAt.toISOString(),
+        lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+        expiresAt: token.expiresAt?.toISOString() ?? null,
+      },
     });
   })
   .post("/auth/revoke", async (c) => {
@@ -189,6 +249,196 @@ export const agentRoute = new Hono<AgentEnv>()
     return c.json({
       events: rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
     });
+  })
+  .post("/notifications", requireScopes("notifications:send"), async (c) => {
+    const token = c.get("apiToken");
+    const parsed = agentNotificationCreateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid notification", issues: parsed.error.issues }, 400);
+    }
+    const idempotencyKey = idempotencyKeyFrom(c.req.header("Idempotency-Key"));
+    if (idempotencyKey === null) {
+      return c.json({ error: "Idempotency-Key must contain between 1 and 200 characters" }, 400);
+    }
+    const requestHash = digest(parsed.data);
+    if (idempotencyKey) {
+      const [existing] = await db
+        .select()
+        .from(agentNotification)
+        .where(
+          and(
+            eq(agentNotification.requesterTokenId, token.id),
+            eq(agentNotification.idempotencyKey, idempotencyKey),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        if (existing.requestHash !== requestHash) {
+          return c.json(
+            { error: "Idempotency-Key was already used with a different payload" },
+            409,
+          );
+        }
+        return c.json({
+          notification: toNotificationDto(existing),
+          accepted: existing.acceptedCount,
+          idempotent: true,
+        });
+      }
+    }
+
+    const [owner] = await db
+      .select()
+      .from(userTable)
+      .where(eq(userTable.id, token.userId))
+      .limit(1);
+    if (!owner) return c.json({ error: "Account not found" }, 404);
+    const billing = await getBilling(owner, true);
+    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
+      return c.json({ error: "Device routing requires Hark Pro" }, 402);
+    }
+
+    let selectedDevices: (typeof device.$inferSelect)[];
+    if (parsed.data.deviceIds) {
+      const owned = await db
+        .select()
+        .from(device)
+        .where(and(eq(device.userId, token.userId), inArray(device.id, parsed.data.deviceIds)));
+      if (owned.length !== parsed.data.deviceIds.length) {
+        return c.json({ error: "Invalid device selection" }, 400);
+      }
+      selectedDevices = owned.filter((row) => row.active && row.platform === "ios");
+    } else {
+      selectedDevices = await db
+        .select()
+        .from(device)
+        .where(
+          and(eq(device.userId, token.userId), eq(device.active, true), eq(device.platform, "ios")),
+        )
+        .orderBy(desc(device.lastSeenAt));
+      if (billing.limits.devices !== null) {
+        selectedDevices = selectedDevices.slice(0, billing.limits.devices);
+      }
+    }
+
+    const limited = await enforceAgentRateLimit(token, owner);
+    if (limited) {
+      c.header("Retry-After", "60");
+      return c.json(limited, 429);
+    }
+    if (!(await checkNotificationAllowance(token.userId))) {
+      return c.json({ error: "Monthly notification limit reached" }, 429);
+    }
+
+    const notificationId = newId("anot");
+    const values: typeof agentNotification.$inferInsert = {
+      id: notificationId,
+      userId: token.userId,
+      requesterTokenId: token.id,
+      title: parsed.data.title,
+      body: parsed.data.body,
+      imageUrl: parsed.data.imageUrl ?? null,
+      url: parsed.data.url ?? null,
+      acceptedCount: 0,
+      idempotencyKey: idempotencyKey ?? null,
+      requestHash: idempotencyKey ? requestHash : null,
+      createdAt: new Date(),
+    };
+
+    // Insert before sending so a raced duplicate replays the stored row
+    // instead of double-pushing; accepted_count is settled after the send.
+    const outcome = await insertAgentNotification(token.id, requestHash, values);
+    if (outcome.kind === "replayed") {
+      return c.json({
+        notification: toNotificationDto(outcome.row),
+        accepted: outcome.row.acceptedCount,
+        idempotent: true,
+      });
+    }
+    if (outcome.kind === "conflict") {
+      return c.json({ error: "Idempotency-Key was already used with a different payload" }, 409);
+    }
+
+    if (selectedDevices.length === 0) {
+      track({
+        name: "agent_notification_created",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "no_devices",
+      });
+      return c.json(
+        {
+          notification: toNotificationDto(outcome.row),
+          accepted: 0,
+          message: "No active iOS devices are registered for this account.",
+        },
+        201,
+      );
+    }
+
+    const messages = buildPushMessages({
+      to: selectedDevices.map((selected) => selected.expoPushToken),
+      eventId: notificationId,
+      serviceId: token.id,
+      // Thread per sender name: each distinct --title from an agent
+      // connection behaves like its own source, matching per-service
+      // threading on the webhook surface.
+      conversationKey: `agent-${token.id}-${createHash("sha256")
+        .update(parsed.data.title.trim().toLowerCase())
+        .digest("hex")
+        .slice(0, 10)}`,
+      resolved: {
+        title: parsed.data.title,
+        body: parsed.data.body,
+        imageUrl: parsed.data.imageUrl,
+        url: parsed.data.url,
+      },
+    });
+    const result = await sendPushMessages(messages);
+    if (result.staleTokens.length > 0) {
+      await db
+        .update(device)
+        .set({ active: false })
+        .where(inArray(device.expoPushToken, result.staleTokens));
+      track({
+        name: "device_deactivated_stale",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "agent_notification",
+        value: result.staleTokens.length,
+      });
+    }
+    track({
+      name: "agent_notification_created",
+      userId: token.userId,
+      plan: billing.plan,
+      outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
+      value: result.accepted,
+      metadata: { targets: messages.length },
+    });
+    if (result.accepted > 0) {
+      track({
+        name: "notification_sent",
+        userId: token.userId,
+        plan: billing.plan,
+        outcome: "agent_notification",
+        value: result.accepted,
+      });
+      await trackNotification(token.userId, notificationId);
+    }
+    await db
+      .update(agentNotification)
+      .set({ acceptedCount: result.accepted })
+      .where(eq(agentNotification.id, notificationId));
+    return c.json(
+      {
+        notification: toNotificationDto({ ...outcome.row, acceptedCount: result.accepted }),
+        accepted: result.accepted,
+        // Provider errors can embed push tokens, so the reason is deliberately coarse.
+        ...(result.accepted === 0 ? { message: "No notifications were accepted by Expo." } : {}),
+      },
+      201,
+    );
   })
   .post("/interactions", requireScopes("interactions:create", "notifications:send"), async (c) => {
     const token = c.get("apiToken");
@@ -314,13 +564,23 @@ export const agentRoute = new Hono<AgentEnv>()
       c.header("Retry-After", "60");
       return c.json({ error: "Account rate limit exceeded", retryAfterSeconds: 60 }, 429);
     }
+    const limited = await enforceAgentRateLimit(token, owner);
+    if (limited) {
+      c.header("Retry-After", "60");
+      return c.json(limited, 429);
+    }
     if (!(await checkNotificationAllowance(token.userId))) {
       return c.json({ error: "Monthly notification limit reached" }, 429);
     }
 
     const now = new Date();
     const interactionId = newId("int");
-    const choices = parsed.data.kind === "approval" ? ["approve", "deny"] : ["reply"];
+    const choices =
+      parsed.data.kind === "approval"
+        ? ["approve", "deny"]
+        : parsed.data.kind === "yes_no"
+          ? ["yes", "no"]
+          : ["reply"];
     const actionDigest = digest({
       interactionId,
       title: parsed.data.title,
@@ -338,6 +598,7 @@ export const agentRoute = new Hono<AgentEnv>()
       kind: parsed.data.kind,
       status: "pending",
       choices,
+      imageUrl: parsed.data.imageUrl ?? null,
       url: parsed.data.url ?? null,
       actionDigest,
       idempotencyKey: idempotencyKey ?? null,
@@ -402,6 +663,7 @@ export const agentRoute = new Hono<AgentEnv>()
       title: parsed.data.title,
       prompt: parsed.data.prompt,
       actionDigest,
+      imageUrl: parsed.data.imageUrl,
       url: parsed.data.url,
     });
     const result = await sendPushMessages(messages);

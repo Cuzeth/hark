@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  agentNotificationCreateSchema,
   deviceRegisterSchema,
   interactionCreateSchema,
   interactionResponseSchema,
@@ -127,6 +128,42 @@ describe("webhookRequestSchema", () => {
   });
 });
 
+describe("agentNotificationCreateSchema", () => {
+  it("defaults the title and normalizes device targets", () => {
+    const result = agentNotificationCreateSchema.safeParse({
+      body: "Deploy finished",
+      deviceIds: ["dev_b", "dev_a", "dev_b"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.title).toBe("Hark");
+      expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
+    }
+  });
+
+  it("only accepts public HTTPS image URLs and web tap URLs", () => {
+    expect(agentNotificationCreateSchema.safeParse({ body: "" }).success).toBe(false);
+    expect(
+      agentNotificationCreateSchema.safeParse({ body: "x", imageUrl: "http://example.com/a.png" })
+        .success,
+    ).toBe(false);
+    expect(
+      agentNotificationCreateSchema.safeParse({ body: "x", imageUrl: "https://localhost/a.png" })
+        .success,
+    ).toBe(false);
+    expect(
+      agentNotificationCreateSchema.safeParse({ body: "x", url: "javascript:alert(1)" }).success,
+    ).toBe(false);
+    expect(
+      agentNotificationCreateSchema.safeParse({
+        body: "x",
+        imageUrl: "https://example.com/a.png",
+        url: "https://example.com/run",
+      }).success,
+    ).toBe(true);
+  });
+});
+
 describe("interaction schemas", () => {
   it("normalizes targets and supplies a conservative expiry", () => {
     const result = interactionCreateSchema.safeParse({
@@ -140,6 +177,25 @@ describe("interaction schemas", () => {
       expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
       expect(result.data.expiresInSeconds).toBe(900);
     }
+  });
+
+  it("accepts only public HTTPS interaction images", () => {
+    expect(
+      interactionCreateSchema.safeParse({
+        title: "Release",
+        prompt: "Deploy?",
+        kind: "approval",
+        imageUrl: "https://example.com/avatar.png",
+      }).success,
+    ).toBe(true);
+    expect(
+      interactionCreateSchema.safeParse({
+        title: "Release",
+        prompt: "Deploy?",
+        kind: "approval",
+        imageUrl: "https://10.0.0.2/avatar.png",
+      }).success,
+    ).toBe(false);
   });
 
   it("requires text only for reply actions", () => {

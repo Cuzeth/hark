@@ -15,6 +15,7 @@ import { and, count, desc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
 import {
+  agentNotification,
   device,
   event,
   interaction,
@@ -119,7 +120,13 @@ async function ownedActivity(
   return row ? expireLiveActivity(row) : undefined;
 }
 
-async function enforceActivityRateLimit(
+/**
+ * Shared per-minute budget for the whole agent surface: Live Activity
+ * operations, interactions, and one-shot agent notifications count against
+ * the same per-token and per-account windows, mirroring how webhook events
+ * share the service and account counters.
+ */
+export async function enforceAgentRateLimit(
   token: AgentEnv["Variables"]["apiToken"],
   owner: AuthedEnv["Variables"]["user"],
 ): Promise<{ error: string; retryAfterSeconds: 60 } | null> {
@@ -128,8 +135,10 @@ async function enforceActivityRateLimit(
   const [
     [tokenActivity],
     [tokenInteractions],
+    [tokenNotifications],
     [accountActivity],
     [accountInteractions],
+    [accountNotifications],
     [webhooks],
   ] = await Promise.all([
     db
@@ -147,6 +156,15 @@ async function enforceActivityRateLimit(
       .where(and(eq(interaction.requesterTokenId, token.id), gte(interaction.createdAt, since))),
     db
       .select({ value: count() })
+      .from(agentNotification)
+      .where(
+        and(
+          eq(agentNotification.requesterTokenId, token.id),
+          gte(agentNotification.createdAt, since),
+        ),
+      ),
+    db
+      .select({ value: count() })
       .from(liveActivityOperation)
       .innerJoin(liveActivity, eq(liveActivity.id, liveActivityOperation.activityId))
       .where(
@@ -158,18 +176,29 @@ async function enforceActivityRateLimit(
       .where(and(eq(interaction.userId, token.userId), gte(interaction.createdAt, since))),
     db
       .select({ value: count() })
+      .from(agentNotification)
+      .where(
+        and(eq(agentNotification.userId, token.userId), gte(agentNotification.createdAt, since)),
+      ),
+    db
+      .select({ value: count() })
       .from(event)
       .innerJoin(service, eq(event.serviceId, service.id))
       .where(and(eq(service.userId, token.userId), gte(event.createdAt, since))),
   ]);
   if (
-    (tokenActivity?.value ?? 0) + (tokenInteractions?.value ?? 0) >=
+    (tokenActivity?.value ?? 0) +
+      (tokenInteractions?.value ?? 0) +
+      (tokenNotifications?.value ?? 0) >=
     billing.limits.servicePerMinute
   ) {
     return { error: "Requester rate limit exceeded", retryAfterSeconds: 60 };
   }
   if (
-    (accountActivity?.value ?? 0) + (accountInteractions?.value ?? 0) + (webhooks?.value ?? 0) >=
+    (accountActivity?.value ?? 0) +
+      (accountInteractions?.value ?? 0) +
+      (accountNotifications?.value ?? 0) +
+      (webhooks?.value ?? 0) >=
     billing.limits.accountPerMinute
   ) {
     return { error: "Account rate limit exceeded", retryAfterSeconds: 60 };
@@ -635,7 +664,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     if (parsed.data.deviceIds && !billing.features.deviceRouting) {
       return c.json({ error: "Device routing requires Hark Pro" }, 402);
     }
-    const limited = await enforceActivityRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token, owner);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
@@ -904,7 +933,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const limited = await enforceActivityRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token, owner);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
@@ -1071,7 +1100,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const limited = await enforceActivityRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token, owner);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);

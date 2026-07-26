@@ -27,6 +27,7 @@ export const ANALYTICS_EVENT_NAMES = [
   "user_active",
   "notification_sent",
   "onboarding_welcome_sent",
+  "agent_notification_created",
   "interaction_created",
   "interaction_responded",
   "live_activity_started",

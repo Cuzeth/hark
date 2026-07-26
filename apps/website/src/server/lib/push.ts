@@ -41,6 +41,8 @@ export interface BuildPushInput {
   to: string[];
   eventId: string;
   serviceId: string;
+  /** Overrides the thread grouping; defaults to the service so each service is one conversation. */
+  conversationKey?: string;
   resolved: ResolvedNotification;
 }
 
@@ -86,7 +88,7 @@ export function buildWelcomePushMessages(to: string): ExpoPushMessage[] {
 }
 
 export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
-  const { to, eventId, serviceId, resolved } = input;
+  const { to, eventId, serviceId, conversationKey, resolved } = input;
   const data: PushData = {
     v: PUSH_SCHEMA_VERSION,
     eventId,
@@ -95,7 +97,7 @@ export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
     sourceName: resolved.title,
     ...(resolved.imageUrl ? { avatarUrl: resolved.imageUrl } : {}),
     ...(resolved.url ? { url: resolved.url } : {}),
-    conversationId: `hark-${serviceId}`,
+    conversationId: `hark-${conversationKey ?? serviceId}`,
   };
 
   return to.map((token) => ({

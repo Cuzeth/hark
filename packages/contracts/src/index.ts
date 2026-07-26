@@ -504,6 +504,7 @@ export const interactionCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),
   prompt: z.string().trim().min(1, "Prompt is required").max(2000),
   kind: interactionKindSchema,
+  imageUrl: publicHttpsUrlSchema.optional(),
   url: webUrlSchema.optional(),
   deviceIds: z
     .array(z.string().trim().min(1).max(100))
@@ -560,6 +561,7 @@ export interface InteractionDto {
   status: InteractionStatus;
   choices: string[];
   response: string | null;
+  imageUrl: string | null;
   url: string | null;
   actionDigest: string;
   accepted: number;
@@ -572,6 +574,41 @@ export interface InteractionDto {
 
 export interface InteractionCreateResponse {
   interaction: InteractionDto;
+  /** Number of notification requests accepted by Expo, not proof of device delivery. */
+  accepted: number;
+  idempotent?: boolean;
+  message?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Agent notifications (one-shot pushes sent with an API token)
+// ---------------------------------------------------------------------------
+
+export const agentNotificationCreateSchema = z.object({
+  body: z.string().trim().min(1, "body is required").max(2000),
+  title: z.string().trim().min(1).max(80).default("Hark"),
+  imageUrl: publicHttpsUrlSchema.optional(),
+  url: webUrlSchema.optional(),
+  deviceIds: z
+    .array(z.string().trim().min(1).max(100))
+    .min(1)
+    .max(50)
+    .transform((ids) => [...new Set(ids)].sort())
+    .optional(),
+});
+export type AgentNotificationCreateInput = z.infer<typeof agentNotificationCreateSchema>;
+
+export interface AgentNotificationDto {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl: string | null;
+  url: string | null;
+  createdAt: string;
+}
+
+export interface AgentNotificationCreateResponse {
+  notification: AgentNotificationDto;
   /** Number of notification requests accepted by Expo, not proof of device delivery. */
   accepted: number;
   idempotent?: boolean;
