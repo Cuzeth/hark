@@ -140,4 +140,16 @@ jobs:
           REMOTE
 
       - name: Verify public deployment
-        run: curl --fail --show-error --silent --retry 12 --retry-all-errors https://hark.ryan.ceo/api/health
+        run: |
+          curl --fail --show-error --silent --retry 12 --retry-all-errors \
+            https://hark.ryan.ceo/api/health >/dev/null
+          curl --fail --show-error --silent https://hark.ryan.ceo/ \
+            | grep --fixed-strings 'https://hark.ryan.ceo/ogimage.png' >/dev/null
+          curl --fail --show-error --silent https://hark.ryan.ceo/pricing \
+            | grep --fixed-strings '100,000 notifications per month' >/dev/null
+          curl --fail --show-error --silent https://hark.ryan.ceo/robots.txt \
+            | grep --fixed-strings 'Sitemap: https://hark.ryan.ceo/sitemap.xml' >/dev/null
+          curl --fail --show-error --silent https://hark.ryan.ceo/sitemap.xml \
+            | grep --fixed-strings '<urlset' >/dev/null
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
+            https://hark.ryan.ceo/seo-smoke-test-missing)" = "404"

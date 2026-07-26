@@ -126,10 +126,13 @@ describe("docsMarkdown", () => {
 });
 
 describe("llmsTxt", () => {
-  it("describes Hark and links both docs views", () => {
+  it("describes Hark and links its canonical machine-readable resources", () => {
     const text = llmsTxt();
     expect(text.startsWith("# Hark")).toBe(true);
     expect(text).toContain("https://hark.ryan.ceo/docs");
     expect(text).toContain("https://hark.ryan.ceo/docs.md");
+    expect(text).toContain("https://hark.ryan.ceo/pricing");
+    expect(text).toContain("https://skills.sh/r44vc0rp/hark/hark");
+    expect(text).toContain("https://www.npmjs.com/package/harkctl");
   });
 });

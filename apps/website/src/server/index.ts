@@ -15,17 +15,22 @@ runMigrations();
 pruneAnalytics();
 startInteractionCallbackWorker();
 
-// In production the same process serves the built SPA with a history fallback.
+// In production the same process serves prerendered public pages and explicit
+// noindex shells for private application routes. Unknown paths remain real 404s
+// instead of becoming indexable soft-404 copies of the home page.
 const clientDir = resolve(process.cwd(), "dist/client");
 if (existsSync(clientDir)) {
-  // `/docs` is prerendered at build time so its content is in the initial HTML
-  // response; the client bundle hydrates it. Registered explicitly because the
-  // history fallback below would otherwise hand back the empty shell.
-  if (existsSync(resolve(clientDir, "docs/index.html"))) {
-    app.get("/docs", serveStatic({ path: "./dist/client/docs/index.html" }));
+  const documentRoutes = ["/", "/docs", "/pricing", "/privacy", "/terms", "/dashboard"];
+  for (const path of documentRoutes) {
+    const file = path === "/" ? "index.html" : `${path.slice(1)}/index.html`;
+    if (existsSync(resolve(clientDir, file))) {
+      app.get(path, serveStatic({ path: `./dist/client/${file}` }));
+    }
+  }
+  if (existsSync(resolve(clientDir, "cli/authorize/index.html"))) {
+    app.get("/cli/authorize", serveStatic({ path: "./dist/client/cli/authorize/index.html" }));
   }
   app.use("*", serveStatic({ root: "./dist/client" }));
-  app.get("*", serveStatic({ path: "./dist/client/index.html" }));
 }
 
 const server = serve({ fetch: app.fetch, port: env.PORT }, (info) => {

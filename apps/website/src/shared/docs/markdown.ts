@@ -114,6 +114,17 @@ export function llmsTxt(): string {
 - [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API.
 - [Documentation as markdown](${DOCS_MARKDOWN_URL}): the same content as plain markdown.
 
+## Product
+
+- [Home](https://hark.ryan.ceo/): product overview and webhook example.
+- [Pricing](https://hark.ryan.ceo/pricing): current Free and Pro capabilities.
+- [Source](https://github.com/R44VC0RP/hark): Hark website, iOS app, CLI, and agent skill.
+
+## Agent tools
+
+- [Hark agent skill](https://skills.sh/r44vc0rp/hark/hark): install Hark for compatible coding agents.
+- [harkctl](https://www.npmjs.com/package/harkctl): CLI for notifications, approvals, replies, Live Activities, and webhook services.
+
 ## Notes
 
 - Every request is authenticated by the webhook token in the URL; treat it as a credential.

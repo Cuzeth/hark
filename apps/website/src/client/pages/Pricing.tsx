@@ -1,6 +1,7 @@
 import type { PricingPlanDto, PricingPlansDto } from "@hark/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
+import { staticPricingPlans } from "../../shared/pricing";
 import { AppleButton } from "../components/AppleButton";
 import { GoogleButton } from "../components/GoogleButton";
 import { api } from "../lib/api";
@@ -13,7 +14,7 @@ const PRO_EXTRAS = ["Interactive responses", "Live Activities", "Response callba
 
 export function Pricing() {
   const { data: session, isPending } = useSession();
-  const [data, setData] = useState<PricingPlansDto | null>(null);
+  const [data, setData] = useState<PricingPlansDto>(staticPricingPlans);
   const [failed, setFailed] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const [checkoutPending, setCheckoutPending] = useState(false);
@@ -86,38 +87,33 @@ export function Pricing() {
           </p>
         ) : (
           <div className="mt-12 grid gap-6 sm:grid-cols-2">
-            {(data?.plans ?? [null, null]).map((plan, index) =>
-              plan ? (
-                <PlanCard key={plan.id} plan={plan}>
-                  {plan.priceMonthly === 0 ? (
-                    session ? (
-                      <Link
-                        to="/dashboard"
-                        className="border-line text-ink hover:bg-surface-hover inline-flex rounded-full border px-5 py-2.5 text-sm font-medium transition"
-                      >
-                        Open dashboard
-                      </Link>
-                    ) : (
-                      <SignInButtons disabled={isPending} />
-                    )
-                  ) : session ? (
-                    <button
-                      type="button"
-                      onClick={() => void upgrade()}
-                      disabled={checkoutPending}
-                      className="bg-accent hover:bg-accent-hover text-on-accent inline-flex rounded-full px-5 py-2.5 text-sm font-medium transition disabled:opacity-50"
+            {data.plans.map((plan) => (
+              <PlanCard key={plan.id} plan={plan}>
+                {plan.priceMonthly === 0 ? (
+                  session ? (
+                    <Link
+                      to="/dashboard"
+                      className="border-line text-ink hover:bg-surface-hover inline-flex rounded-full border px-5 py-2.5 text-sm font-medium transition"
                     >
-                      {checkoutPending ? "Opening checkout…" : "Upgrade to Pro"}
-                    </button>
+                      Open dashboard
+                    </Link>
                   ) : (
                     <SignInButtons disabled={isPending} />
-                  )}
-                </PlanCard>
-              ) : (
-                // biome-ignore lint/suspicious/noArrayIndexKey: static two-slot skeleton
-                <div key={index} className="border-line h-80 animate-pulse rounded-2xl border" />
-              ),
-            )}
+                  )
+                ) : session ? (
+                  <button
+                    type="button"
+                    onClick={() => void upgrade()}
+                    disabled={checkoutPending}
+                    className="bg-accent hover:bg-accent-hover text-on-accent inline-flex rounded-full px-5 py-2.5 text-sm font-medium transition disabled:opacity-50"
+                  >
+                    {checkoutPending ? "Opening checkout…" : "Upgrade to Pro"}
+                  </button>
+                ) : (
+                  <SignInButtons disabled={isPending} />
+                )}
+              </PlanCard>
+            ))}
           </div>
         )}
 

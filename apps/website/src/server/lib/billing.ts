@@ -1,11 +1,15 @@
 import type { BillingDto, PricingPlanDto, PricingPlansDto } from "@hark/contracts";
 import { Autumn } from "autumn-js";
+import {
+  FREE_NOTIFICATIONS,
+  PRO_NOTIFICATIONS,
+  PRO_PRICE_MONTHLY,
+  staticPricingPlans,
+} from "../../shared/pricing";
 import { env } from "../env";
 import type { AuthedUser } from "../middleware";
 import { track } from "./analytics";
 
-const FREE_NOTIFICATIONS = 10_000;
-const PRO_NOTIFICATIONS = 100_000;
 const CACHE_TTL_MS = 60_000;
 
 const autumn = env.AUTUMN_API_KEY
@@ -27,7 +31,7 @@ function freeBilling(): BillingDto {
   return {
     configured: autumn !== null,
     plan: "free",
-    priceMonthly: 8,
+    priceMonthly: PRO_PRICE_MONTHLY,
     features: { deviceRouting: false },
     limits: {
       devices: 1,
@@ -53,7 +57,7 @@ function toBilling(
   return {
     configured: true,
     plan: isPro ? "pro" : "free",
-    priceMonthly: 8,
+    priceMonthly: PRO_PRICE_MONTHLY,
     features: { deviceRouting: Boolean(customer.flags.device_routing) },
     limits: {
       devices: isPro ? null : 1,
@@ -93,31 +97,12 @@ function rateLimits(pro: boolean): Pick<PricingPlanDto, "servicePerMinute" | "ac
 
 /** Mirrors autumn.config.ts, used when Autumn is unreachable or not configured. */
 function staticPlans(): PricingPlansDto {
-  return {
-    source: "static",
-    plans: [
-      {
-        id: "free",
-        name: "Free",
-        description: "Everything needed for personal webhook notifications.",
-        priceMonthly: 0,
-        notificationsPerMonth: FREE_NOTIFICATIONS,
-        devices: 1,
-        deviceRouting: false,
-        ...rateLimits(false),
-      },
-      {
-        id: "pro_monthly",
-        name: "Pro",
-        description: "Multiple iPhones, targeted routing, and higher limits.",
-        priceMonthly: 8,
-        notificationsPerMonth: PRO_NOTIFICATIONS,
-        devices: null,
-        deviceRouting: true,
-        ...rateLimits(true),
-      },
-    ],
-  };
+  return staticPricingPlans({
+    freeServicePerMinute: env.SERVICE_RATE_LIMIT_PER_MINUTE,
+    freeAccountPerMinute: env.ACCOUNT_RATE_LIMIT_PER_MINUTE,
+    proServicePerMinute: env.PRO_SERVICE_RATE_LIMIT_PER_MINUTE,
+    proAccountPerMinute: env.PRO_ACCOUNT_RATE_LIMIT_PER_MINUTE,
+  });
 }
 
 /**

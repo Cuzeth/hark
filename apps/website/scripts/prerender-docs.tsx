@@ -1,59 +1,129 @@
-/**
- * Prerenders `/docs` into static HTML after `vite build`.
- *
- * `/docs` is the one route agents, crawlers, and `curl` are expected to read, so
- * its content has to exist in the initial response. Rendering the real React
- * tree with `react-dom/server` — rather than hand-writing a second HTML
- * template — means the static page and the interactive page are the same
- * components over the same content model, and cannot drift.
- *
- * Output: `dist/client/docs/index.html`, served by `src/server/index.ts` for
- * `GET /docs`. The client bundle still loads and hydrates it, so the sidebar
- * scrollspy and copy buttons work exactly as before.
- */
+/** Prerenders public pages and writes noindex shells for private application routes. */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router";
-import { Docs } from "../src/client/pages/Docs";
-import { DOCS_MARKDOWN_URL, DOCS_TITLE } from "../src/shared/docs/content";
+import { App } from "../src/client/App";
+import {
+  absoluteUrl,
+  DEMO_VIDEO_URL,
+  PAGE_SEO,
+  PRIVATE_SEO_PAGES,
+  PUBLIC_SEO_PAGES,
+  type SeoPage,
+  SOCIAL_IMAGE_URL,
+  structuredDataForPage,
+} from "../src/shared/seo";
 
 const clientDir = resolve(import.meta.dirname, "../dist/client");
 const shellPath = resolve(clientDir, "index.html");
-const outputDir = resolve(clientDir, "docs");
-
-const title = `Hark docs — ${DOCS_TITLE}`;
-const description =
-  "Hark API documentation: send an HTTP POST to a webhook URL and get a source-branded iPhone notification, approval prompt, or Live Activity.";
-
-const markup = renderToString(
-  <StrictMode>
-    <StaticRouter location="/docs">
-      <Docs />
-    </StaticRouter>
-  </StrictMode>,
-);
-
 const shell = await readFile(shellPath, "utf8");
 if (!shell.includes('<div id="root"></div>')) {
-  throw new Error("Cannot prerender /docs: dist/client/index.html has no empty #root div");
+  throw new Error("Cannot prerender public pages: dist/client/index.html has no empty #root div");
+}
+if (!/<!-- seo:start -->[\s\S]*?<!-- seo:end -->/.test(shell)) {
+  throw new Error("Cannot write page metadata: dist/client/index.html has no SEO marker block");
 }
 
-const html = shell
-  .replace('<div id="root"></div>', `<div id="root">${markup}</div>`)
-  .replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`)
-  .replace(
-    /<meta\s+name="description"[\s\S]*?\/>/,
-    `<meta name="description" content="${description}" />`,
-  )
-  // Points agents at the markdown twin of this page.
-  .replace(
-    "</head>",
-    `  <link rel="alternate" type="text/markdown" href="${DOCS_MARKDOWN_URL}" />\n  </head>`,
-  );
+function escapeAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
 
-await mkdir(outputDir, { recursive: true });
-await writeFile(resolve(outputDir, "index.html"), html);
+function seoHead(page: SeoPage): string {
+  const seo = PAGE_SEO[page];
+  const canonical = absoluteUrl(seo.path);
+  const robots = seo.index
+    ? "index, follow, max-image-preview:large, max-video-preview:-1"
+    : "noindex, nofollow";
+  const title = escapeAttribute(seo.title);
+  const description = escapeAttribute(seo.description);
+  const structuredData = structuredDataForPage(page);
+  const lines = [
+    "<!-- seo:start -->",
+    `    <title data-seo="true">${title}</title>`,
+    `    <meta data-seo="true" name="description" content="${description}" />`,
+    `    <meta data-seo="true" name="robots" content="${robots}" />`,
+    '    <meta data-seo="true" name="application-name" content="Hark" />',
+    `    <link data-seo="true" rel="canonical" href="${canonical}" />`,
+    '    <meta data-seo="true" property="og:type" content="website" />',
+    '    <meta data-seo="true" property="og:site_name" content="Hark" />',
+    '    <meta data-seo="true" property="og:locale" content="en_US" />',
+    `    <meta data-seo="true" property="og:title" content="${title}" />`,
+    `    <meta data-seo="true" property="og:description" content="${description}" />`,
+    `    <meta data-seo="true" property="og:url" content="${canonical}" />`,
+    `    <meta data-seo="true" property="og:image" content="${SOCIAL_IMAGE_URL}" />`,
+    '    <meta data-seo="true" property="og:image:type" content="image/png" />',
+    '    <meta data-seo="true" property="og:image:width" content="1920" />',
+    '    <meta data-seo="true" property="og:image:height" content="1080" />',
+    '    <meta data-seo="true" property="og:image:alt" content="Hark iOS alerts, notifications, and Live Activities" />',
+    '    <meta data-seo="true" name="twitter:card" content="summary_large_image" />',
+    `    <meta data-seo="true" name="twitter:title" content="${title}" />`,
+    `    <meta data-seo="true" name="twitter:description" content="${description}" />`,
+    `    <meta data-seo="true" name="twitter:image" content="${SOCIAL_IMAGE_URL}" />`,
+    '    <meta data-seo="true" name="twitter:image:alt" content="Hark iOS alerts, notifications, and Live Activities" />',
+  ];
 
-console.log(`prerendered /docs → dist/client/docs/index.html (${html.length} bytes)`);
+  if (page === "home") {
+    lines.push(
+      `    <meta data-seo="true" property="og:video" content="${DEMO_VIDEO_URL}" />`,
+      `    <meta data-seo="true" property="og:video:secure_url" content="${DEMO_VIDEO_URL}" />`,
+      '    <meta data-seo="true" property="og:video:type" content="video/mp4" />',
+      '    <meta data-seo="true" property="og:video:width" content="1280" />',
+      '    <meta data-seo="true" property="og:video:height" content="720" />',
+    );
+  }
+
+  if (seo.markdownAlternate) {
+    lines.push(
+      `    <link data-seo="true" rel="alternate" type="text/markdown" href="${seo.markdownAlternate}" />`,
+    );
+  }
+
+  if (structuredData) {
+    const json = JSON.stringify(structuredData).replaceAll("<", "\\u003c");
+    lines.push(`    <script data-seo="true" type="application/ld+json">${json}</script>`);
+  }
+  lines.push("    <!-- seo:end -->");
+  return lines.join("\n");
+}
+
+function renderPage(page: SeoPage, prerender: boolean): string {
+  const seo = PAGE_SEO[page];
+  const markup = prerender
+    ? renderToString(
+        <StrictMode>
+          <StaticRouter location={seo.path}>
+            <App />
+          </StaticRouter>
+        </StrictMode>,
+      )
+    : "";
+
+  return shell
+    .replace('<div id="root"></div>', `<div id="root">${markup}</div>`)
+    .replace(/<!-- seo:start -->[\s\S]*?<!-- seo:end -->/, seoHead(page));
+}
+
+for (const page of PUBLIC_SEO_PAGES) {
+  const seo = PAGE_SEO[page];
+  const outputPath =
+    seo.path === "/" ? shellPath : resolve(clientDir, seo.path.slice(1), "index.html");
+  await mkdir(resolve(outputPath, ".."), { recursive: true });
+  const html = renderPage(page, true);
+  await writeFile(outputPath, html);
+  console.log(`prerendered ${seo.path} → ${outputPath} (${html.length} bytes)`);
+}
+
+for (const page of PRIVATE_SEO_PAGES) {
+  const seo = PAGE_SEO[page];
+  const outputPath = resolve(clientDir, seo.path.slice(1), "index.html");
+  await mkdir(resolve(outputPath, ".."), { recursive: true });
+  const html = renderPage(page, false);
+  await writeFile(outputPath, html);
+  console.log(`wrote noindex shell ${seo.path} → ${outputPath}`);
+}
