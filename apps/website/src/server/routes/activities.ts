@@ -99,6 +99,9 @@ async function ownedActivity(
   tokenId: string,
   identifier: string,
 ): Promise<ActivityRow | undefined> {
+  // Keys are reusable once an activity ends, so an identifier can match one
+  // live activity plus any number of terminal ones. Prefer the live match,
+  // then the most recently created terminal one.
   const [row] = await db
     .select()
     .from(liveActivity)
@@ -107,6 +110,10 @@ async function ownedActivity(
         eq(liveActivity.requesterTokenId, tokenId),
         or(eq(liveActivity.id, identifier), eq(liveActivity.key, identifier)),
       ),
+    )
+    .orderBy(
+      desc(inArray(liveActivity.status, ["starting", "active", "partial"])),
+      desc(liveActivity.createdAt),
     )
     .limit(1);
   return row ? expireLiveActivity(row) : undefined;
@@ -233,6 +240,67 @@ async function recordDelivery(
   });
 }
 
+async function sendDeliveryEvent(
+  row: ActivityRow,
+  delivery: DeliveryRow,
+  eventName: LiveActivityApnsEvent,
+): Promise<Awaited<ReturnType<typeof sendLiveActivityPush>>> {
+  const props = liveActivityPropsSchema.parse(row.props);
+  let encryptedToken: string | null;
+  if (eventName === "start") {
+    const [target] = await db
+      .select({ token: device.liveActivityPushToStartTokenCiphertext })
+      .from(device)
+      .where(eq(device.id, delivery.deviceId))
+      .limit(1);
+    encryptedToken = target?.token ?? null;
+  } else {
+    encryptedToken = delivery.updateTokenCiphertext;
+  }
+  if (!encryptedToken) {
+    return {
+      status: 0,
+      apnsId: null,
+      reason: eventName === "start" ? "MissingPushToStartToken" : "MissingUpdateToken",
+      accepted: false,
+    };
+  }
+  try {
+    return await sendLiveActivityPush(
+      decryptLiveActivityToken(encryptedToken),
+      delivery.environment as "sandbox" | "production",
+      {
+        event: eventName,
+        props,
+        timestamp: row.apnsTimestamp,
+        ...(eventName === "start"
+          ? {
+              attributes: {
+                tokenRegistrationURL: `${env.APP_URL.replace(/\/$/, "")}/api/live-activity/update-token`,
+                tokenRegistrationToken: createLiveActivityRegistrationToken(
+                  delivery.id,
+                  row.id,
+                  row.expiresAt,
+                ),
+                deliveryId: delivery.id,
+              },
+            }
+          : {}),
+        ...(row.staleAt ? { staleDate: Math.floor(row.staleAt.getTime() / 1000) } : {}),
+        ...(row.dismissalAt ? { dismissalDate: Math.floor(row.dismissalAt.getTime() / 1000) } : {}),
+      },
+      10,
+    );
+  } catch (error) {
+    return {
+      status: 0,
+      apnsId: null,
+      reason: error instanceof Error ? error.message : "DeliveryFailed",
+      accepted: false,
+    };
+  }
+}
+
 export async function dispatchLiveActivity(
   row: ActivityRow,
   deliveries: DeliveryRow[],
@@ -240,67 +308,9 @@ export async function dispatchLiveActivity(
   eventName: LiveActivityApnsEvent,
   requester: ActivityRequester,
 ): Promise<{ accepted: number; failed: number; errors: string[] }> {
-  const props = liveActivityPropsSchema.parse(row.props);
-  const timestamp = row.apnsTimestamp;
   const results = await Promise.all(
     deliveries.map(async (delivery) => {
-      let encryptedToken: string | null;
-      if (eventName === "start") {
-        const [target] = await db
-          .select({ token: device.liveActivityPushToStartTokenCiphertext })
-          .from(device)
-          .where(eq(device.id, delivery.deviceId))
-          .limit(1);
-        encryptedToken = target?.token ?? null;
-      } else {
-        encryptedToken = delivery.updateTokenCiphertext;
-      }
-      let result: Awaited<ReturnType<typeof sendLiveActivityPush>>;
-      if (!encryptedToken) {
-        result = {
-          status: 0,
-          apnsId: null,
-          reason: eventName === "start" ? "MissingPushToStartToken" : "MissingUpdateToken",
-          accepted: false,
-        };
-      } else {
-        try {
-          result = await sendLiveActivityPush(
-            decryptLiveActivityToken(encryptedToken),
-            delivery.environment as "sandbox" | "production",
-            {
-              event: eventName,
-              props,
-              timestamp,
-              ...(eventName === "start"
-                ? {
-                    attributes: {
-                      tokenRegistrationURL: `${env.APP_URL.replace(/\/$/, "")}/api/live-activity/update-token`,
-                      tokenRegistrationToken: createLiveActivityRegistrationToken(
-                        delivery.id,
-                        row.id,
-                        row.expiresAt,
-                      ),
-                      deliveryId: delivery.id,
-                    },
-                  }
-                : {}),
-              ...(row.staleAt ? { staleDate: Math.floor(row.staleAt.getTime() / 1000) } : {}),
-              ...(row.dismissalAt
-                ? { dismissalDate: Math.floor(row.dismissalAt.getTime() / 1000) }
-                : {}),
-            },
-            10,
-          );
-        } catch (error) {
-          result = {
-            status: 0,
-            apnsId: null,
-            reason: error instanceof Error ? error.message : "DeliveryFailed",
-            accepted: false,
-          };
-        }
-      }
+      const result = await sendDeliveryEvent(row, delivery, eventName);
       await recordDelivery(
         operationId,
         requester,
@@ -318,6 +328,173 @@ export async function dispatchLiveActivity(
     failed: results.filter((result) => !result.accepted).length,
     errors: [...new Set(results.flatMap((result) => (result.reason ? [result.reason] : [])))],
   };
+}
+
+export type BlockingDelivery = { activity: ActivityRow; delivery: DeliveryRow };
+
+/**
+ * Returns the live deliveries occupying any of the given devices, joined with
+ * their activities. Deliveries belonging to expired or terminal activities are
+ * lazily marked ended instead of being reported as blockers.
+ */
+export async function findBlockingDeliveries(
+  deviceIds: string[],
+  now: Date,
+): Promise<BlockingDelivery[]> {
+  if (deviceIds.length === 0) return [];
+  const occupied = await db
+    .select({ delivery: liveActivityDelivery, activity: liveActivity })
+    .from(liveActivityDelivery)
+    .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
+    .where(
+      and(
+        inArray(liveActivityDelivery.deviceId, deviceIds),
+        inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
+      ),
+    );
+  const live = (item: BlockingDelivery) =>
+    item.activity.expiresAt > now &&
+    ["starting", "active", "partial"].includes(item.activity.status);
+  const expired = occupied.filter((item) => !live(item)).map((item) => item.delivery.id);
+  if (expired.length > 0) {
+    await db
+      .update(liveActivityDelivery)
+      .set({ status: "ended", endedAt: now, updatedAt: now })
+      .where(inArray(liveActivityDelivery.id, expired));
+  }
+  return occupied.filter(live);
+}
+
+/**
+ * Implicitly ends the blocking deliveries so a `replace: true` start can take
+ * the device slot: each blocked device receives a silent end push with the
+ * blocking activity's current state and immediate dismissal, the deliveries
+ * are marked ended, and a blocking activity with no remaining live deliveries
+ * becomes terminal. These ends are intentionally unmetered and create no
+ * liveActivityOperation rows; only the surrounding start is billed.
+ * Returns the number of distinct blocking activities affected.
+ */
+export async function replaceBlockingDeliveries(
+  blockers: BlockingDelivery[],
+  now: Date,
+  alsoEnd?: ActivityRow,
+): Promise<number> {
+  const byActivity = new Map<string, { activity: ActivityRow; deliveries: DeliveryRow[] }>();
+  const seenDeliveries = new Set<string>();
+  const add = (activity: ActivityRow, delivery?: DeliveryRow) => {
+    const group = byActivity.get(activity.id) ?? { activity, deliveries: [] };
+    byActivity.set(activity.id, group);
+    if (delivery && !seenDeliveries.has(delivery.id)) {
+      seenDeliveries.add(delivery.id);
+      group.deliveries.push(delivery);
+    }
+  };
+  for (const { activity, delivery } of blockers) add(activity, delivery);
+  if (alsoEnd) {
+    // Taking over a key ends the keyed activity everywhere: its live
+    // deliveries on devices outside this start's targets are ended too, so
+    // the key cannot stay held by a half-alive run.
+    add(alsoEnd);
+    const keyedDeliveries = await db
+      .select()
+      .from(liveActivityDelivery)
+      .where(
+        and(
+          eq(liveActivityDelivery.activityId, alsoEnd.id),
+          inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
+        ),
+      );
+    for (const delivery of keyedDeliveries) add(alsoEnd, delivery);
+  }
+  for (const { activity, deliveries } of byActivity.values()) {
+    const ending: ActivityRow = {
+      ...activity,
+      sequence: activity.sequence + 1,
+      apnsTimestamp: Math.max(Math.floor(now.getTime() / 1000), activity.apnsTimestamp + 1),
+      dismissalAt: now,
+    };
+    await Promise.all(
+      deliveries.map(async (delivery) => {
+        const result = await sendDeliveryEvent(ending, delivery, "end");
+        // The delivery is released even when the push fails, matching how a
+        // rejected explicit end still frees the device. The update token is
+        // cleared so later operations on a surviving multi-device activity
+        // cannot resurrect this delivery.
+        await db
+          .update(liveActivityDelivery)
+          .set({
+            status: "ended",
+            lastEvent: "end",
+            lastSequence: ending.sequence,
+            lastApnsStatus: result.status || null,
+            lastApnsReason: result.reason,
+            lastApnsId: result.apnsId,
+            lastAttemptAt: now,
+            updatedAt: now,
+            endedAt: now,
+            updateTokenCiphertext: null,
+            updateTokenUpdatedAt: null,
+          })
+          .where(eq(liveActivityDelivery.id, delivery.id));
+      }),
+    );
+    const [remaining] = await db
+      .select({ value: count() })
+      .from(liveActivityDelivery)
+      .where(
+        and(
+          eq(liveActivityDelivery.activityId, activity.id),
+          inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
+        ),
+      );
+    if ((remaining?.value ?? 0) === 0) {
+      await db
+        .update(liveActivity)
+        .set({
+          status: "ended",
+          sequence: ending.sequence,
+          apnsTimestamp: ending.apnsTimestamp,
+          dismissalAt: now,
+          updatedAt: now,
+          endedAt: now,
+        })
+        .where(
+          and(
+            eq(liveActivity.id, activity.id),
+            eq(liveActivity.sequence, activity.sequence),
+            inArray(liveActivity.status, ["starting", "active", "partial"]),
+          ),
+        );
+    }
+  }
+  return byActivity.size;
+}
+
+/**
+ * Returns the requester's live activity holding the given key, if any. Stale
+ * rows past their expiry are lazily expired first, which also releases the
+ * partial unique key index so the key becomes reusable.
+ */
+export async function liveKeyedActivity(
+  requester: ActivityRequester,
+  key: string,
+): Promise<ActivityRow | undefined> {
+  const [row] = await db
+    .select()
+    .from(liveActivity)
+    .where(
+      and(
+        requester.requesterTokenId !== undefined
+          ? eq(liveActivity.requesterTokenId, requester.requesterTokenId)
+          : eq(liveActivity.requesterServiceId, requester.requesterServiceId),
+        eq(liveActivity.key, key),
+        inArray(liveActivity.status, ["starting", "active", "partial"]),
+      ),
+    )
+    .limit(1);
+  if (!row) return undefined;
+  const fresh = await expireLiveActivity(row);
+  return ["starting", "active", "partial"].includes(fresh.status) ? fresh : undefined;
 }
 
 /** Records the outcome of one Live Activity operation without touching task content. */
@@ -494,52 +671,37 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     );
 
     const now = new Date();
-    if (targets.length > 0) {
-      const occupied = await db
-        .select({
-          deliveryId: liveActivityDelivery.id,
-          activityId: liveActivity.id,
-          activityStatus: liveActivity.status,
-          expiresAt: liveActivity.expiresAt,
-        })
-        .from(liveActivityDelivery)
-        .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
-        .where(
-          and(
-            inArray(
-              liveActivityDelivery.deviceId,
-              targets.map((target) => target.id),
-            ),
-            inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
-          ),
-        );
-      const expiredDeliveryIds = occupied
-        .filter(
-          (item) =>
-            item.expiresAt <= now ||
-            !["starting", "active", "partial"].includes(item.activityStatus),
-        )
-        .map((item) => item.deliveryId);
-      if (expiredDeliveryIds.length > 0) {
-        await db
-          .update(liveActivityDelivery)
-          .set({ status: "ended", endedAt: now, updatedAt: now })
-          .where(inArray(liveActivityDelivery.id, expiredDeliveryIds));
-      }
-      const conflict = occupied.find(
-        (item) =>
-          item.expiresAt > now && ["starting", "active", "partial"].includes(item.activityStatus),
+    const blockers = await findBlockingDeliveries(
+      targets.map((target) => target.id),
+      now,
+    );
+    let replaced = 0;
+    const firstBlocker = blockers[0];
+    if (firstBlocker && !parsed.data.replace) {
+      return c.json(
+        {
+          error: "A Live Activity is already active on a target device",
+          code: "ACTIVE_ACTIVITY_CONFLICT",
+          activityId: firstBlocker.activity.id,
+        },
+        409,
       );
-      if (conflict) {
-        return c.json(
-          {
-            error: "A Live Activity is already active on a target device",
-            code: "ACTIVE_ACTIVITY_CONFLICT",
-            activityId: conflict.activityId,
-          },
-          409,
-        );
-      }
+    }
+    const keyed = parsed.data.key
+      ? await liveKeyedActivity({ requesterTokenId: token.id }, parsed.data.key)
+      : undefined;
+    if (keyed && !parsed.data.replace) {
+      return c.json(
+        {
+          error: "A Live Activity with this key is still active",
+          code: "ACTIVE_ACTIVITY_CONFLICT",
+          activityId: keyed.id,
+        },
+        409,
+      );
+    }
+    if (parsed.data.replace && (firstBlocker || keyed)) {
+      replaced = await replaceBlockingDeliveries(blockers, now, keyed);
     }
 
     const apnsTimestamp = Math.floor(now.getTime() / 1000);
@@ -605,6 +767,34 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
           );
         }
       }
+      const raced = await findBlockingDeliveries(
+        targets.map((target) => target.id),
+        new Date(),
+      );
+      const racedBlocker = raced[0];
+      if (racedBlocker) {
+        return c.json(
+          {
+            error: "A Live Activity is already active on a target device",
+            code: "ACTIVE_ACTIVITY_CONFLICT",
+            activityId: racedBlocker.activity.id,
+          },
+          409,
+        );
+      }
+      const racedKeyed = parsed.data.key
+        ? await liveKeyedActivity({ requesterTokenId: token.id }, parsed.data.key)
+        : undefined;
+      if (racedKeyed) {
+        return c.json(
+          {
+            error: "A Live Activity with this key is still active",
+            code: "ACTIVE_ACTIVITY_CONFLICT",
+            activityId: racedKeyed.id,
+          },
+          409,
+        );
+      }
       throw error;
     }
     if (!row) return c.json({ error: "Failed to create Live Activity" }, 500);
@@ -659,6 +849,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
         activity: toLiveActivityDto(row),
         accepted: result.accepted,
         failed: result.failed,
+        ...(parsed.data.replace ? { replaced } : {}),
         ...(result.accepted === 0
           ? {
               message:

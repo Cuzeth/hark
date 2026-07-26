@@ -85,6 +85,13 @@
       "when": 1785016656904,
       "tag": "0011_elite_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1785024389331,
+      "tag": "0012_pink_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }

@@ -462,6 +462,86 @@ describe("Live Activity agent routes", () => {
     });
   });
 
+  it("replaces the blocking activity when replace is true", async () => {
+    const first = await start({
+      title: "Old run",
+      status: "Running",
+      deviceIds: ["activity_dev_1"],
+    });
+    const firstBody = (await first.json()) as { activity: { id: string } };
+    expect(
+      (await registerUpdateToken(firstBody.activity.id, "native-replaced", "ba".repeat(32))).status,
+    ).toBe(200);
+
+    apnsCalls.length = 0;
+    const second = await start({
+      title: "New run",
+      status: "Starting",
+      replace: true,
+      deviceIds: ["activity_dev_1"],
+    });
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { activity: { id: string } };
+    expect(secondBody).toMatchObject({ accepted: 1, replaced: 1 });
+
+    expect(apnsCalls).toHaveLength(2);
+    expect(apnsCalls[0]).toMatchObject({
+      token: "ba".repeat(32),
+      priority: 10,
+      input: { event: "end", props: { activityId: firstBody.activity.id, title: "Old run" } },
+    });
+    expect(apnsCalls[1]).toMatchObject({
+      input: { event: "start", props: { activityId: secondBody.activity.id } },
+    });
+
+    const { eq } = await import("drizzle-orm");
+    const oldActivity = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, firstBody.activity.id))
+      .get();
+    expect(oldActivity).toMatchObject({ status: "ended" });
+    expect(oldActivity?.endedAt).not.toBeNull();
+    const oldDelivery = db
+      .select()
+      .from(schema.liveActivityDelivery)
+      .where(eq(schema.liveActivityDelivery.activityId, firstBody.activity.id))
+      .get();
+    expect(oldDelivery).toMatchObject({ status: "ended", lastEvent: "end" });
+  });
+
+  it("reuses a key after the keyed activity ends", async () => {
+    const first = await start({
+      title: "Keyed",
+      status: "Running",
+      key: "deploy",
+      deviceIds: ["activity_dev_1"],
+    });
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { activity: { id: string } };
+    expect(
+      (
+        await agent("/deploy/end", WRITE_SECRET, {
+          method: "POST",
+          body: JSON.stringify({}),
+        })
+      ).status,
+    ).toBe(200);
+
+    const second = await start({
+      title: "Keyed again",
+      status: "Running",
+      key: "deploy",
+      deviceIds: ["activity_dev_1"],
+    });
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { activity: { id: string } };
+    expect(secondBody.activity.id).not.toBe(firstBody.activity.id);
+
+    const read = await agent("/deploy");
+    expect(await read.json()).toMatchObject({ activity: { id: secondBody.activity.id } });
+  });
+
   it("uses strictly increasing APNs timestamps for same-second updates", async () => {
     const created = await start({
       title: "Timestamp",

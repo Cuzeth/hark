@@ -44,7 +44,10 @@ Activity commands accept flags or `--stdin` JSON. Use `activity get <id|key>` an
 inspect state, `--idempotency-key` for retries, and `--if-sequence` to reject stale updates. Progress
 is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. Activities default to an eight-hour
 expiry and become stale after four hours without an update. Repeated `--device` targeting requires
-Hark Pro, and Hark permits one active activity per device.
+Hark Pro, and Hark permits one active activity per device; pass `--replace` on `activity start` to
+silently end whatever occupies the device and take the slot (the response reports the count as
+`replaced`). A `--key` becomes reusable once its activity ends, so `activity start --key deploy
+--replace` works as a fixed-key restart.
 
 Exit codes: `0` success/approved/replied, `1` API error, `2` usage error, `3` authentication or
 scope error, `4` timeout/canceled/expired, `5` denied, `6` network error, `7` no push accepted.

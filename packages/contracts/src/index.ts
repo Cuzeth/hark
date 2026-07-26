@@ -256,6 +256,8 @@ const deviceIdsSchema = z
 
 export const liveActivityStartSchema = z.object({
   key: z.string().trim().min(1).max(100).optional(),
+  /** End any Live Activity currently occupying a target device before starting. */
+  replace: z.boolean().default(false),
   title: z.string().trim().min(1, "Title is required").max(80),
   status: z.string().trim().min(1, "Status is required").max(60),
   detail: z.string().trim().min(1).max(240).optional(),
@@ -365,6 +367,8 @@ export interface LiveActivityMutationResponse {
   activity: LiveActivityDto;
   accepted: number;
   failed: number;
+  /** Distinct blocking activities ended because the start requested `replace`. */
+  replaced?: number;
   idempotent?: boolean;
   message?: string;
 }
@@ -381,6 +385,8 @@ export type LiveActivityWebhookResponse =
       expiresAt: string;
       staleAt: string | null;
       endedAt: string | null;
+      /** Distinct blocking activities ended because the start requested `replace`. */
+      replaced?: number;
       idempotent?: boolean;
       message?: string;
     }

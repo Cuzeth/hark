@@ -28,6 +28,9 @@ import {
   type ActivityRow,
   dispatchLiveActivity,
   expireLiveActivity,
+  findBlockingDeliveries,
+  liveKeyedActivity,
+  replaceBlockingDeliveries,
   toLiveActivityDto,
   trackActivityOutcome,
 } from "./activities";
@@ -63,6 +66,9 @@ async function ownedActivity(
   serviceId: string,
   identifier: string,
 ): Promise<ActivityRow | undefined> {
+  // Keys are reusable once an activity ends, so an identifier can match one
+  // live activity plus any number of terminal ones. Prefer the live match,
+  // then the most recently created terminal one.
   const [row] = await db
     .select()
     .from(liveActivity)
@@ -71,6 +77,10 @@ async function ownedActivity(
         eq(liveActivity.requesterServiceId, serviceId),
         or(eq(liveActivity.id, identifier), eq(liveActivity.key, identifier)),
       ),
+    )
+    .orderBy(
+      desc(inArray(liveActivity.status, ["starting", "active", "partial"])),
+      desc(liveActivity.createdAt),
     )
     .limit(1);
   return row ? expireLiveActivity(row) : undefined;
@@ -209,44 +219,6 @@ async function eligibleDevices(
   };
 }
 
-async function activeConflict(deviceIds: string[], now: Date) {
-  if (deviceIds.length === 0) return null;
-  const occupied = await db
-    .select({
-      deliveryId: liveActivityDelivery.id,
-      activityId: liveActivity.id,
-      requesterServiceId: liveActivity.requesterServiceId,
-      activityStatus: liveActivity.status,
-      expiresAt: liveActivity.expiresAt,
-    })
-    .from(liveActivityDelivery)
-    .innerJoin(liveActivity, eq(liveActivity.id, liveActivityDelivery.activityId))
-    .where(
-      and(
-        inArray(liveActivityDelivery.deviceId, deviceIds),
-        inArray(liveActivityDelivery.status, ["pending", "accepted", "active"]),
-      ),
-    );
-  const expired = occupied
-    .filter(
-      (item) =>
-        item.expiresAt <= now || !["starting", "active", "partial"].includes(item.activityStatus),
-    )
-    .map((item) => item.deliveryId);
-  if (expired.length > 0) {
-    await db
-      .update(liveActivityDelivery)
-      .set({ status: "ended", endedAt: now, updatedAt: now })
-      .where(inArray(liveActivityDelivery.id, expired));
-  }
-  return (
-    occupied.find(
-      (item) =>
-        item.expiresAt > now && ["starting", "active", "partial"].includes(item.activityStatus),
-    ) ?? null
-  );
-}
-
 async function deliveriesFor(activityId: string): Promise<DeliveryRow[]> {
   return db
     .select()
@@ -320,22 +292,44 @@ export const activityHooksRoute = new Hono()
     }
     const now = new Date();
     const targets = targetResult.targets;
-    const conflict = await activeConflict(
+    const blockers = await findBlockingDeliveries(
       targets.map((target) => target.id),
       now,
     );
-    if (conflict) {
+    let replaced = 0;
+    const firstBlocker = blockers[0];
+    if (firstBlocker && !parsed.data.replace) {
       return c.json(
         {
           ok: false,
           error: "A Live Activity is already active on a target device",
           code: "ACTIVE_ACTIVITY_CONFLICT",
-          ...(conflict.requesterServiceId === service.id
-            ? { activityId: conflict.activityId }
+          // A blocker from another service of the same account stays
+          // undisclosed; its id would leak activity of an unrelated
+          // integration.
+          ...(firstBlocker.activity.requesterServiceId === service.id
+            ? { activityId: firstBlocker.activity.id }
             : {}),
         },
         409,
       );
+    }
+    const keyed = parsed.data.key
+      ? await liveKeyedActivity({ requesterServiceId: service.id }, parsed.data.key)
+      : undefined;
+    if (keyed && !parsed.data.replace) {
+      return c.json(
+        {
+          ok: false,
+          error: "A Live Activity with this key is still active",
+          code: "ACTIVE_ACTIVITY_CONFLICT",
+          activityId: keyed.id,
+        },
+        409,
+      );
+    }
+    if (parsed.data.replace && (firstBlocker || keyed)) {
+      replaced = await replaceBlockingDeliveries(blockers, now, keyed);
     }
 
     const activityId = newId("act");
@@ -426,16 +420,30 @@ export const activityHooksRoute = new Hono()
           return c.json(response(existing, undefined, { idempotent: true }));
         }
       }
-      const raced = await activeConflict(
+      const raced = await findBlockingDeliveries(
         targets.map((target) => target.id),
         new Date(),
       );
-      if (raced) {
+      if (raced.length > 0) {
         return c.json(
           {
             ok: false,
             error: "A Live Activity is already active on a target device",
             code: "ACTIVE_ACTIVITY_CONFLICT",
+          },
+          409,
+        );
+      }
+      const racedKeyed = parsed.data.key
+        ? await liveKeyedActivity({ requesterServiceId: service.id }, parsed.data.key)
+        : undefined;
+      if (racedKeyed) {
+        return c.json(
+          {
+            ok: false,
+            error: "A Live Activity with this key is still active",
+            code: "ACTIVE_ACTIVITY_CONFLICT",
+            activityId: racedKeyed.id,
           },
           409,
         );
@@ -470,6 +478,7 @@ export const activityHooksRoute = new Hono()
     if (result.accepted > 0) await trackNotification(service.userId, operationId);
     return c.json(
       response(row ?? created.row, result, {
+        ...(parsed.data.replace ? { replaced } : {}),
         ...(result.accepted === 0
           ? { message: "No Live Activity-capable iOS devices accepted the request." }
           : {}),

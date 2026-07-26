@@ -311,6 +311,236 @@ describe("Live Activity webhook routes", () => {
     });
   });
 
+  it("replaces the blocking activity when replace is true", async () => {
+    const first = await start();
+    const firstBody = (await first.json()) as { activityId: string };
+    const registered = await app.request("/api/devices/live-activity/update-token", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        deviceId: "hook_activity_device",
+        activityId: firstBody.activityId,
+        nativeActivityId: "native-replace",
+        updateToken: "dd".repeat(32),
+        environment: "sandbox",
+        schemaVersion: 1,
+      }),
+    });
+    expect(registered.status).toBe(200);
+
+    apnsCalls.length = 0;
+    const second = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy #185",
+      status: "Building",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { activityId: string };
+    expect(secondBody).toMatchObject({ ok: true, replaced: 1, status: "active", accepted: 1 });
+
+    expect(apnsCalls).toHaveLength(2);
+    expect(apnsCalls[0]).toMatchObject({
+      token: "dd".repeat(32),
+      priority: 10,
+      input: { event: "end", props: { activityId: firstBody.activityId, title: "Deploy #184" } },
+    });
+    const endPush = apnsCalls[0];
+    if (!endPush) throw new Error("Expected an implicit end push");
+    expect((endPush.input as { dismissalDate?: number }).dismissalDate).toBeTypeOf("number");
+    expect(apnsCalls[1]).toMatchObject({
+      input: { event: "start", props: { activityId: secondBody.activityId } },
+    });
+
+    const { eq } = await import("drizzle-orm");
+    const oldActivity = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, firstBody.activityId))
+      .get();
+    expect(oldActivity).toMatchObject({ status: "ended" });
+    expect(oldActivity?.endedAt).not.toBeNull();
+    const oldDelivery = db
+      .select()
+      .from(schema.liveActivityDelivery)
+      .where(eq(schema.liveActivityDelivery.activityId, firstBody.activityId))
+      .get();
+    expect(oldDelivery).toMatchObject({ status: "ended", lastEvent: "end" });
+  });
+
+  it("replaces a blocker owned by another service without disclosing it", async () => {
+    const foreign = await start(OTHER_TOKEN);
+    const foreignBody = (await foreign.json()) as { activityId: string };
+
+    const second = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy #185",
+      status: "Building",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(second.status).toBe(201);
+    const raw = await second.text();
+    expect(raw).not.toContain(foreignBody.activityId);
+    expect(JSON.parse(raw)).toMatchObject({ ok: true, replaced: 1, accepted: 1 });
+
+    const { eq } = await import("drizzle-orm");
+    const displaced = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, foreignBody.activityId))
+      .get();
+    expect(displaced).toMatchObject({ status: "ended" });
+  });
+
+  it("starts normally with replaced 0 when replace finds no conflict", async () => {
+    const response = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy #186",
+      status: "Building",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ ok: true, replaced: 0, accepted: 1 });
+  });
+
+  it("frees a key once its activity ends and lets replace displace the keyed run", async () => {
+    const keyedStart = () =>
+      activityRequest(TOKEN, "", "POST", {
+        title: "Deploy",
+        status: "Building",
+        key: "deploy",
+        deviceIds: ["hook_activity_device"],
+      });
+    const first = await keyedStart();
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { activityId: string };
+    expect((await activityRequest(TOKEN, "/deploy/end", "POST", {})).status).toBe(200);
+
+    const second = await keyedStart();
+    expect(second.status).toBe(201);
+    const secondBody = (await second.json()) as { activityId: string };
+    expect(secondBody.activityId).not.toBe(firstBody.activityId);
+
+    const third = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy",
+      status: "Building",
+      key: "deploy",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(third.status).toBe(201);
+    const thirdBody = (await third.json()) as { activityId: string };
+    expect(thirdBody).toMatchObject({ replaced: 1 });
+
+    const read = await activityRequest(TOKEN, "/deploy", "GET");
+    expect(await read.json()).toMatchObject({
+      activityId: thirdBody.activityId,
+      status: "active",
+    });
+
+    const { eq } = await import("drizzle-orm");
+    const displaced = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, secondBody.activityId))
+      .get();
+    expect(displaced).toMatchObject({ status: "ended" });
+  });
+
+  it("takes over a key whose activity no longer occupies a device", async () => {
+    const first = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy",
+      status: "Building",
+      key: "deploy",
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(first.status).toBe(201);
+    const firstBody = (await first.json()) as { activityId: string };
+
+    // Simulate a delivery that died (rejected push, device transfer) while
+    // the activity stayed live: the device slot is free, the key is not.
+    const { eq } = await import("drizzle-orm");
+    await db
+      .update(schema.liveActivityDelivery)
+      .set({ status: "failed", updateTokenCiphertext: null })
+      .where(eq(schema.liveActivityDelivery.activityId, firstBody.activityId));
+
+    const blocked = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy",
+      status: "Building",
+      key: "deploy",
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toMatchObject({
+      code: "ACTIVE_ACTIVITY_CONFLICT",
+      activityId: firstBody.activityId,
+    });
+
+    const replaceStart = await activityRequest(TOKEN, "", "POST", {
+      title: "Deploy",
+      status: "Building",
+      key: "deploy",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    });
+    expect(replaceStart.status).toBe(201);
+    const replaceBody = (await replaceStart.json()) as { activityId: string };
+    expect(replaceBody).toMatchObject({ ok: true, replaced: 1, accepted: 1 });
+
+    const displaced = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, firstBody.activityId))
+      .get();
+    expect(displaced).toMatchObject({ status: "ended" });
+
+    const read = await activityRequest(TOKEN, "/deploy", "GET");
+    expect(await read.json()).toMatchObject({
+      activityId: replaceBody.activityId,
+      status: "active",
+    });
+  });
+
+  it("replays a replace start idempotently without ending anything twice", async () => {
+    const first = await start();
+    const firstBody = (await first.json()) as { activityId: string };
+    const body = {
+      title: "Deploy #185",
+      status: "Building",
+      replace: true,
+      deviceIds: ["hook_activity_device"],
+    };
+    const initial = await activityRequest(TOKEN, "", "POST", body, "replace-once");
+    expect(initial.status).toBe(201);
+    const initialBody = (await initial.json()) as { activityId: string; replaced: number };
+    expect(initialBody.replaced).toBe(1);
+
+    const pushes = apnsCalls.length;
+    const replay = await activityRequest(TOKEN, "", "POST", body, "replace-once");
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({
+      ok: true,
+      activityId: initialBody.activityId,
+      idempotent: true,
+    });
+    expect(apnsCalls).toHaveLength(pushes);
+
+    const { eq } = await import("drizzle-orm");
+    const current = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, initialBody.activityId))
+      .get();
+    expect(current).toMatchObject({ status: "active" });
+    const displaced = db
+      .select()
+      .from(schema.liveActivity)
+      .where(eq(schema.liveActivity.id, firstBody.activityId))
+      .get();
+    expect(displaced).toMatchObject({ status: "ended" });
+  });
+
   it("requires Pro to start a Live Activity", async () => {
     billingState.pro = false;
     const response = await start();

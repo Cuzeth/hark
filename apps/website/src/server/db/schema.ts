@@ -282,8 +282,14 @@ export const liveActivity = sqliteTable(
       table.requesterServiceId,
       table.idempotencyKey,
     ),
-    uniqueIndex("live_activity_token_key_unique").on(table.requesterTokenId, table.key),
-    uniqueIndex("live_activity_service_key_unique").on(table.requesterServiceId, table.key),
+    // Keys must be unique only among non-terminal activities, so a requester
+    // can reuse a stable key (for example `deploy`) once its activity ends.
+    uniqueIndex("live_activity_token_key_unique")
+      .on(table.requesterTokenId, table.key)
+      .where(sql`${table.status} in ('starting', 'active', 'partial')`),
+    uniqueIndex("live_activity_service_key_unique")
+      .on(table.requesterServiceId, table.key)
+      .where(sql`${table.status} in ('starting', 'active', 'partial')`),
     index("live_activity_user_status_updated_idx").on(table.userId, table.status, table.updatedAt),
     index("live_activity_token_created_idx").on(table.requesterTokenId, table.createdAt),
     index("live_activity_service_created_idx").on(table.requesterServiceId, table.createdAt),

@@ -70,6 +70,7 @@ export function parseArgs(argv) {
     "approve",
     "deny",
     "reply",
+    "replace",
     "wait",
     "json",
     "stdin",
@@ -346,7 +347,7 @@ function help() {
   harkctl interaction get <id>
   harkctl interaction wait <id> [--timeout <duration>]
   harkctl activity start --title <title> --status <status> [--progress <0..1>] [--key <key>]
-                         [--accent-color <#RRGGBB>]
+                         [--accent-color <#RRGGBB>] [--replace]
   harkctl activity update <id|key> [--status <status>] [--detail <text>] [--progress <0..1>]
                             [--if-sequence <n>] [--idempotency-key <key>]
   harkctl activity end <id|key> [--status <status>] [--dismiss-after <duration>]
@@ -441,6 +442,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
       title,
       status,
       ...(options.key ? { key: options.key } : {}),
+      ...(options.replace ? { replace: true } : {}),
       ...(options.detail ? { detail: options.detail } : {}),
       ...(progress !== undefined ? { progress } : {}),
       ...(options.symbol ? { symbol: options.symbol } : {}),

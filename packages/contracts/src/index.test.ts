@@ -196,6 +196,7 @@ describe("Live Activity schemas", () => {
       accentColor: "#5ED8B7",
       expiresInSeconds: 28_800,
       staleAfterSeconds: 14_400,
+      replace: false,
     });
     expect(
       liveActivityStartSchema.safeParse({
