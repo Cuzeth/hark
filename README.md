@@ -7,6 +7,37 @@ scripts, monitoring tools, or anything else that can send an HTTP request.
 
 [Website](https://hark.ryan.ceo) | [Documentation](https://hark.ryan.ceo/docs)
 
+## Quick Start
+
+Requires [Node.js 22 or newer](https://nodejs.org/).
+
+1. Install the Hark skill for your agent:
+
+   ```sh
+   npx skills add R44VC0RP/hark --skill hark --global
+   ```
+
+2. Install the CLI:
+
+   ```sh
+   npm install -g harkctl
+   ```
+
+3. Authenticate it with your Hark account:
+
+   ```sh
+   harkctl auth login
+   ```
+
+4. Ask your agent:
+
+   ```text
+   What can Hark do?
+   ```
+
+Your agent can now notify your iPhone, request approvals or text replies, show task progress with
+Live Activities, and create webhook services for external systems.
+
 ## What Hark Does
 
 - Sends rich iOS notifications from a simple webhook.
@@ -16,7 +47,7 @@ scripts, monitoring tools, or anything else that can send an HTTP request.
 - Shows stateful task progress with Live Activities on the Lock Screen and Dynamic Island.
 - Supports multiple devices and targeted delivery with Hark Pro.
 
-## Get Started
+## Webhook Setup
 
 1. Sign in at [hark.ryan.ceo](https://hark.ryan.ceo).
 2. Register your iPhone with the Hark app.
@@ -102,18 +133,9 @@ harkctl notify ask "Deploy production?" --approval --wait
 harkctl activity start --title "Release" --status "Building" --progress 0.1
 ```
 
-### Agent Skill
-
-Install the Hark skill so OpenCode, Claude Code, Codex, Cursor, or another supported agent can use
-`harkctl`, create webhook services, and wire Hark into workflows safely:
-
-```sh
-npx skills add R44VC0RP/hark --skill hark
-```
-
-Add `--global` to make it available across projects. The skill lives at
-[`skills/hark/SKILL.md`](./skills/hark/SKILL.md) and follows the open Agent Skills format used by
-[skills.sh](https://skills.sh).
+The installable [`hark` agent skill](./skills/hark/SKILL.md) follows the open Agent Skills format
+used by [skills.sh](https://skills.sh/r44vc0rp/hark/hark) and supports OpenCode, Claude Code, Codex,
+Cursor, and other compatible agents.
 
 ## License
 
