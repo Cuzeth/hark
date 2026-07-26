@@ -1,10 +1,21 @@
 import type { BillingRedirectResponse } from "@hark/contracts";
 import { Hono } from "hono";
 import { track } from "../lib/analytics";
-import { createBillingPortal, createCheckout, getBilling, hasAutumn } from "../lib/billing";
+import {
+  createBillingPortal,
+  createCheckout,
+  getBilling,
+  getPricingPlans,
+  hasAutumn,
+} from "../lib/billing";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
 export const billingRoute = new Hono<AuthedEnv>()
+  // Public: the pricing page reads the plan catalog without a session.
+  .get("/plans", async (c) => {
+    c.header("Cache-Control", "public, max-age=300");
+    return c.json(await getPricingPlans());
+  })
   .use("*", requireAuth)
   .get("/", async (c) => c.json(await getBilling(c.get("user"))))
   .post("/checkout", async (c) => {

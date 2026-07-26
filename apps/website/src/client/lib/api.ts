@@ -9,6 +9,7 @@ import type {
   DeviceDto,
   EventDto,
   LiveActivityDto,
+  PricingPlansDto,
   ServiceCreatedResponse,
   ServiceCreateInput,
   ServiceDto,
@@ -78,6 +79,7 @@ export const api = {
   listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
   removeDevice: (id: string) => request<{ ok: true }>(`/api/devices/${id}`, { method: "DELETE" }),
   getBilling: () => request<BillingDto>("/api/billing"),
+  getPricingPlans: () => request<PricingPlansDto>("/api/billing/plans"),
   startCheckout: () =>
     request<BillingRedirectResponse>("/api/billing/checkout", { method: "POST" }),
   openBillingPortal: () =>

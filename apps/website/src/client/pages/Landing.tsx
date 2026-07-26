@@ -31,6 +31,9 @@ export function Landing() {
           <Link className="text-ink-subtle hover:text-ink text-sm transition" to="/docs">
             Docs
           </Link>
+          <Link className="text-ink-subtle hover:text-ink text-sm transition" to="/pricing">
+            Pricing
+          </Link>
           {session ? (
             <Link
               to="/dashboard"

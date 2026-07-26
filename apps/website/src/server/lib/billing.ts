@@ -1,4 +1,4 @@
-import type { BillingDto } from "@hark/contracts";
+import type { BillingDto, PricingPlanDto, PricingPlansDto } from "@hark/contracts";
 import { Autumn } from "autumn-js";
 import { env } from "../env";
 import type { AuthedUser } from "../middleware";
@@ -74,6 +74,93 @@ function toBilling(
 
 export function hasAutumn(): boolean {
   return autumn !== null;
+}
+
+const PLANS_CACHE_TTL_MS = 5 * 60_000;
+let plansCache: { value: PricingPlansDto; expiresAt: number } | null = null;
+
+function rateLimits(pro: boolean): Pick<PricingPlanDto, "servicePerMinute" | "accountPerMinute"> {
+  return pro
+    ? {
+        servicePerMinute: env.PRO_SERVICE_RATE_LIMIT_PER_MINUTE,
+        accountPerMinute: env.PRO_ACCOUNT_RATE_LIMIT_PER_MINUTE,
+      }
+    : {
+        servicePerMinute: env.SERVICE_RATE_LIMIT_PER_MINUTE,
+        accountPerMinute: env.ACCOUNT_RATE_LIMIT_PER_MINUTE,
+      };
+}
+
+/** Mirrors autumn.config.ts, used when Autumn is unreachable or not configured. */
+function staticPlans(): PricingPlansDto {
+  return {
+    source: "static",
+    plans: [
+      {
+        id: "free",
+        name: "Free",
+        description: "Everything needed for personal webhook notifications.",
+        priceMonthly: 0,
+        notificationsPerMonth: FREE_NOTIFICATIONS,
+        devices: 1,
+        deviceRouting: false,
+        ...rateLimits(false),
+      },
+      {
+        id: "pro_monthly",
+        name: "Pro",
+        description: "Multiple iPhones, targeted routing, and higher limits.",
+        priceMonthly: 8,
+        notificationsPerMonth: PRO_NOTIFICATIONS,
+        devices: null,
+        deviceRouting: true,
+        ...rateLimits(true),
+      },
+    ],
+  };
+}
+
+/**
+ * Public pricing data, sourced live from the Autumn plan catalog so the
+ * pricing page cannot drift from what checkout actually attaches.
+ */
+export async function getPricingPlans(): Promise<PricingPlansDto> {
+  if (!autumn) return staticPlans();
+  if (plansCache && plansCache.expiresAt > Date.now()) return plansCache.value;
+
+  try {
+    const response = await autumn.plans.list();
+    const plans = response.list
+      .filter((plan) => !plan.addOn && !plan.archived)
+      .map((plan): PricingPlanDto => {
+        const item = (featureId: string) =>
+          plan.items.find((candidate) => candidate.featureId === featureId);
+        const metered = (featureId: string, fallback: number | null) => {
+          const found = item(featureId);
+          if (!found) return fallback;
+          return found.unlimited ? null : found.included;
+        };
+        return {
+          id: plan.id,
+          name: plan.name,
+          description: plan.description,
+          priceMonthly: plan.price?.amount ?? 0,
+          notificationsPerMonth: metered("notifications", null),
+          devices: metered("devices", null),
+          deviceRouting: item("device_routing") !== undefined,
+          ...rateLimits(item("higher_rate_limits") !== undefined),
+        };
+      })
+      .sort((a, b) => a.priceMonthly - b.priceMonthly);
+    if (plans.length === 0) return staticPlans();
+
+    const value: PricingPlansDto = { source: "autumn", plans };
+    plansCache = { value, expiresAt: Date.now() + PLANS_CACHE_TTL_MS };
+    return value;
+  } catch (error) {
+    console.error("[billing] Could not list Autumn plans", error);
+    return plansCache?.value ?? staticPlans();
+  }
 }
 
 export function clearBillingCache(userId: string): void {
