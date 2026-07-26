@@ -86,6 +86,10 @@ whatever occupies the device and take the slot. Starting an activity may alert t
 progress updates are silent by default. High-priority updates control delivery speed, not sound or
 haptics.
 
+To contribute a genuinely new Live Activity layout, including no-simulator testing and every public
+API, widget, CLI, and docs touchpoint, see
+[Contributing a Live Activity template](./CONTRIBUTING_LIVE_ACTIVITY_TEMPLATES.md).
+
 ## Agent Workflows
 
 The [`harkctl`](./packages/harkctl) CLI can send one-shot notifications, ask for approvals or short
