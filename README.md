@@ -98,6 +98,19 @@ harkctl notify ask "Deploy production?" --approval --wait
 harkctl activity start --title "Release" --status "Building" --progress 0.1
 ```
 
+### Agent Skill
+
+Install the Hark skill so OpenCode, Claude Code, Codex, Cursor, or another supported agent can use
+`harkctl`, create webhook services, and wire Hark into workflows safely:
+
+```sh
+npx skills add R44VC0RP/hark --skill hark
+```
+
+Add `--global` to make it available across projects. The skill lives at
+[`skills/hark/SKILL.md`](./skills/hark/SKILL.md) and follows the open Agent Skills format used by
+[skills.sh](https://skills.sh).
+
 ## License
 
 Hark is source-available under the

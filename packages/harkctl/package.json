@@ -17,7 +17,7 @@
   ],
   "type": "module",
   "bin": {
-    "harkctl": "./bin/harkctl.mjs"
+    "harkctl": "bin/harkctl.mjs"
   },
   "files": [
     "bin",
