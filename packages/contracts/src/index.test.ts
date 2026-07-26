@@ -241,6 +241,38 @@ describe("Live Activity schemas", () => {
     expect(liveActivityPropsSchema.safeParse({ ...props, schemaVersion: 2 }).success).toBe(false);
   });
 
+  it("keeps style optional in props but defaulted on start", () => {
+    const props = {
+      schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+      activityId: "act_1",
+      title: "Build release",
+      status: "Running tests",
+      updatedAt: new Date().toISOString(),
+      symbol: "build",
+      privacyMode: "standard",
+    };
+    // Payloads written before the field existed must keep validating.
+    expect(liveActivityPropsSchema.safeParse(props).success).toBe(true);
+    expect(liveActivityPropsSchema.safeParse({ ...props, style: "ring" }).success).toBe(true);
+    expect(liveActivityPropsSchema.safeParse({ ...props, style: "neon" }).success).toBe(false);
+
+    expect(liveActivityStartSchema.parse({ title: "Task", status: "Starting" }).style).toBe(
+      "standard",
+    );
+    expect(
+      liveActivityStartSchema.parse({ title: "Task", status: "Starting", style: "hero" }).style,
+    ).toBe("hero");
+    expect(
+      liveActivityStartSchema.safeParse({ title: "Task", status: "Starting", style: "neon" })
+        .success,
+    ).toBe(false);
+
+    // Updates accept a style change and it counts as a meaningful field.
+    expect(liveActivityUpdateSchema.safeParse({ style: "steps" }).success).toBe(true);
+    expect(liveActivityUpdateSchema.safeParse({ style: "neon" }).success).toBe(false);
+    expect(liveActivityUpdateSchema.parse({ style: "terminal" }).style).toBe("terminal");
+  });
+
   it("normalizes start targets and requires a meaningful update", () => {
     const start = liveActivityStartSchema.parse({
       title: "Task",

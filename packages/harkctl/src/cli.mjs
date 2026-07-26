@@ -41,6 +41,15 @@ function parseAccentColor(value) {
   return String(value);
 }
 
+const ACTIVITY_STYLES = ["standard", "ring", "hero", "terminal", "steps"];
+
+function parseStyle(value) {
+  if (!ACTIVITY_STYLES.includes(String(value))) {
+    throw new UsageError(`--style must be one of: ${ACTIVITY_STYLES.join(", ")}`);
+  }
+  return String(value);
+}
+
 export function parseArgs(argv) {
   const positionals = [];
   const options = { device: [], scope: [] };
@@ -63,6 +72,7 @@ export function parseArgs(argv) {
     "symbol",
     "privacy",
     "accent-color",
+    "style",
     "stale-after",
     "dismiss-after",
     "if-sequence",
@@ -362,8 +372,10 @@ function help() {
   harkctl interaction get <id>
   harkctl interaction wait <id> [--timeout <duration>]
   harkctl activity start --title <title> --status <status> [--progress <0..1>] [--key <key>]
+                         [--style <standard|ring|hero|terminal|steps>]
                          [--accent-color <#RRGGBB>] [--replace]
   harkctl activity update <id|key> [--status <status>] [--detail <text>] [--progress <0..1>]
+                            [--style <standard|ring|hero|terminal|steps>]
                             [--if-sequence <n>] [--idempotency-key <key>]
   harkctl activity end <id|key> [--status <status>] [--dismiss-after <duration>]
                          [--if-sequence <n>] [--idempotency-key <key>]
@@ -473,6 +485,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(options["accent-color"]
         ? { accentColor: parseAccentColor(options["accent-color"]) }
         : {}),
+      ...(options.style ? { style: parseStyle(options.style) } : {}),
       ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
       ...(options["expires-in"] ? { expiresInSeconds: parseDuration(options["expires-in"]) } : {}),
       ...(options["stale-after"]
@@ -518,6 +531,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(options["accent-color"]
         ? { accentColor: parseAccentColor(options["accent-color"]) }
         : {}),
+      ...(options.style ? { style: parseStyle(options.style) } : {}),
       ...(options["stale-after"]
         ? { staleAfterSeconds: parseDuration(options["stale-after"]) }
         : {}),

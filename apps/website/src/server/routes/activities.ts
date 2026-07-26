@@ -746,6 +746,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       symbol: parsed.data.symbol,
       privacyMode: parsed.data.privacyMode,
       accentColor: parsed.data.accentColor,
+      style: parsed.data.style,
     };
     const values: typeof liveActivity.$inferInsert = {
       id: activityId,
@@ -957,6 +958,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       ...(parsed.data.symbol !== undefined ? { symbol: parsed.data.symbol } : {}),
       ...(parsed.data.privacyMode !== undefined ? { privacyMode: parsed.data.privacyMode } : {}),
       ...(parsed.data.accentColor !== undefined ? { accentColor: parsed.data.accentColor } : {}),
+      ...(parsed.data.style !== undefined ? { style: parsed.data.style } : {}),
       updatedAt: now.toISOString(),
     };
     if (parsed.data.detail === null) delete nextProps.detail;

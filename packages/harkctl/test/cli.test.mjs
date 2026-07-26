@@ -692,6 +692,7 @@ test("activity start sends normalized finite progress and routing", async () => 
       symbol: "build",
       privacyMode: "private",
       accentColor: "#FF9F0A",
+      style: "ring",
       deviceIds: ["dev_a", "dev_b"],
       expiresInSeconds: 3600,
       staleAfterSeconds: 300,
@@ -720,6 +721,8 @@ test("activity start sends normalized finite progress and routing", async () => 
         "private",
         "--accent-color",
         "#FF9F0A",
+        "--style",
+        "ring",
         "--device",
         "dev_a",
         "--device",
@@ -765,6 +768,8 @@ test("activity update and end send sequence preconditions", async () => {
         "2",
         "--accent-color",
         "#64D2FF",
+        "--style",
+        "hero",
       ],
       { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
     );
@@ -791,6 +796,7 @@ test("activity update and end send sequence preconditions", async () => {
       status: "Testing",
       progress: 0.7,
       accentColor: "#64D2FF",
+      style: "hero",
       ifSequence: 2,
     });
     assert.equal(calls[0].init.method, "PATCH");
@@ -820,6 +826,16 @@ test("activity CLI rejects invalid progress and preserves no-delivery exit behav
       { HARK_TOKEN: "hark_test" },
     ),
     /accent-color/,
+  );
+  await assert.rejects(
+    execute(["activity", "start", "--title", "Task", "--status", "Run", "--style", "neon"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /--style must be one of: standard, ring, hero, terminal, steps/,
+  );
+  await assert.rejects(
+    execute(["activity", "update", "act_1", "--style", "neon"], { HARK_TOKEN: "hark_test" }),
+    /--style must be one of/,
   );
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>

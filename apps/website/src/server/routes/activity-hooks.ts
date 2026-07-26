@@ -349,6 +349,7 @@ export const activityHooksRoute = new Hono()
       symbol: parsed.data.symbol,
       privacyMode: parsed.data.privacyMode,
       accentColor: parsed.data.accentColor,
+      style: parsed.data.style,
     };
     let created: { row: ActivityRow; deliveries: DeliveryRow[] };
     try {
@@ -558,6 +559,7 @@ export const activityHooksRoute = new Hono()
       ...(parsed.data.symbol !== undefined ? { symbol: parsed.data.symbol } : {}),
       ...(parsed.data.privacyMode !== undefined ? { privacyMode: parsed.data.privacyMode } : {}),
       ...(parsed.data.accentColor !== undefined ? { accentColor: parsed.data.accentColor } : {}),
+      ...(parsed.data.style !== undefined ? { style: parsed.data.style } : {}),
       updatedAt: now.toISOString(),
     };
     if (parsed.data.detail === null) delete nextProps.detail;

@@ -73,7 +73,9 @@ canceled, or expired, or the timeout passes (default `60s`).
 
 Activity commands accept flags or `--stdin` JSON. Use `activity get <id|key>` and `activity list` to
 inspect state, `--idempotency-key` for retries, and `--if-sequence` to reject stale updates. Progress
-is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. Activities default to an eight-hour
+is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. `--style` on `activity start` and
+`activity update` picks the widget layout: `standard` (default), `ring`, `hero`, `terminal`, or
+`steps`; app builds that predate a style render the standard layout until updated. Activities default to an eight-hour
 expiry and become stale after four hours without an update. Repeated `--device` targeting requires
 Hark Pro, and Hark permits one active activity per device; pass `--replace` on `activity start` to
 silently end whatever occupies the device and take the slot (the response reports the count as

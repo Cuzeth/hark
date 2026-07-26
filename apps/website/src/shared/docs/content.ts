@@ -644,6 +644,12 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
                 detail: "Six-digit hex, `#RRGGBB`. Defaults to `#5ED8B7`.",
               },
               {
+                name: "style",
+                type: "enum",
+                detail:
+                  "`standard`, `ring`, `hero`, `terminal`, or `steps`. Defaults to `standard` and selects the widget layout. Updates can switch it mid-flight. App builds that predate a style fall back to the standard layout.",
+              },
+              {
                 name: "privacyMode",
                 type: "enum",
                 detail:

@@ -226,6 +226,14 @@ export type LiveActivitySymbol = z.infer<typeof liveActivitySymbolSchema>;
 export const LIVE_ACTIVITY_PRIVACY_MODES = ["standard", "private"] as const;
 export const liveActivityPrivacyModeSchema = z.enum(LIVE_ACTIVITY_PRIVACY_MODES);
 export type LiveActivityPrivacyMode = z.infer<typeof liveActivityPrivacyModeSchema>;
+/**
+ * Widget layout variants. `style` stays optional in the props payload so
+ * payloads written before the field existed keep validating, and app builds
+ * that predate a value render their standard layout.
+ */
+export const LIVE_ACTIVITY_STYLES = ["standard", "ring", "hero", "terminal", "steps"] as const;
+export const liveActivityStyleSchema = z.enum(LIVE_ACTIVITY_STYLES);
+export type LiveActivityStyle = z.infer<typeof liveActivityStyleSchema>;
 export const LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR = "#5ED8B7" as const;
 export const LIVE_ACTIVITY_DEFAULT_EXPIRES_IN_SECONDS = 28_800 as const;
 export const LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS = 14_400 as const;
@@ -244,6 +252,7 @@ export const liveActivityPropsSchema = z.object({
   symbol: liveActivitySymbolSchema,
   privacyMode: liveActivityPrivacyModeSchema,
   accentColor: liveActivityAccentColorSchema.optional(),
+  style: liveActivityStyleSchema.optional(),
 });
 export type LiveActivityProps = z.infer<typeof liveActivityPropsSchema>;
 
@@ -265,6 +274,7 @@ export const liveActivityStartSchema = z.object({
   symbol: liveActivitySymbolSchema.default("terminal"),
   privacyMode: liveActivityPrivacyModeSchema.default("standard"),
   accentColor: liveActivityAccentColorSchema.default(LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR),
+  style: liveActivityStyleSchema.default("standard"),
   deviceIds: deviceIdsSchema,
   expiresInSeconds: z
     .number()
@@ -290,6 +300,7 @@ export const liveActivityUpdateSchema = z
     symbol: liveActivitySymbolSchema.optional(),
     privacyMode: liveActivityPrivacyModeSchema.optional(),
     accentColor: liveActivityAccentColorSchema.optional(),
+    style: liveActivityStyleSchema.optional(),
     staleAfterSeconds: z.number().int().min(0).max(28_800).optional(),
     ifSequence: z.number().int().nonnegative().optional(),
   })

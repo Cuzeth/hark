@@ -170,7 +170,8 @@ describe("Live Activity webhook routes", () => {
         status: "active",
         accepted: 1,
         failed: 0,
-        state: { accentColor: "#FF9F0A", progress: 0 },
+        // An omitted style stores the schema default.
+        state: { accentColor: "#FF9F0A", progress: 0, style: "standard" },
         expiresAt: "2026-07-25T20:00:00.000Z",
         staleAt: "2026-07-25T16:00:00.000Z",
       });
@@ -180,7 +181,7 @@ describe("Live Activity webhook routes", () => {
         input: {
           event: "start",
           staleDate: 1_784_995_200,
-          props: { activityId: startBody.activityId, accentColor: "#FF9F0A" },
+          props: { activityId: startBody.activityId, accentColor: "#FF9F0A", style: "standard" },
           attributes: {
             tokenRegistrationURL: "http://localhost:5173/api/live-activity/update-token",
           },
@@ -230,14 +231,21 @@ describe("Live Activity webhook routes", () => {
         TOKEN,
         `/${startBody.activityId}`,
         "PATCH",
-        { status: "Testing", progress: 0.5, accentColor: "#64D2FF", ifSequence: 0 },
+        {
+          status: "Testing",
+          progress: 0.5,
+          accentColor: "#64D2FF",
+          style: "terminal",
+          ifSequence: 0,
+        },
         "deploy-update-1",
       );
       expect(await updated.json()).toMatchObject({
         ok: true,
         activityId: startBody.activityId,
         sequence: 1,
-        state: { status: "Testing", progress: 0.5, accentColor: "#64D2FF" },
+        // Updates switch the layout mid-flight, exactly like symbol or accentColor.
+        state: { status: "Testing", progress: 0.5, accentColor: "#64D2FF", style: "terminal" },
         staleAt: "2026-07-25T17:00:00.000Z",
       });
       expect(apnsCalls.at(-1)).toMatchObject({
@@ -266,7 +274,8 @@ describe("Live Activity webhook routes", () => {
         activityId: startBody.activityId,
         sequence: 2,
         status: "ended",
-        state: { status: "Deployed", progress: 1, accentColor: "#5ED8B7" },
+        // Operations that omit style leave the stored value unchanged.
+        state: { status: "Deployed", progress: 1, accentColor: "#5ED8B7", style: "terminal" },
       });
       expect(apnsCalls.at(-1)).toMatchObject({
         priority: 10,

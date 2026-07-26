@@ -265,6 +265,7 @@ describe("Live Activity agent routes", () => {
         progress: 0.2,
         key: "release-main",
         accentColor: "#FF9F0A",
+        style: "ring",
       },
       "start-release",
     );
@@ -283,6 +284,7 @@ describe("Live Activity agent routes", () => {
           status: "Building",
           progress: 0.2,
           accentColor: "#FF9F0A",
+          style: "ring",
         },
       },
     });
@@ -293,6 +295,7 @@ describe("Live Activity agent routes", () => {
         progress: 0.2,
         key: "release-main",
         accentColor: "#FF9F0A",
+        style: "ring",
       },
       "start-release",
     );
