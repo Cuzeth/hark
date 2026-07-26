@@ -11,7 +11,7 @@ harkctl
 ├─ interaction  get <id> · wait <id>
 ├─ activity     start · update · end · get · list
 ├─ devices      list
-└─ services     list
+└─ services     create · list
 ```
 
 Start a browser authorization flow and approve the requested scopes with your signed-in Hark account:
@@ -23,6 +23,7 @@ harkctl notify "Deploy finished ✅" --title "Deploy bot" --image https://exampl
   --url https://example.com/runs/1
 harkctl notify ask "Deploy production?" --approval --wait --timeout 15m --json
 harkctl notify ask "What should the release note say?" --text --device dev_... --poll
+harkctl services create --title "Release bot" --image https://example.com/bot.png
 harkctl activity start --key release-main --title "Release" --status "Building" --progress 0.1 \
   --accent-color '#FF9F0A'
 harkctl activity update release-main --status "Testing" --progress 0.7 \
@@ -33,8 +34,8 @@ harkctl auth logout
 
 Login prints a short code and verification URL to stderr, opens the system browser when interactive,
 polls at the server-provided interval, and atomically writes credentials to a mode-`0600` file. The
-default scopes support notifications, asks, Live Activities, and listing devices/services without
-requesting `events:read`. Every requested scope is shown on the browser authorization page before
+default scopes support notifications, asks, Live Activities, listing devices/services, and creating
+webhook services without requesting `events:read`. Every requested scope is shown on the browser authorization page before
 approval. Connected tokens appear under **Dashboard > Agent connections**, where they can be revoked.
 
 Use repeatable `--scope`, `--client-name`, and `--expires-in` to narrow or label access. `--no-open`
@@ -68,6 +69,15 @@ Inside `notify`, a first positional of exactly `ask` selects the subcommand. Eve
 `interaction get <id>` prints the current state and maps terminal states to exit codes.
 `interaction wait <id> [--timeout <duration>]` long-polls until the interaction is answered,
 canceled, or expired, or the timeout passes (default `60s`).
+
+## services
+
+`services create --title <title> [--image <url>] [--url <url>]` creates a persistent webhook
+service and prints its full `webhookUrl` in the JSON response. The title and image become defaults
+for notifications sent through that URL, while `--url` sets the default tap destination. Pass
+`--stdin` to supply the service object as JSON. `services list` shows existing services without
+printing their webhook credentials. Creating services requires `services:write`; existing CLI
+logins created before this scope was added need to sign in again.
 
 ## activity
 

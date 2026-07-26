@@ -62,6 +62,42 @@ test("parses duration suffixes", () => {
   assert.throws(() => parseDuration("tomorrow"), /Invalid duration/);
 });
 
+test("creates a webhook service with default appearance", async () => {
+  const originalFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, init) => {
+    request = { url: String(url), init };
+    return Response.json(
+      {
+        service: {
+          id: "svc_test",
+          title: "Release bot",
+          imageUrl: "https://example.com/bot.png",
+          url: null,
+        },
+        webhookUrl: "https://example.test/hooks/hook_secret",
+      },
+      { status: 201 },
+    );
+  };
+  try {
+    const result = await execute(
+      ["services", "create", "--title", "Release bot", "--image", "https://example.com/bot.png"],
+      { HARK_TOKEN: "hark_test", HARK_API_URL: "https://example.test" },
+    );
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.body.webhookUrl, "https://example.test/hooks/hook_secret");
+    assert.equal(request.url, "https://example.test/api/agent/services");
+    assert.equal(request.init.method, "POST");
+    assert.deepEqual(JSON.parse(request.init.body), {
+      title: "Release bot",
+      imageUrl: "https://example.com/bot.png",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("auth login polls through pending and slow_down without opening a non-TTY browser", async () => {
   const originalFetch = globalThis.fetch;
   const directory = await mkdtemp(join(tmpdir(), "harkctl-login-"));

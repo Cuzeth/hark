@@ -421,6 +421,7 @@ export const API_TOKEN_SCOPES = [
   "activities:read",
   "activities:write",
   "services:read",
+  "services:write",
   "devices:read",
   "events:read",
 ] as const;

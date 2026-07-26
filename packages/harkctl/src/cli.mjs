@@ -13,6 +13,7 @@ const DEFAULT_SCOPES = [
   "activities:write",
   "devices:read",
   "services:read",
+  "services:write",
 ];
 const TERMINAL = new Set(["approved", "denied", "yes", "no", "replied", "canceled", "expired"]);
 
@@ -383,6 +384,7 @@ function help() {
   harkctl activity list [--limit <n>]
   harkctl devices list
   harkctl services list
+  harkctl services create --title <title> [--image <url>] [--url <url>] [--stdin]
 
 notify sends a one-shot push; notify ask sends a push that elicits an answer.
 Inside notify, a first positional of exactly "ask" selects the subcommand. Everything
@@ -444,6 +446,24 @@ export async function execute(argv, env = process.env, overrides = {}) {
   }
   if (group === "services" && action === "list") {
     return { body: await request(config, "/api/agent/services"), exitCode: 0 };
+  }
+  if (group === "services" && action === "create") {
+    const stdin = options.stdin ? await readStdinJson() : {};
+    const title = options.title ?? stdin.title;
+    if (!title) throw new UsageError("services create requires --title");
+    const payload = {
+      ...stdin,
+      title,
+      ...(options.image ? { imageUrl: options.image } : {}),
+      ...(options.url ? { url: options.url } : {}),
+    };
+    return {
+      body: await request(config, "/api/agent/services", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+      exitCode: 0,
+    };
   }
   if (group === "activity" && action === "list") {
     const limit = options.limit ? Number.parseInt(options.limit, 10) : 50;

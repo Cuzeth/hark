@@ -1,5 +1,6 @@
 import {
   type ServiceCreatedResponse,
+  type ServiceCreateInput,
   type ServiceDto,
   serviceCreateSchema,
   serviceUpdateSchema,
@@ -18,7 +19,7 @@ import {
 } from "../lib/token";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
-function toDto(row: typeof service.$inferSelect): ServiceDto {
+export function serviceToDto(row: typeof service.$inferSelect): ServiceDto {
   let webhookUrl: string | null = null;
   if (row.tokenCiphertext) {
     try {
@@ -38,6 +39,33 @@ function toDto(row: typeof service.$inferSelect): ServiceDto {
   };
 }
 
+export async function createServiceForUser(
+  userId: string,
+  input: ServiceCreateInput,
+): Promise<ServiceCreatedResponse> {
+  const token = generateWebhookToken();
+  const now = new Date();
+  const [row] = await db
+    .insert(service)
+    .values({
+      id: newId("svc"),
+      userId,
+      title: input.title,
+      imageUrl: input.imageUrl ?? null,
+      url: input.url ?? null,
+      tokenHash: hashWebhookToken(token),
+      tokenCiphertext: encryptWebhookToken(token),
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
+  if (!row) throw new Error("Failed to create service");
+  return {
+    service: serviceToDto(row),
+    webhookUrl: webhookUrlFor(token),
+  };
+}
+
 export function webhookUrlFor(token: string): string {
   return `${env.APP_URL.replace(/\/$/, "")}/hooks/${token}`;
 }
@@ -51,7 +79,7 @@ export const servicesRoute = new Hono<AuthedEnv>()
       .from(service)
       .where(eq(service.userId, user.id))
       .orderBy(desc(service.createdAt));
-    return c.json({ services: rows.map(toDto) });
+    return c.json({ services: rows.map(serviceToDto) });
   })
   .post("/", async (c) => {
     const user = c.get("user");
@@ -60,30 +88,7 @@ export const servicesRoute = new Hono<AuthedEnv>()
       return c.json({ error: "Invalid service", issues: parsed.error.issues }, 400);
     }
 
-    const token = generateWebhookToken();
-    const now = new Date();
-    const [row] = await db
-      .insert(service)
-      .values({
-        id: newId("svc"),
-        userId: user.id,
-        title: parsed.data.title,
-        imageUrl: parsed.data.imageUrl ?? null,
-        url: parsed.data.url ?? null,
-        tokenHash: hashWebhookToken(token),
-        tokenCiphertext: encryptWebhookToken(token),
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    if (!row) {
-      return c.json({ error: "Failed to create service" }, 500);
-    }
-
-    const response: ServiceCreatedResponse = {
-      service: toDto(row),
-      webhookUrl: webhookUrlFor(token),
-    };
+    const response = await createServiceForUser(user.id, parsed.data);
     return c.json(response, 201);
   })
   .patch("/:id", async (c) => {
@@ -103,7 +108,7 @@ export const servicesRoute = new Hono<AuthedEnv>()
       .where(and(eq(service.id, c.req.param("id")), eq(service.userId, user.id)))
       .returning();
     if (!row) return c.json({ error: "Service not found" }, 404);
-    return c.json({ service: toDto(row) });
+    return c.json({ service: serviceToDto(row) });
   })
   .post("/:id/rotate", async (c) => {
     const user = c.get("user");
@@ -122,7 +127,7 @@ export const servicesRoute = new Hono<AuthedEnv>()
       return c.json({ error: "Service not found" }, 404);
     }
     const response: ServiceCreatedResponse = {
-      service: toDto(row),
+      service: serviceToDto(row),
       webhookUrl: webhookUrlFor(token),
     };
     return c.json(response);

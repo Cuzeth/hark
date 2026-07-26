@@ -8,6 +8,7 @@ import {
   interactionCreateSchema,
   interactionCredentialResponseSchema,
   interactionResponseSchema,
+  serviceCreateSchema,
 } from "@hark/contracts";
 import { and, count, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
 import { Hono } from "hono";
@@ -37,6 +38,7 @@ import {
   requireScopes,
 } from "../middleware";
 import { enforceAgentRateLimit } from "./activities";
+import { createServiceForUser } from "./services";
 
 type InteractionRow = typeof interaction.$inferSelect;
 
@@ -223,6 +225,14 @@ export const agentRoute = new Hono<AgentEnv>()
         updatedAt: row.updatedAt.toISOString(),
       })),
     });
+  })
+  .post("/services", requireScopes("services:write"), async (c) => {
+    const parsed = serviceCreateSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: "Invalid service", issues: parsed.error.issues }, 400);
+    }
+    const response = await createServiceForUser(c.get("apiToken").userId, parsed.data);
+    return c.json(response, 201);
   })
   .get("/events", requireScopes("events:read"), async (c) => {
     const requested = Number.parseInt(c.req.query("limit") ?? "50", 10);

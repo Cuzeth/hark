@@ -816,6 +816,43 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
         ],
       },
       {
+        id: "cli-service",
+        blocks: [
+          {
+            kind: "p",
+            text: "`harkctl services create` creates a persistent webhook endpoint for another tool or workflow. Its title, image, and tap URL become defaults, so the sender only needs to POST a `body`. The command prints the credential-bearing `webhookUrl` in its JSON response.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl services create \\
+  --title "Release bot" \\
+  --image https://example.com/bot.png \\
+  --url https://ci.example.com/releases`,
+          },
+          {
+            kind: "code",
+            language: "json",
+            code: `{
+  "service": {
+    "id": "svc_...",
+    "title": "Release bot",
+    "imageUrl": "https://example.com/bot.png"
+  },
+  "webhookUrl": "https://hark.ryan.ceo/hooks/hook_..."
+}`,
+          },
+          {
+            kind: "p",
+            text: "Use `--stdin` to provide the same fields as JSON. `services list` lists existing services without emitting their webhook credentials. Creation requires `services:write`; if your CLI login predates that scope, sign in again and approve the updated permissions.",
+          },
+          {
+            kind: "note",
+            text: "Treat `webhookUrl` as a secret. Anyone who has it can send notifications through that service.",
+          },
+        ],
+      },
+      {
         id: "cli-notify",
         blocks: [
           {

@@ -155,7 +155,13 @@ beforeAll(async () => {
       name: "Full",
       tokenHash: hashApiToken(SECRET),
       prefix: SECRET.slice(0, 13),
-      scopes: ["notifications:send", "interactions:create", "interactions:read"],
+      scopes: [
+        "notifications:send",
+        "interactions:create",
+        "interactions:read",
+        "services:read",
+        "services:write",
+      ],
       createdAt: now,
     },
     {
@@ -284,7 +290,13 @@ describe("agent token authentication", () => {
     expect(token).toMatchObject({
       name: "Full",
       prefix: SECRET.slice(0, 13),
-      scopes: ["notifications:send", "interactions:create", "interactions:read"],
+      scopes: [
+        "notifications:send",
+        "interactions:create",
+        "interactions:read",
+        "services:read",
+        "services:write",
+      ],
       revokedAt: null,
     });
     expect(typeof token?.createdAt).toBe("string");
@@ -304,7 +316,13 @@ describe("agent token authentication", () => {
         id: "tok_full",
         name: "Full",
         prefix: SECRET.slice(0, 13),
-        scopes: ["notifications:send", "interactions:create", "interactions:read"],
+        scopes: [
+          "notifications:send",
+          "interactions:create",
+          "interactions:read",
+          "services:read",
+          "services:write",
+        ],
         expiresAt: null,
       },
     });
@@ -325,6 +343,48 @@ describe("agent token authentication", () => {
       .from(schema.apiToken)
       .where(eq(schema.apiToken.id, "tok_full"));
     expect(token?.lastUsedAt?.getTime()).toBe(recent.getTime());
+  });
+});
+
+describe("agent services", () => {
+  it("creates a service with webhook defaults and requires write scope", async () => {
+    sent.length = 0;
+    const forbidden = await agent("/services", READ_SECRET, {
+      method: "POST",
+      body: JSON.stringify({ title: "Release bot" }),
+    });
+    expect(forbidden.status).toBe(403);
+
+    const response = await agent("/services", SECRET, {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Release bot",
+        imageUrl: "https://example.com/bot.png",
+      }),
+    });
+    expect(response.status).toBe(201);
+    const body = await response.json();
+    expect(body).toMatchObject({
+      service: {
+        title: "Release bot",
+        imageUrl: "https://example.com/bot.png",
+      },
+    });
+    expect(body.webhookUrl).toMatch(/^https?:\/\/.*\/hooks\/whk_/);
+    expect(body.service.webhookUrl).toBe(body.webhookUrl);
+
+    const webhook = await app.request(new URL(body.webhookUrl).pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "Release shipped" }),
+    });
+    expect(webhook.status).toBe(200);
+    expect(sent[0]).toMatchObject({
+      title: "Release bot",
+      body: "Release shipped",
+      richContent: { image: "https://example.com/bot.png" },
+      data: { avatarUrl: "https://example.com/bot.png" },
+    });
   });
 });
 
