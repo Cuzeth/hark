@@ -41,6 +41,8 @@ export interface DocPlanRow {
 
 export type DocTableBlock =
   | { kind: "table"; variant: "field"; caption: string; rows: DocFieldRow[] }
+  /** Same shape as `field`, headed "Flag" for CLI options. */
+  | { kind: "table"; variant: "flag"; caption: string; rows: DocFieldRow[] }
   | { kind: "table"; variant: "route"; caption: string; rows: DocRouteRow[] }
   | { kind: "table"; variant: "plan"; caption: string; rows: DocPlanRow[] };
 
@@ -774,6 +776,182 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           {
             kind: "note",
             text: "iOS also budgets push-to-start deliveries per app. Rapid successive starts to the same device can be silently suppressed: the start still reports `accepted`, but the device never registers an update token, so every later update and end fails with `MissingUpdateToken`. Space fresh starts out by a minute or so — or keep one activity alive and update it, which is cheaper and never hits the budget.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "cli",
+    lead: "`harkctl` wraps the agent API for terminals, scripts, and coding agents: one-shot notifications, questions with answers you can wait on, and Live Activities — no webhook URL required. It needs Node.js 22 or newer.",
+    subsections: [
+      {
+        id: "cli-install",
+        blocks: [
+          {
+            kind: "p",
+            text: "Run it straight from npm with `npx harkctl`, or install it globally with `npm install -g harkctl`. Signing in uses a browser device-authorization flow — no tokens on the command line, ever.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: "npx harkctl auth login",
+          },
+          {
+            kind: "steps",
+            items: [
+              "The CLI prints a short code and opens [hark.ryan.ceo](https://hark.ryan.ceo) in your browser.",
+              "Sign in and approve the requested scopes; every scope is shown before you approve.",
+              "Credentials are written to an OS config file with mode `0600`, and the CLI polls until the approval lands.",
+            ],
+          },
+          {
+            kind: "p",
+            text: "Each login appears under your dashboard's Services list as an agent connection, with its scopes, creation date, and last use. Revoking it there signs that agent out immediately. `harkctl auth status` shows the active connection; `harkctl auth logout` revokes and removes local credentials.",
+          },
+          {
+            kind: "p",
+            text: "Use repeatable `--scope` flags to narrow access, `--client-name` to label the connection, and `--expires-in` (default `90d`) to bound its lifetime. For CI or self-hosted setups, `HARK_TOKEN` and `HARK_API_URL` environment variables override the config file.",
+          },
+        ],
+      },
+      {
+        id: "cli-notify",
+        blocks: [
+          {
+            kind: "p",
+            text: "`harkctl notify <body>` sends a one-shot push to every active iPhone on your account. Appearance is per call — the title acts as the sender name, and messages with the same title thread together like a service.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl notify "Build 48 passed" \\
+  --title "CI" \\
+  --image https://github.com/github.png \\
+  --url https://ci.example.com/builds/48`,
+          },
+          {
+            kind: "table",
+            variant: "flag",
+            caption: "notify flags",
+            rows: [
+              { name: "--title", type: "string", detail: "Sender name. Defaults to `Hark`." },
+              {
+                name: "--image",
+                type: "url",
+                detail: "Public HTTPS avatar, same rules as the webhook `imageUrl`.",
+              },
+              { name: "--url", type: "url", detail: "Opened when the notification is tapped." },
+              {
+                name: "--device",
+                type: "id, repeatable",
+                detail: "Target specific iPhones. Requires Hark Pro.",
+              },
+              {
+                name: "--idempotency-key",
+                type: "string",
+                detail: "Safe retries: replays return the original result without a second push.",
+              },
+              {
+                name: "--stdin",
+                type: "boolean",
+                detail: "Merge a JSON object from stdin under the explicit flags.",
+              },
+            ],
+          },
+          {
+            kind: "note",
+            text: "Sends from one connection share the webhook per-minute budgets — the requester counts like a service, the account window spans everything — and the same monthly notification allowance.",
+          },
+        ],
+      },
+      {
+        id: "cli-ask",
+        blocks: [
+          {
+            kind: "p",
+            text: "`harkctl notify ask <prompt>` sends a push that elicits an answer. Pass exactly one response type: `--approval` (Approve/Deny), `--yes-no` (Yes/No), or `--text` (a short typed reply). The appearance flags from `notify` all apply.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl notify ask "Deploy 8e7fc2a to production?" \\
+  --approval --title "Deploybot" --wait --timeout 15m`,
+          },
+          {
+            kind: "p",
+            text: "`--wait` blocks until the answer arrives or the timeout passes. `--poll` waits at most 20 seconds to catch an instant answer, for the case where someone is already looking at their phone. A timed-out poll or wait does not end the prompt — it stays answerable until it expires (default 15 minutes, `--expires-in` to change), and `harkctl interaction wait <id>` resumes waiting any time.",
+          },
+          {
+            kind: "code",
+            language: "json",
+            code: `{
+  "interaction": {
+    "id": "int_7MFuml-SqoUmpPLo",
+    "kind": "reply",
+    "status": "replied",
+    "response": "ship it",
+    "respondedAt": "2026-07-26T11:54:17.927Z"
+  },
+  "accepted": 1,
+  "timedOut": false
+}`,
+          },
+        ],
+      },
+      {
+        id: "cli-activity",
+        blocks: [
+          {
+            kind: "p",
+            text: "The `activity` commands drive the Activity API end to end. Address an activity by the returned ID or by your own `--key`, and pick a layout with `--style`.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl activity start --key deploy --replace --style ring \\
+  --title "Deploy #184" --status "Building" --progress 0.1
+
+harkctl activity update deploy --status "Testing" --progress 0.6 --if-sequence 0
+
+harkctl activity end deploy --status "Shipped" --progress 1 --dismiss-after 45s`,
+          },
+          {
+            kind: "bullets",
+            items: [
+              "`--replace` takes the device slot and the key, ending whatever blocks them, so a fixed-key start works on every run.",
+              "`--if-sequence` rejects stale writes: the update only applies if the activity is still at that sequence.",
+              "`--style` selects `standard`, `ring`, `hero`, `terminal`, or `steps`, and can change mid-flight on `update`.",
+              "`activity get <id|key>` reads current state; `activity list` shows recent activities.",
+            ],
+          },
+        ],
+      },
+      {
+        id: "cli-scripting",
+        blocks: [
+          {
+            kind: "p",
+            text: "Every successful command prints exactly one JSON object to stdout; diagnostics go to stderr. Exit codes make answers branchable without parsing:",
+          },
+          {
+            kind: "bullets",
+            items: [
+              "`0` — success, approved, yes, or replied",
+              "`4` — timed out, canceled, or expired",
+              "`5` — denied or no",
+              "`7` — no device accepted the push",
+              "`1` API error · `2` usage error · `3` authentication or scope error · `6` network error",
+            ],
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `if harkctl notify ask "Deploy to production?" --approval --wait --timeout 10m; then
+  ./deploy.sh && harkctl notify "Deployed" --title "Deploybot"
+else
+  echo "Not approved" >&2
+fi`,
           },
         ],
       },

@@ -45,6 +45,17 @@ export const DOC_NAV = [
       { id: "activity-alerts", label: "Alerts and priority" },
     ],
   },
+  {
+    id: "cli",
+    label: "harkctl CLI",
+    items: [
+      { id: "cli-install", label: "Install and sign in" },
+      { id: "cli-notify", label: "Send a notification" },
+      { id: "cli-ask", label: "Ask a question" },
+      { id: "cli-activity", label: "Drive a Live Activity" },
+      { id: "cli-scripting", label: "Scripting and exit codes" },
+    ],
+  },
 ] as const;
 
 type DocNavSection = (typeof DOC_NAV)[number];

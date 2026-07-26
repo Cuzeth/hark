@@ -125,10 +125,18 @@ function HeadRow({ headers }: { headers: string[] }) {
   );
 }
 
-export function FieldTable({ caption, rows }: { caption: string; rows: DocFieldRow[] }) {
+export function FieldTable({
+  caption,
+  rows,
+  nameHeader = "Field",
+}: {
+  caption: string;
+  rows: DocFieldRow[];
+  nameHeader?: string;
+}) {
   return (
     <TableShell caption={caption}>
-      <HeadRow headers={["Field", "Type", "Description"]} />
+      <HeadRow headers={[nameHeader, "Type", "Description"]} />
       <tbody className="divide-y divide-line border-y border-line">
         {rows.map((row) => (
           <tr key={row.name}>

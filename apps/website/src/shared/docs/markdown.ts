@@ -39,6 +39,11 @@ function tableBlock(block: DocTableBlock): string {
         ["Field", "Type", "Description"],
         block.rows.map((row) => [`\`${row.name}\``, row.type, row.detail]),
       );
+    case "flag":
+      return table(
+        ["Flag", "Type", "Description"],
+        block.rows.map((row) => [`\`${row.name}\``, row.type, row.detail]),
+      );
     case "route":
       return table(
         ["Route", "Purpose"],

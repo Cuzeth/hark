@@ -84,6 +84,8 @@ function Block({ block }: { block: DocBlock }) {
       switch (block.variant) {
         case "field":
           return <FieldTable caption={block.caption} rows={block.rows} />;
+        case "flag":
+          return <FieldTable caption={block.caption} nameHeader="Flag" rows={block.rows} />;
         case "route":
           return <RouteTable caption={block.caption} rows={block.rows} />;
         case "plan":
