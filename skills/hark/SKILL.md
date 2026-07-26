@@ -1,6 +1,11 @@
 ---
 name: hark
 description: Use Hark and the harkctl CLI to send iPhone notifications, request approvals or replies, run Live Activities, and create persistent webhook services for CI, agents, scripts, monitoring, and other workflows. Use when a user asks to install or authenticate harkctl, notify their phone, ask them a question, show task progress, create a Hark service, obtain a webhook URL, or wire Hark into an existing workflow.
+license: PolyForm Noncommercial 1.0.0 (https://polyformproject.org/licenses/noncommercial/1.0.0)
+compatibility: Requires Node.js 22+ and internet access. Workflow examples may also use jq, curl, or gh.
+metadata:
+  author: R44VC0RP
+  version: "1.0.0"
 ---
 
 # Hark
@@ -119,29 +124,30 @@ that needs a reusable webhook URL.
 1. Inspect the target workflow and infer a concise default title, public HTTPS image, and optional
    tap destination. Ask only if a required value cannot be inferred.
 
-2. Create the service while capturing stdout. Do not echo the result:
+2. Create the service and pipe its URL directly into the platform's secret manager in one shell
+   invocation. Do not let the URL cross tool calls or enter normal command output. Use a secret name
+   such as `HARK_WEBHOOK_URL`.
+
+   For GitHub Actions repositories:
 
    ```bash
-   service_json="$(npx -y harkctl@latest services create \
+   set -o pipefail
+   npx -y harkctl@latest services create \
      --title "Release bot" \
      --image https://example.com/release-bot.png \
-     --url https://example.com/releases)"
-   webhook_url="$(printf '%s' "$service_json" | jq -r '.webhookUrl')"
-   test -n "$webhook_url" && test "$webhook_url" != null
+     --url https://example.com/releases | \
+     jq -er '.webhookUrl' | \
+     gh secret set HARK_WEBHOOK_URL
    ```
 
-3. Put `webhook_url` directly into the platform's secret manager. Prefer stdin-based secret commands
-   so the value does not appear in process arguments. Use a name such as `HARK_WEBHOOK_URL`. Never
-   write it to a tracked file.
+   For another platform, use its stdin-based secret command. If it cannot read from stdin, capture
+   and store the URL within one shell invocation, then unset it. Never pass the URL as a command-line
+   argument or write it to a tracked file.
 
-   For GitHub Actions:
+   Service creation is not idempotent. If secret storage fails after creation, do not blindly rerun
+   the command; reveal the created URL in the Hark dashboard or remove the duplicate first.
 
-   ```bash
-   printf '%s' "$webhook_url" | gh secret set HARK_WEBHOOK_URL
-   unset webhook_url service_json
-   ```
-
-4. Reference the secret from the workflow and POST only the event-specific fields. The configured
+3. Reference the secret from the workflow and POST only the event-specific fields. The configured
    service title, image, and tap URL are defaults:
 
    ```yaml
@@ -158,7 +164,7 @@ that needs a reusable webhook URL.
          -d "$(jq -n --arg body 'Workflow finished' '{body: $body}')"
    ```
 
-5. Validate the workflow syntax. Send a test notification only when the user requested it or the
+4. Validate the workflow syntax. Send a test notification only when the user requested it or the
    integration cannot otherwise be verified without triggering the workflow.
 
 `services list` shows service metadata but intentionally omits webhook credentials. If a URL is
