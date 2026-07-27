@@ -222,6 +222,9 @@ export default function HomeScreen() {
 
   const ready = permission === "granted" && registration === "registered";
 
+  if (__DEV__ && !Device.isDevice) return <Redirect href="/inbox" />;
+  if (ready) return <Redirect href="/inbox" />;
+
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="dark" />

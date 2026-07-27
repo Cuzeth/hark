@@ -19,13 +19,13 @@ export const DEVICE_ID_KEY = "hark.device.serverId";
 const RETRY_QUEUE_KEY = "hark.interaction.responseQueue.v1";
 const MAX_QUEUED_RESPONSES = 20;
 
-type QueuedInput =
+export type InteractionActionInput =
   | { action: "approve" | "deny" | "yes" | "no"; actionDigest: string }
   | { action: "reply"; response: string; actionDigest: string };
 
 interface QueuedResponse {
   interactionId: string;
-  input: QueuedInput;
+  input: InteractionActionInput;
   responseToken?: string;
 }
 
@@ -90,6 +90,13 @@ function isTerminalApiError(error: unknown): boolean {
 async function submitOrQueue(response: QueuedResponse): Promise<void> {
   await enqueue(response);
   await flushInteractionResponses();
+}
+
+export async function submitInteractionResponse(
+  interactionId: string,
+  input: InteractionActionInput,
+): Promise<void> {
+  await submitOrQueue({ interactionId, input });
 }
 
 export async function flushInteractionResponses(): Promise<void> {
@@ -201,7 +208,7 @@ export async function handleNotificationResponse(
   }
   if (!data?.interactionId || !data.actionDigest) return;
 
-  let input: QueuedInput | undefined;
+  let input: InteractionActionInput | undefined;
   if (response.actionIdentifier === HARK_APPROVE_ACTION_ID) {
     input = { action: "approve", actionDigest: data.actionDigest };
   } else if (response.actionIdentifier === HARK_DENY_ACTION_ID) {

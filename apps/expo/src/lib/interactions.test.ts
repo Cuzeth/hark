@@ -53,6 +53,7 @@ import {
   DEVICE_ID_KEY,
   flushInteractionResponses,
   handleNotificationResponse,
+  submitInteractionResponse,
 } from "./interactions";
 
 const QUEUE_KEY = "hark.interaction.responseQueue.v1";
@@ -89,6 +90,21 @@ afterEach(async () => {
 });
 
 describe("interaction response queue", () => {
+  it("uses the durable queue for an in-app response", async () => {
+    await submitInteractionResponse("int_inbox", {
+      action: "reply",
+      response: "Ship it",
+      actionDigest: DIGEST,
+    });
+    expect(state.submissions).toHaveLength(0);
+    expect(JSON.parse(state.store.get(QUEUE_KEY) ?? "[]")).toEqual([
+      {
+        interactionId: "int_inbox",
+        input: { action: "reply", response: "Ship it", actionDigest: DIGEST },
+      },
+    ]);
+  });
+
   it("submits with a response credential without a login cookie", async () => {
     state.cookie = undefined;
     state.store.set(DEVICE_ID_KEY, "dev_1");

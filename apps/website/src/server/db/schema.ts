@@ -196,6 +196,7 @@ export const agentNotification = sqliteTable(
       table.idempotencyKey,
     ),
     index("agent_notification_token_created_at_idx").on(table.requesterTokenId, table.createdAt),
+    index("agent_notification_user_created_at_idx").on(table.userId, table.createdAt),
   ],
 );
 
@@ -288,6 +289,7 @@ export const interaction = sqliteTable(
     index("interaction_service_created_at_idx").on(table.requesterServiceId, table.createdAt),
     index("interaction_callback_due_idx").on(table.callbackStatus, table.callbackNextAttemptAt),
     index("interaction_user_status_expiry_idx").on(table.userId, table.status, table.expiresAt),
+    index("interaction_user_responded_at_idx").on(table.userId, table.respondedAt),
   ],
 );
 
@@ -402,6 +404,8 @@ export const liveActivityOperation = sqliteTable(
     }),
     event: text("event").notNull(),
     sequence: integer("sequence").notNull(),
+    /** State immediately after this operation; null only for legacy rows. */
+    props: text("props", { mode: "json" }).$type<Record<string, unknown>>(),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
     acceptedCount: integer("accepted_count").notNull().default(0),

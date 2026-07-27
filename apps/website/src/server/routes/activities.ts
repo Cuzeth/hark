@@ -16,6 +16,7 @@ import { Hono } from "hono";
 import { db } from "../db";
 import {
   agentNotification,
+  apiToken,
   device,
   event,
   interaction,
@@ -836,6 +837,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       requesterTokenId: token.id,
       event: "start",
       sequence: row.sequence,
+      props: row.props,
       idempotencyKey: key ?? null,
       requestHash: key ? requestHash : null,
       createdAt: now,
@@ -1002,6 +1004,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
             requesterTokenId: token.id,
             event: "update",
             sequence: updated.sequence,
+            props,
             idempotencyKey: key ?? null,
             requestHash: key ? requestHash : null,
             createdAt: now,
@@ -1159,6 +1162,7 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
             requesterTokenId: token.id,
             event: "end",
             sequence: updated.sequence,
+            props,
             idempotencyKey: key ?? null,
             requestHash: key ? requestHash : null,
             createdAt: now,
@@ -1212,8 +1216,15 @@ export const activitiesSessionRoute = new Hono<AuthedEnv>()
   .use("*", requireAuth)
   .get("/", async (c) => {
     const rows = await db
-      .select()
+      .select({
+        row: liveActivity,
+        tokenName: apiToken.name,
+        serviceName: service.title,
+        serviceImageUrl: service.imageUrl,
+      })
       .from(liveActivity)
+      .leftJoin(apiToken, eq(liveActivity.requesterTokenId, apiToken.id))
+      .leftJoin(service, eq(liveActivity.requesterServiceId, service.id))
       .where(
         and(
           eq(liveActivity.userId, c.get("user").id),
@@ -1222,9 +1233,19 @@ export const activitiesSessionRoute = new Hono<AuthedEnv>()
       )
       .orderBy(desc(liveActivity.updatedAt))
       .limit(20);
+    const activities = await Promise.all(
+      rows.map(async ({ row, tokenName, serviceName, serviceImageUrl }) => ({
+        ...toLiveActivityDto(await expireLiveActivity(row)),
+        sourceName:
+          serviceName ??
+          tokenName ??
+          (typeof row.props.title === "string" ? row.props.title : "Hark"),
+        sourceImageUrl: serviceImageUrl,
+      })),
+    );
     return c.json({
-      activities: await Promise.all(rows.map(expireLiveActivity)).then((items) =>
-        items.map(toLiveActivityDto),
+      activities: activities.filter((item) =>
+        ["starting", "active", "partial"].includes(item.status),
       ),
     });
   });

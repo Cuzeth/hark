@@ -1,7 +1,12 @@
 import type {
+  DeviceDto,
   DeviceRegisterInput,
   DeviceUnregisterInput,
   EventDto,
+  InboxActivityKind,
+  InboxActivityPageDto,
+  InboxInteractionDto,
+  InboxLiveActivityDto,
   InteractionCredentialResponseInput,
   InteractionDto,
   InteractionResponseInput,
@@ -37,6 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
   registerDevice: (input: DeviceRegisterInput) =>
     request<{ device: { id: string } }>("/api/devices", {
       method: "POST",
@@ -58,6 +64,11 @@ export const api = {
       body: JSON.stringify(input),
     }),
   listEvents: (limit = 20) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
+  listPendingInteractions: () =>
+    request<{ interactions: InboxInteractionDto[] }>("/api/interactions"),
+  listActiveActivities: () => request<{ activities: InboxLiveActivityDto[] }>("/api/activities"),
+  listActivityFeed: (filter: "all" | InboxActivityKind, page: number) =>
+    request<InboxActivityPageDto>(`/api/activity-feed?filter=${filter}&page=${page}`),
   respondToInteraction: (id: string, input: InteractionResponseInput) =>
     request<{ interaction: InteractionDto }>(`/api/interactions/${id}/respond`, {
       method: "POST",

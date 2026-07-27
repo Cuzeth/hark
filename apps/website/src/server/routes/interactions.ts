@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   type AgentNotificationDto,
   agentNotificationCreateSchema,
+  type InboxInteractionDto,
   type InteractionDto,
   type InteractionKind,
   type InteractionStatus,
@@ -778,6 +779,36 @@ export const agentRoute = new Hono<AgentEnv>()
 
 export const interactionResponseRoute = new Hono<AuthedEnv>()
   .use("*", requireAuth)
+  .get("/", async (c) => {
+    const now = new Date();
+    const rows = await db
+      .select({
+        row: interaction,
+        tokenName: apiToken.name,
+        serviceName: service.title,
+        serviceImageUrl: service.imageUrl,
+      })
+      .from(interaction)
+      .leftJoin(apiToken, eq(interaction.requesterTokenId, apiToken.id))
+      .leftJoin(service, eq(interaction.requesterServiceId, service.id))
+      .where(
+        and(
+          eq(interaction.userId, c.get("user").id),
+          eq(interaction.status, "pending"),
+          gt(interaction.expiresAt, now),
+        ),
+      )
+      .orderBy(desc(interaction.createdAt))
+      .limit(50);
+    const interactions: InboxInteractionDto[] = rows.map(
+      ({ row, tokenName, serviceName, serviceImageUrl }) => ({
+        ...toDto(row),
+        sourceName: serviceName ?? tokenName ?? row.title,
+        sourceImageUrl: row.imageUrl ?? serviceImageUrl,
+      }),
+    );
+    return c.json({ interactions });
+  })
   .post("/:id/respond", async (c) => {
     const parsed = interactionResponseSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {

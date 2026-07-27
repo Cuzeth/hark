@@ -380,6 +380,11 @@ export interface LiveActivityDto {
   endedAt: string | null;
 }
 
+export interface InboxLiveActivityDto extends LiveActivityDto {
+  sourceName: string;
+  sourceImageUrl: string | null;
+}
+
 export interface LiveActivityMutationResponse {
   activity: LiveActivityDto;
   accepted: number;
@@ -588,6 +593,33 @@ export interface InteractionDto {
   createdAt: string;
   respondedAt: string | null;
   canceledAt: string | null;
+}
+
+export interface InboxInteractionDto extends InteractionDto {
+  sourceName: string;
+  sourceImageUrl: string | null;
+}
+
+export const INBOX_ACTIVITY_KINDS = ["notification", "live_activity", "response"] as const;
+export type InboxActivityKind = (typeof INBOX_ACTIVITY_KINDS)[number];
+
+export interface InboxActivityDto {
+  id: string;
+  kind: InboxActivityKind;
+  sourceName: string;
+  sourceImageUrl: string | null;
+  title: string;
+  detail: string | null;
+  url: string | null;
+  result: string | null;
+  createdAt: string;
+}
+
+export interface InboxActivityPageDto {
+  items: InboxActivityDto[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface InteractionCreateResponse {
