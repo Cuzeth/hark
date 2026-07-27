@@ -1,4 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 114 114">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 114 114" role="img">
+  <title>Sparkles</title>
   <rect width="114" height="114" fill="#1e3a8a"/>
   <text x="57" y="62" font-size="62" text-anchor="middle" dominant-baseline="central">✨</text>
 </svg>
