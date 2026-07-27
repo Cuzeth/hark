@@ -1,23 +1,32 @@
 import { Link } from "react-router";
-import { AppDownloadBanner } from "../components/AppDownloadBanner";
 import { AppleButton } from "../components/AppleButton";
-import { CodeBlock } from "../components/CodeBlock";
 import { GoogleButton } from "../components/GoogleButton";
+import { type NotificationItem, NotificationStack } from "../components/NotificationStack";
 import { signInWithApple, signInWithGoogle, useSession } from "../lib/auth";
 
-const requestExample = `curl -X POST https://hark.ryan.ceo/hooks/whk_your_token \\
-  -H 'Content-Type: application/json' \\
-  -d '{
-    "body": "Production deployed successfully.",
-    "title": "GitHub",
-    "imageUrl": "https://github.com/github.png"
-  }'`;
-
-const responseExample = `{
-  "ok": true,
-  "eventId": "evt_Cxns2IdbF4H0TJYq",
-  "delivered": 1
-}`;
+const welcomeNotifications: NotificationItem[] = [
+  {
+    title: "Welcome to Hark",
+    image: "/welcome.svg",
+    description: "Hark makes it easy to notify yourself of your own services.",
+  },
+  {
+    title: "Webhooks & agents",
+    image: "/agent.png",
+    description: "Use webhooks or an agent to send custom messages.",
+  },
+  {
+    title: "Make it yours",
+    image: "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg",
+    description: "Custom titles, images, and descriptions.",
+  },
+  {
+    title: "Get started",
+    image: "/get-started.svg",
+    description: "Click here to get started.",
+    link: "/docs",
+  },
+];
 
 export function Landing() {
   const { data: session, isPending } = useSession();
@@ -46,124 +55,22 @@ export function Landing() {
         </nav>
       </header>
 
-      <div className="mx-auto w-full max-w-3xl px-6">
-        <AppDownloadBanner />
-      </div>
-
-      <main className="mx-auto w-full max-w-3xl flex-1 px-6 pb-24 text-left">
-        <section>
-          <h1 className="max-w-2xl text-4xl font-semibold text-balance sm:text-5xl">
-            POST a webhook. Get a beautiful iOS notification.
-          </h1>
-          <p className="text-ink-subtle mt-5 max-w-xl text-base leading-relaxed text-pretty">
-            Create a service, copy its secret webhook URL, and every POST becomes a source-branded
-            communication notification on your iPhone — with your service's name and avatar.
-          </p>
-          <div className="border-media-line mt-8 w-full overflow-hidden rounded-2xl border bg-black">
-            <video
-              aria-label="A demonstration of Hark delivering project notifications to an iPhone"
-              autoPlay
-              className="pointer-events-none aspect-video w-full"
-              disablePictureInPicture
-              loop
-              muted
-              playsInline
-              poster="/notifications-demo-poster.jpg"
-              preload="metadata"
-            >
-              <source src="/notifications-demo.mp4" type="video/mp4" />
-            </video>
+      <main className="mx-auto w-full max-w-3xl flex-1 px-6">
+        <p className="sr-only">
+          Welcome to Hark. Hark makes it easy to notify yourself of your own services. Use webhooks
+          or an agent to send custom messages with custom titles, images, and descriptions. Sign in
+          below to get started.
+        </p>
+        <div className="mt-6 flex justify-center">
+          <NotificationStack items={welcomeNotifications} interval={800} />
+        </div>
+        {!session ? (
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            <AppleButton onClick={() => void signInWithApple()} disabled={isPending} />
+            <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
           </div>
-          <div className="mt-8">
-            {session ? (
-              <Link
-                to="/dashboard"
-                className="bg-accent hover:bg-accent-hover text-on-accent rounded-full px-6 py-3 text-sm font-medium transition"
-              >
-                Go to your services
-              </Link>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                <AppleButton onClick={() => void signInWithApple()} disabled={isPending} />
-                <GoogleButton onClick={() => void signInWithGoogle()} disabled={isPending} />
-              </div>
-            )}
-          </div>
-        </section>
-
-        <hr className="border-line mt-20 border-t" />
-
-        <section className="pt-14" aria-labelledby="how-it-works">
-          <h2 id="how-it-works" className="text-2xl font-semibold">
-            How it works
-          </h2>
-          <p className="text-ink-subtle mt-3 max-w-xl text-base leading-relaxed">
-            POST JSON to a service's webhook URL. Only <InlineCode>body</InlineCode> is required.
-          </p>
-
-          <h3 className="mt-10 mb-3 text-sm font-semibold">Request</h3>
-          <CodeBlock language="bash" code={requestExample} />
-
-          <h3 className="mt-8 mb-3 text-sm font-semibold">Payload</h3>
-          <dl className="divide-line border-line divide-y border-y">
-            <Field name="body" required>
-              The notification message, up to 2,000 characters.
-            </Field>
-            <Field name="title">The sender name shown on the notification.</Field>
-            <Field name="imageUrl">A public HTTPS avatar URL.</Field>
-            <Field name="url">Opened when you tap the notification.</Field>
-          </dl>
-
-          <h3 className="mt-8 mb-3 text-sm font-semibold">Response</h3>
-          <CodeBlock language="json" code={responseExample} />
-
-          <Link
-            to="/docs"
-            className="text-accent-text mt-8 inline-flex items-center gap-1.5 text-sm font-medium transition hover:gap-2.5"
-          >
-            Read the full docs
-            <span aria-hidden="true">&rarr;</span>
-          </Link>
-        </section>
-      </main>
-
-      <footer className="text-ink-faint mx-auto flex w-full max-w-3xl items-center justify-between px-6 py-6 text-xs">
-        <span>Hark · webhook → iPhone, nothing else in between.</span>
-        <nav className="flex items-center gap-3" aria-label="Legal">
-          <Link className="hover:text-ink-muted transition" to="/privacy">
-            Privacy
-          </Link>
-          <Link className="hover:text-ink-muted transition" to="/terms">
-            Terms
-          </Link>
-        </nav>
-      </footer>
-    </div>
-  );
-}
-
-function Field({
-  name,
-  required,
-  children,
-}: {
-  name: string;
-  required?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1 py-3 sm:flex-row sm:gap-4">
-      <dt className="flex shrink-0 items-baseline gap-2 sm:w-44">
-        <InlineCode>{name}</InlineCode>
-        {required ? (
-          <span className="text-ink-faint text-[0.6875rem] uppercase">required</span>
         ) : null}
-      </dt>
-      <dd className="text-ink-subtle text-sm leading-relaxed">{children}</dd>
+      </main>
     </div>
   );
-}
-
-function InlineCode({ children }: { children: React.ReactNode }) {
-  return <code className="text-ink-muted font-mono text-xs">{children}</code>;
 }

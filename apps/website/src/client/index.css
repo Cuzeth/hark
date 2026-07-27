@@ -319,3 +319,17 @@ address {
     animation-duration: 0.01ms;
   }
 }
+
+/* Liquid-glass surfaces fall back to a solid panel when the user asks for
+   less transparency. This file is imported after Tailwind, so these rules win
+   over the utility classes; LiquidGlassLayer separately skips its inline
+   refraction filter under the same media query. */
+@media (prefers-reduced-transparency: reduce) {
+  .hark-liquid-glass {
+    background: var(--color-surface);
+  }
+  .hark-liquid-glass-effect {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
