@@ -198,6 +198,24 @@ describe("HarkAgentActivity layout styles", () => {
       harkInteractionDeviceId: "dev_1",
       harkInteractionDeliveryId: "lad_1",
     });
+    for (const button of buttons) {
+      expect(button.props.modifiers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            $modifier: "buttonBorderShape",
+            args: ["roundedRectangle", 6],
+          }),
+          expect.objectContaining({
+            $modifier: "controlSize",
+            args: ["regular"],
+          }),
+          expect.objectContaining({
+            $modifier: "frame",
+            args: [{ height: 36, maxWidth: Infinity }],
+          }),
+        ]),
+      );
+    }
     expect(findAll(slots.expandedBottom, "Button")).toHaveLength(2);
 
     const resolved = render({

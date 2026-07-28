@@ -111,10 +111,10 @@ function HarkAgentActivityLayout(props: LiveActivityProps, _environment: LiveAct
         harkInteractionDeliveryId: interactionEnvironment.harkInteractionDeliveryId,
         modifiers: [
           buttonStyle("borderedProminent"),
-          buttonBorderShape("capsule"),
-          controlSize("large"),
+          buttonBorderShape("roundedRectangle", 6),
+          controlSize("regular"),
           tint(accent),
-          frame({ maxWidth: Infinity }),
+          frame({ height: 36, maxWidth: Infinity }),
         ],
       } as Parameters<typeof Button>[0] & Record<string, unknown>)
     : undefined;
@@ -129,10 +129,10 @@ function HarkAgentActivityLayout(props: LiveActivityProps, _environment: LiveAct
         harkInteractionDeliveryId: interactionEnvironment.harkInteractionDeliveryId,
         modifiers: [
           buttonStyle("bordered"),
-          buttonBorderShape("capsule"),
-          controlSize("large"),
+          buttonBorderShape("roundedRectangle", 6),
+          controlSize("regular"),
           tint(accent),
-          frame({ maxWidth: Infinity }),
+          frame({ height: 36, maxWidth: Infinity }),
         ],
       } as Parameters<typeof Button>[0] & Record<string, unknown>)
     : undefined;
