@@ -448,13 +448,13 @@ function PendingRow({
         <View style={styles.actions}>
           <ActionButton
             disabled={responding}
-            label="Deny"
+            label={item.secondaryLabel ?? "Deny"}
             onPress={() => onResolve("deny")}
             secondary
           />
           <ActionButton
             disabled={responding}
-            label={responding ? "Sending…" : "Approve"}
+            label={responding ? "Sending…" : (item.primaryLabel ?? "Approve")}
             onPress={() => onResolve("approve")}
           />
         </View>
@@ -462,13 +462,13 @@ function PendingRow({
         <View style={styles.actions}>
           <ActionButton
             disabled={responding}
-            label="No"
+            label={item.secondaryLabel ?? "No"}
             onPress={() => onResolve("no")}
             secondary
           />
           <ActionButton
             disabled={responding}
-            label={responding ? "Sending…" : "Yes"}
+            label={responding ? "Sending…" : (item.primaryLabel ?? "Yes")}
             onPress={() => onResolve("yes")}
           />
         </View>

@@ -917,6 +917,18 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
+            text: "Add `--live-activity` to an approval or yes/no request to put its buttons on the Lock Screen and expanded Dynamic Island. `--primary-label` and `--secondary-label` customize visible verbs such as Send/Deny or Push/Cancel while the returned action remains canonical. Interactive Live Activities require iOS 17+, expire within eight hours, and don't support text replies, images, or URLs.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl notify ask "Send the prepared release email?" \
+  --approval --live-activity \
+  --primary-label Send --secondary-label Deny \
+  --wait --timeout 15m`,
+          },
+          {
+            kind: "p",
             text: "`--wait` blocks until the answer arrives or the timeout passes. `--poll` waits at most 20 seconds to catch an instant answer, for the case where someone is already looking at their phone. A timed-out poll or wait does not end the prompt — it stays answerable until it expires (default 15 minutes, `--expires-in` to change), and `harkctl interaction wait <id>` resumes waiting any time.",
           },
           {

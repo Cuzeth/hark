@@ -6,7 +6,16 @@ import { Redirect, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/lib/api";
 import { authClient, useSession } from "../src/lib/auth";
@@ -93,6 +102,9 @@ export default function HomeScreen() {
         platform: "ios",
         deviceName: Device.deviceName ?? undefined,
         interactionSchemaVersion: 1,
+        ...(Number.parseFloat(String(Platform.Version)) >= 17
+          ? { liveActivityInteractionVersion: 1 as const }
+          : {}),
       });
 
       await SecureStore.setItemAsync(EXPO_TOKEN_KEY, expoToken);

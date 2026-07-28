@@ -1,0 +1,2 @@
+ALTER TABLE `live_activity_delivery` ADD `purpose` text DEFAULT 'task' NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `live_activity_delivery_one_active_task_per_device_unique` ON `live_activity_delivery` (`device_id`) WHERE "live_activity_delivery"."purpose" = 'task' and "live_activity_delivery"."status" in ('pending', 'accepted', 'active');

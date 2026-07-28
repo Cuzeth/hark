@@ -17,6 +17,7 @@ import {
   agentRoute,
   interactionCredentialResponseRoute,
   interactionResponseRoute,
+  liveActivityInteractionResponseRoute,
 } from "./routes/interactions";
 import { liveActivityRegistrationRoute } from "./routes/live-activity-registration";
 import { servicesRoute } from "./routes/services";
@@ -60,6 +61,7 @@ app.route("/api/activities", activitiesSessionRoute);
 app.route("/api/activity-feed", activityFeedRoute);
 app.route("/api/interactions", interactionResponseRoute);
 app.route("/api/interaction-responses", interactionCredentialResponseRoute);
+app.route("/api/live-activity-interactions", liveActivityInteractionResponseRoute);
 app.route("/api/live-activity", liveActivityRegistrationRoute);
 app.route("/api/billing", billingRoute);
 app.route("/api/devices", devicesRoute);

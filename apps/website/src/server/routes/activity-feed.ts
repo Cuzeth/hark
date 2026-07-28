@@ -132,6 +132,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
       left join api_token t on t.id = o.requester_token_id
       left join service s on s.id = o.requester_service_id
       where a.user_id = ${userId}
+        and a.interaction_id is null
     ) feed
     where ${filterClause}
     order by created_at desc, id desc

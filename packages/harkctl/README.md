@@ -61,6 +61,21 @@ does not end the prompt — it stays answerable on the phone until it expires, a
 `harkctl interaction wait <id>` resumes waiting at any time; `--poll` cannot be combined with
 `--wait` or `--timeout`.
 
+Use `--live-activity` with `--approval` or `--yes-no` to put the decision directly on the Lock
+Screen and expanded Dynamic Island. Optional `--primary-label` and `--secondary-label` customize
+the visible verbs without changing the canonical approve/deny or yes/no result:
+
+```bash
+harkctl notify ask "Send the prepared release email?" \
+  --approval --live-activity \
+  --primary-label Send --secondary-label Deny \
+  --wait --timeout 15m
+```
+
+Interactive Live Activity prompts require iOS 17 or later, expire within eight hours, and don't
+support `--text`, `--image`, or `--url`. If no capable device accepts the activity, the command exits
+`7` just like an undeliverable notification.
+
 Inside `notify`, a first positional of exactly `ask` selects the subcommand. Everything after a bare
 `--` separator is treated as positional, so `harkctl notify -- ask` sends the literal body “ask”.
 
@@ -87,10 +102,11 @@ is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. `--style` on `activ
 `activity update` picks the widget layout: `standard` (default), `ring`, `hero`, `terminal`, or
 `steps`; app builds that predate a style render the standard layout until updated. Activities default to an eight-hour
 expiry and become stale after four hours without an update. Repeated `--device` targeting requires
-Hark Pro, and Hark permits one active activity per device; pass `--replace` on `activity start` to
-silently end whatever occupies the device and take the slot (the response reports the count as
-`replaced`). A `--key` becomes reusable once its activity ends, so `activity start --key deploy
---replace` works as a fixed-key restart.
+Hark Pro, and Hark permits one active task activity per device; pass `--replace` on `activity start`
+to silently end whatever task occupies the device and take the slot (the response reports the count
+as `replaced`). Interactive approval activities may coexist with that task. A `--key` becomes
+reusable once its activity ends, so `activity start --key deploy --replace` works as a fixed-key
+restart.
 
 ## Configuration
 

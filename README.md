@@ -112,10 +112,10 @@ POST  /hooks/:token/live-activities/:activityId/end
 ```
 
 Updates accept partial state such as `status`, `detail`, `progress`, `symbol`, and `accentColor`.
-Hark allows one active Hark Live Activity per device; pass `replace: true` on start to silently end
-whatever occupies the device and take the slot. Starting an activity may alert the user, but
-progress updates are silent by default. High-priority updates control delivery speed, not sound or
-haptics.
+Hark allows one active task Live Activity per device; pass `replace: true` on start to silently end
+whatever task occupies the device and take the slot. Interactive approval activities may coexist
+with that task. Starting an activity may alert the user, but progress updates are silent by default.
+High-priority updates control delivery speed, not sound or haptics.
 
 To contribute a genuinely new Live Activity layout, including no-simulator testing and every public
 API, widget, CLI, and docs touchpoint, see
@@ -130,6 +130,8 @@ replies, and manage Live Activities from scripts or AI agents.
 harkctl auth login
 harkctl notify "Deploy finished ✅" --title "Deploy bot"
 harkctl notify ask "Deploy production?" --approval --wait
+harkctl notify ask "Send the email?" --approval --live-activity \
+  --primary-label Send --secondary-label Deny --wait
 harkctl activity start --title "Release" --status "Building" --progress 0.1
 ```
 
