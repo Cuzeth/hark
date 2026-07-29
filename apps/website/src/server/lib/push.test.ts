@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { env } from "../env";
 import {
   buildInteractionPushMessages,
   buildPushMessages,
@@ -13,34 +14,30 @@ const service = {
 };
 
 describe("buildWelcomePushMessages", () => {
-  it("builds Ryan's three-message onboarding sequence", () => {
+  it("builds the two-message onboarding sequence", () => {
     const messages = buildWelcomePushMessages("ExponentPushToken[a]");
-    expect(messages).toHaveLength(3);
+    expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
       to: "ExponentPushToken[a]",
-      title: "Ryan",
-      body: "hey! my name is ryan and I made hark!",
+      title: "Hark",
+      body: "Welcome to Hark — this iPhone is registered.",
       priority: "high",
       mutableContent: true,
       richContent: {
-        image: "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg",
+        image: `${env.APP_URL}/favicon.png`,
       },
       data: {
         v: 1,
-        sourceId: "ryan",
-        sourceName: "Ryan",
-        avatarUrl: "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg",
-        url: "https://x.com/ryanvogel",
-        conversationId: "hark-welcome-ryan",
+        sourceId: "hark",
+        sourceName: "Hark",
+        avatarUrl: `${env.APP_URL}/favicon.png`,
+        url: env.APP_URL,
+        conversationId: "hark-welcome",
       },
     });
     expect(messages[1]).toMatchObject({
-      body: "easily send notifications via a webhook",
-      data: { url: "https://hark.ryan.ceo" },
-    });
-    expect(messages[2]).toMatchObject({
-      body: "get started here (click me)",
-      data: { url: "https://hark.ryan.ceo" },
+      body: "Create a service in the dashboard and point any webhook at it.",
+      data: { url: `${env.APP_URL}/dashboard` },
     });
   });
 });

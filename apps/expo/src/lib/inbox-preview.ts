@@ -1,7 +1,8 @@
 import type { InboxActivityDto, InboxInteractionDto, InboxLiveActivityDto } from "@hark/contracts";
 
-export const PREVIEW_AVATAR_URL =
-  "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg";
+import { API_URL } from "./auth";
+
+export const PREVIEW_AVATAR_URL = `${API_URL}/favicon.png`;
 
 const now = Date.now();
 

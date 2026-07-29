@@ -71,39 +71,6 @@ export default function SettingsScreen() {
     ]);
   };
 
-  const deleteAccount = () => {
-    Alert.alert(
-      "Delete account",
-      "This permanently deletes your services, activity history, and registered devices.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete account",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                const expoPushToken = await SecureStore.getItemAsync(EXPO_TOKEN_KEY);
-                if (expoPushToken) await api.unregisterDevice({ expoPushToken });
-                const result = await authClient.deleteUser();
-                if (result.error) {
-                  throw new Error(result.error.message ?? "Account deletion was not completed");
-                }
-                await clearDevice();
-                router.replace("/");
-              } catch (error) {
-                Alert.alert(
-                  "Could not delete account",
-                  error instanceof Error ? error.message : "Please try again.",
-                );
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="dark" />
@@ -152,9 +119,6 @@ export default function SettingsScreen() {
         <SettingsRow icon="person.fill" label="Signed in as" value={session?.user.email ?? ""} />
         <Pressable accessibilityRole="button" onPress={signOut} style={styles.accountAction}>
           <Text style={styles.accountActionText}>Sign out</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={deleteAccount} style={styles.accountAction}>
-          <Text style={styles.deleteText}>Delete account</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -262,12 +226,6 @@ const styles = StyleSheet.create({
   },
   accountActionText: {
     color: colors.ink,
-    fontFamily: fonts.medium,
-    fontSize: 14,
-    letterSpacing: tightTracking(14),
-  },
-  deleteText: {
-    color: colors.danger,
     fontFamily: fonts.medium,
     fontSize: 14,
     letterSpacing: tightTracking(14),

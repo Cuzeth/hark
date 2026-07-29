@@ -82,7 +82,7 @@ export default function HomeScreen() {
         throw new Error("Push notifications require a physical iPhone.");
       }
       const projectId =
-        (Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined)?.projectId ??
+        (Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined)?.projectId ||
         process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
       const expoToken = (
         await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)
@@ -192,43 +192,6 @@ export default function HomeScreen() {
     ]);
   };
 
-  const deleteAccount = () => {
-    Alert.alert(
-      "Delete account",
-      "This permanently deletes your services, webhook history, and registered devices. This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete account",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              try {
-                if (expoPushToken) await api.unregisterDevice({ expoPushToken });
-                const result = await authClient.deleteUser();
-                if (result.error) {
-                  throw new Error(result.error.message ?? "Account deletion was not completed");
-                }
-                await Promise.all([
-                  SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
-                  SecureStore.deleteItemAsync(APNS_TOKEN_KEY),
-                  SecureStore.deleteItemAsync(DEVICE_ID_KEY),
-                  clearInteractionResponses(),
-                ]);
-                router.replace("/");
-              } catch (error) {
-                Alert.alert(
-                  "Could not delete account",
-                  error instanceof Error ? error.message : "Please try again.",
-                );
-              }
-            })();
-          },
-        },
-      ],
-    );
-  };
-
   if (!isPending && !session) {
     return <Redirect href="/" />;
   }
@@ -302,9 +265,6 @@ export default function HomeScreen() {
 
         {lastError ? <Text style={styles.error}>{lastError}</Text> : null}
         <ActivityLog events={events} onRefresh={refreshEvents} />
-        <Pressable accessibilityRole="button" onPress={deleteAccount} style={styles.deleteAccount}>
-          <Text style={styles.deleteAccountText}>Delete account</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -723,16 +683,5 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 14,
     letterSpacing: tightTracking(10),
-  },
-  deleteAccount: {
-    alignSelf: "flex-start",
-    marginTop: 18,
-    paddingVertical: 8,
-  },
-  deleteAccountText: {
-    color: colors.danger,
-    fontFamily: fonts.medium,
-    fontSize: 13,
-    letterSpacing: tightTracking(13),
   },
 });

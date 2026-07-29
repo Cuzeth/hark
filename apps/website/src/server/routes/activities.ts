@@ -34,7 +34,6 @@ import {
   type LiveActivityApnsEvent,
   sendLiveActivityPush,
 } from "../lib/apns";
-import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { createLiveActivityInteractionCredential } from "../lib/live-activity-interaction";
 import { createLiveActivityRegistrationToken } from "../lib/live-activity-registration";
@@ -131,9 +130,7 @@ async function ownedActivity(
  */
 export async function enforceAgentRateLimit(
   token: AgentEnv["Variables"]["apiToken"],
-  owner: AuthedEnv["Variables"]["user"],
 ): Promise<{ error: string; retryAfterSeconds: 60 } | null> {
-  const billing = await getBilling(owner, true);
   const since = new Date(Date.now() - 60_000);
   const [
     [tokenActivity],
@@ -199,7 +196,7 @@ export async function enforceAgentRateLimit(
     (tokenActivity?.value ?? 0) +
       (tokenInteractions?.value ?? 0) +
       (tokenNotifications?.value ?? 0) >=
-    billing.limits.servicePerMinute
+    env.SERVICE_RATE_LIMIT_PER_MINUTE
   ) {
     return { error: "Requester rate limit exceeded", retryAfterSeconds: 60 };
   }
@@ -208,7 +205,7 @@ export async function enforceAgentRateLimit(
       (accountInteractions?.value ?? 0) +
       (accountNotifications?.value ?? 0) +
       (webhooks?.value ?? 0) >=
-    billing.limits.accountPerMinute
+    env.ACCOUNT_RATE_LIMIT_PER_MINUTE
   ) {
     return { error: "Account rate limit exceeded", retryAfterSeconds: 60 };
   }
@@ -926,17 +923,10 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const billing = await getBilling(owner, true);
-    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
-      return c.json({ error: "Device routing requires Hark Pro" }, 402);
-    }
-    const limited = await enforceAgentRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
-    }
-    if (!(await checkNotificationAllowance(token.userId))) {
-      return c.json({ error: "Monthly notification limit reached" }, 429);
     }
 
     let targets = await db
@@ -953,9 +943,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .orderBy(desc(device.lastSeenAt));
     if (parsed.data.deviceIds && targets.length !== parsed.data.deviceIds.length) {
       return c.json({ error: "Invalid device selection" }, 400);
-    }
-    if (!parsed.data.deviceIds && billing.limits.devices !== null) {
-      targets = targets.slice(0, billing.limits.devices);
     }
     targets = targets.filter(
       (target) =>
@@ -1140,7 +1127,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
     trackActivityOutcome("live_activity_started", token.userId, deliveries.length, result);
-    if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>(
       {
         activity: toLiveActivityDto(row),
@@ -1201,13 +1187,10 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const limited = await enforceAgentRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
-    }
-    if (!(await checkNotificationAllowance(token.userId))) {
-      return c.json({ error: "Monthly notification limit reached" }, 429);
     }
     const now = new Date();
     const apnsTimestamp = Math.max(Math.floor(now.getTime() / 1000), current.apnsTimestamp + 1);
@@ -1324,7 +1307,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>({
       activity: toLiveActivityDto(updated ?? row),
       accepted: result.accepted,
@@ -1370,12 +1352,11 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const limited = await enforceAgentRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
     }
-    // Ending intentionally bypasses the monthly allowance so an agent can always clear Lock Screen UI.
     const now = new Date();
     const apnsTimestamp = Math.max(Math.floor(now.getTime() / 1000), current.apnsTimestamp + 1);
     const previous = liveActivityPropsSchema.parse(current.props);
@@ -1468,7 +1449,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    if (result.accepted > 0) await trackNotification(token.userId, operationId);
     return c.json<LiveActivityMutationResponse>({
       activity: toLiveActivityDto(updated ?? row),
       accepted: result.accepted,

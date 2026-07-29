@@ -4,7 +4,7 @@ import { chmod, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 
-const DEFAULT_API_URL = "https://hark.ryan.ceo";
+const DEFAULT_API_URL = "https://hark.abdeen.dev";
 const DEFAULT_SCOPES = [
   "notifications:send",
   "interactions:create",

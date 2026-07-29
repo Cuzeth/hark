@@ -6,8 +6,6 @@ import { activitiesAgentRoute, activitiesSessionRoute } from "./routes/activitie
 import { activityFeedRoute } from "./routes/activity-feed";
 import { activityHooksRoute } from "./routes/activity-hooks";
 import { apiTokensRoute } from "./routes/api-tokens";
-import { appleAuthRoute } from "./routes/apple-auth";
-import { billingRoute } from "./routes/billing";
 import { deviceAuthorizationRoute } from "./routes/device-authorization";
 import { devicesRoute } from "./routes/devices";
 import { docsTextRoute } from "./routes/docs";
@@ -43,7 +41,6 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 app.get("/api/health", (c) => c.json({ ok: true }));
-app.get("/oss", (c) => c.redirect("https://github.com/R44VC0RP/hark/"));
 
 // Mounted before the static handler in index.ts so the generated markdown wins
 // over anything with the same name in dist/client.
@@ -53,7 +50,6 @@ app.on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
 app.route("/api/services", servicesRoute);
 app.route("/api/api-tokens", apiTokensRoute);
-app.route("/api/apple-auth", appleAuthRoute);
 app.route("/api/device-authorization", deviceAuthorizationRoute);
 app.route("/api/agent/activities", activitiesAgentRoute);
 app.route("/api/agent", agentRoute);
@@ -63,7 +59,6 @@ app.route("/api/interactions", interactionResponseRoute);
 app.route("/api/interaction-responses", interactionCredentialResponseRoute);
 app.route("/api/live-activity-interactions", liveActivityInteractionResponseRoute);
 app.route("/api/live-activity", liveActivityRegistrationRoute);
-app.route("/api/billing", billingRoute);
 app.route("/api/devices", devicesRoute);
 app.route("/api/events", eventsRoute);
 app.route("/hooks", activityHooksRoute);

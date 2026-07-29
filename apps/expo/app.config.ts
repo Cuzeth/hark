@@ -10,8 +10,7 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: "light",
   platforms: ["ios"],
   ios: {
-    bundleIdentifier: "ceo.ryan.hark",
-    usesAppleSignIn: true,
+    bundleIdentifier: "dev.abdeen.hark",
     icon: "./assets/icon.png",
     supportsTablet: false,
     // Communication Notifications + SiriKit. `aps-environment` is managed by
@@ -29,10 +28,8 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "./plugins/with-ios-scene-delegate",
     "expo-router",
-    "expo-apple-authentication",
     "expo-secure-store",
     "expo-notifications",
-    "expo-web-browser",
     [
       "expo-splash-screen",
       {
@@ -50,8 +47,8 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     [
       "expo-widgets",
       {
-        bundleIdentifier: "ceo.ryan.hark.widgets",
-        groupIdentifier: "group.ceo.ryan.hark",
+        bundleIdentifier: "dev.abdeen.hark.widgets",
+        groupIdentifier: "group.dev.abdeen.hark",
         enablePushNotifications: true,
         frequentUpdates: true,
       },
@@ -59,13 +56,13 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     [
       "@bacons/apple-targets",
       {
-        appleTeamId: process.env.APPLE_TEAM_ID ?? "9G68SMNHEU",
+        appleTeamId: process.env.APPLE_TEAM_ID ?? "",
       },
     ],
   ],
   extra: {
     eas: {
-      projectId: process.env.EAS_PROJECT_ID ?? "0fce08a7-f312-4b58-a907-85a648113946",
+      projectId: process.env.EAS_PROJECT_ID ?? "",
     },
   },
 });

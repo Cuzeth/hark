@@ -1,19 +1,20 @@
+import { usernameClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 
-export const authClient = createAuthClient();
+export const authClient = createAuthClient({
+  plugins: [usernameClient()],
+});
 
 export const { useSession, signOut } = authClient;
 
-export function signInWithGoogle(callbackURL = "/dashboard"): Promise<unknown> {
-  return authClient.signIn.social({
-    provider: "google",
-    callbackURL,
-  });
+export function signInWithUsername(username: string, password: string) {
+  return authClient.signIn.username({ username, password });
 }
 
-export function signInWithApple(callbackURL = "/dashboard"): Promise<unknown> {
-  return authClient.signIn.social({
-    provider: "apple",
-    callbackURL,
+export function changePassword(currentPassword: string, newPassword: string) {
+  return authClient.changePassword({
+    currentPassword,
+    newPassword,
+    revokeOtherSessions: true,
   });
 }

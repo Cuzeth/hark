@@ -83,9 +83,9 @@ describe("parseInline", () => {
       { kind: "code", text: "body" },
       { kind: "text", text: " is required." },
     ]);
-    expect(parseInline("Sign in at [hark.ryan.ceo](https://hark.ryan.ceo).")).toEqual([
+    expect(parseInline("Sign in at [hark.abdeen.dev](https://hark.abdeen.dev).")).toEqual([
       { kind: "text", text: "Sign in at " },
-      { kind: "link", text: "hark.ryan.ceo", href: "https://hark.ryan.ceo" },
+      { kind: "link", text: "hark.abdeen.dev", href: "https://hark.abdeen.dev" },
       { kind: "text", text: "." },
     ]);
   });
@@ -106,11 +106,13 @@ describe("docsMarkdown", () => {
   });
 
   it("emits fenced code with a language and pipe tables", () => {
-    expect(markdown).toContain("```bash\ncurl -X POST https://hark.ryan.ceo/hooks/whk_your_token");
+    expect(markdown).toContain(
+      "```bash\ncurl -X POST https://hark.abdeen.dev/hooks/whk_your_token",
+    );
     expect(markdown).toContain('```json\n{\n  "ok": true,');
     expect(markdown).toContain("| Field | Type | Description |");
     expect(markdown).toContain("| Route | Purpose |");
-    expect(markdown).toContain("| Limit | Free | Pro |");
+    expect(markdown).toContain("| Limit | Value |");
   });
 
   it("keeps table cells on one line", () => {
@@ -120,8 +122,8 @@ describe("docsMarkdown", () => {
     }
   });
 
-  it("flags Hark Pro sections", () => {
-    expect(markdown).toContain("**Hark Pro**");
+  it("keeps every capability ungated", () => {
+    expect(markdown).not.toContain("Hark Pro");
   });
 });
 
@@ -129,10 +131,8 @@ describe("llmsTxt", () => {
   it("describes Hark and links its canonical machine-readable resources", () => {
     const text = llmsTxt();
     expect(text.startsWith("# Hark")).toBe(true);
-    expect(text).toContain("https://hark.ryan.ceo/docs");
-    expect(text).toContain("https://hark.ryan.ceo/docs.md");
-    expect(text).toContain("https://hark.ryan.ceo/pricing");
-    expect(text).toContain("https://skills.sh/r44vc0rp/hark/hark");
-    expect(text).toContain("https://www.npmjs.com/package/harkctl");
+    expect(text).toContain("https://hark.abdeen.dev/docs");
+    expect(text).toContain("https://hark.abdeen.dev/docs.md");
+    expect(text).toContain("https://github.com/Cuzeth/hark");
   });
 });

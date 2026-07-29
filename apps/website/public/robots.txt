@@ -1,6 +1,2 @@
 User-agent: *
-Allow: /
-Disallow: /api/
-Disallow: /hooks/
-
-Sitemap: https://hark.ryan.ceo/sitemap.xml
+Disallow: /

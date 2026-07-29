@@ -19,7 +19,7 @@
 import type { DocItemId, DocSectionId } from "./nav";
 
 /** Placeholder webhook URL used throughout the docs samples. */
-export const EXAMPLE_ENDPOINT = "https://hark.ryan.ceo/hooks/whk_your_token";
+export const EXAMPLE_ENDPOINT = "https://hark.abdeen.dev/hooks/whk_your_token";
 
 export interface DocFieldRow {
   name: string;
@@ -35,8 +35,7 @@ export interface DocRouteRow {
 
 export interface DocPlanRow {
   limit: string;
-  free: string;
-  pro: string;
+  value: string;
 }
 
 export type DocTableBlock =
@@ -44,6 +43,7 @@ export type DocTableBlock =
   /** Same shape as `field`, headed "Flag" for CLI options. */
   | { kind: "table"; variant: "flag"; caption: string; rows: DocFieldRow[] }
   | { kind: "table"; variant: "route"; caption: string; rows: DocRouteRow[] }
+  /** Single-column limits table. */
   | { kind: "table"; variant: "plan"; caption: string; rows: DocPlanRow[] };
 
 export type DocBlock =
@@ -66,14 +66,11 @@ export interface DocStylePreview {
 
 export interface DocSubsection {
   id: DocItemId;
-  /** Marks a capability that requires a paid Hark Pro plan. */
-  pro?: true;
   blocks: DocBlock[];
 }
 
 export interface DocSection {
   id: DocSectionId;
-  pro?: true;
   /** Intro paragraph shown above the first subsection. */
   lead: string;
   subsections: DocSubsection[];
@@ -82,8 +79,8 @@ export interface DocSection {
 /** Page title, reused by the HTML `<h1>`, the prerendered `<title>`, and the markdown. */
 export const DOCS_TITLE = "Webhooks to iPhone notifications";
 export const DOCS_EYEBROW = "Documentation";
-export const DOCS_URL = "https://hark.ryan.ceo/docs";
-export const DOCS_MARKDOWN_URL = "https://hark.ryan.ceo/docs.md";
+export const DOCS_URL = "https://hark.abdeen.dev/docs";
+export const DOCS_MARKDOWN_URL = "https://hark.abdeen.dev/docs.md";
 
 export const DOC_CONTENT: DocSection[] = [
   {
@@ -109,7 +106,7 @@ export const DOC_CONTENT: DocSection[] = [
           {
             kind: "steps",
             items: [
-              "Sign in at [hark.ryan.ceo](https://hark.ryan.ceo).",
+              "Sign in at [hark.abdeen.dev](https://hark.abdeen.dev) with your admin credentials.",
               "Register your iPhone with the Hark app.",
               "Create a service in the dashboard and give it a title, avatar, and tap URL.",
               "Copy the secret webhook URL it returns.",
@@ -240,13 +237,13 @@ export const DOC_CONTENT: DocSection[] = [
               },
               {
                 name: "deviceIds",
-                type: "string[], Pro",
+                type: "string[]",
                 detail:
                   "1 to 50 device IDs from the dashboard. Omit to notify every active device.",
               },
               {
                 name: "response",
-                type: "object, Pro",
+                type: "object",
                 detail: "Turns the notification into an approval, yes/no, or text prompt.",
               },
             ],
@@ -273,15 +270,14 @@ export const DOC_CONTENT: DocSection[] = [
       },
       {
         id: "device-routing",
-        pro: true,
         blocks: [
           {
             kind: "p",
-            text: "By default a request fans out to every active iOS device on the account, most recently seen first. Free accounts are capped at one device, so extra phones are ignored until you upgrade.",
+            text: "By default a request fans out to every active iOS device on the account, most recently seen first.",
           },
           {
             kind: "p",
-            text: "Hark Pro can pass a non-empty `deviceIds` array to target specific iPhones. Copy the stable device IDs from the dashboard. IDs that do not belong to the account return `400 Invalid device selection`; owned but inactive or non-iOS devices in the list are skipped silently.",
+            text: "Pass a non-empty `deviceIds` array to target specific iPhones. Copy the stable device IDs from the dashboard. IDs that do not belong to the account return `400 Invalid device selection`; owned but inactive or non-iOS devices in the list are skipped silently.",
           },
           {
             kind: "code",
@@ -291,10 +287,6 @@ export const DOC_CONTENT: DocSection[] = [
   "deviceIds": ["dev_your_iphone_id"]
 }`,
           },
-          {
-            kind: "p",
-            text: "Sending `deviceIds` without device routing on your plan returns `402`.",
-          },
         ],
       },
       {
@@ -303,17 +295,17 @@ export const DOC_CONTENT: DocSection[] = [
           {
             kind: "table",
             variant: "plan",
-            caption: "Plan limits",
+            caption: "Rate limits",
             rows: [
-              { limit: "Requests per minute, per service", free: "60", pro: "300" },
-              { limit: "Requests per minute, per account", free: "300", pro: "1,500" },
-              { limit: "Notifications per month", free: "10,000", pro: "100,000" },
-              { limit: "Active devices", free: "1", pro: "Unlimited" },
+              { limit: "Requests per minute, per service", value: "300" },
+              { limit: "Requests per minute, per account", value: "1,500" },
+              { limit: "Notifications per month", value: "Unlimited" },
+              { limit: "Active devices", value: "Unlimited" },
             ],
           },
           {
             kind: "p",
-            text: "The per-minute counters use a rolling 60-second window and are shared across notifications, interactive responses, and Live Activity operations. A limited request returns `429` with a `Retry-After: 60` header and `retryAfterSeconds` in the body. Exhausting the monthly allowance also returns `429`, without a retry hint.",
+            text: "The per-minute counters use a rolling 60-second window and are shared across notifications, interactive responses, and Live Activity operations. A limited request returns `429` with a `Retry-After: 60` header and `retryAfterSeconds` in the body. Both defaults are configurable on the instance through the `SERVICE_RATE_LIMIT_PER_MINUTE` and `ACCOUNT_RATE_LIMIT_PER_MINUTE` environment variables.",
           },
         ],
       },
@@ -337,10 +329,9 @@ export const DOC_CONTENT: DocSection[] = [
               { name: "200", type: "ok", detail: "Accepted, or an idempotent replay." },
               { name: "202", type: "ok", detail: "An identical request is still processing." },
               { name: "400", type: "error", detail: "Invalid payload, key, or device selection." },
-              { name: "402", type: "error", detail: "The payload uses a Hark Pro feature." },
               { name: "404", type: "error", detail: "Unknown webhook token." },
               { name: "409", type: "error", detail: "Idempotency key reused with a new payload." },
-              { name: "429", type: "error", detail: "Rate limit or monthly allowance exhausted." },
+              { name: "429", type: "error", detail: "Rate limit exhausted." },
               { name: "502", type: "error", detail: "Every push target was rejected by Expo." },
             ],
           },
@@ -352,11 +343,10 @@ export const DOC_CONTENT: DocSection[] = [
       },
       {
         id: "interactive-responses",
-        pro: true,
         blocks: [
           {
             kind: "p",
-            text: "Hark Pro can attach a fixed response type to any notification. Supported types are `approval` (Approve or Deny), `yes_no` (Yes or No), and `text` (a short free-form reply).",
+            text: "Attach a fixed response type to any notification. Supported types are `approval` (Approve or Deny), `yes_no` (Yes or No), and `text` (a short free-form reply).",
           },
           {
             kind: "code",
@@ -425,7 +415,6 @@ export const DOC_CONTENT: DocSection[] = [
       },
       {
         id: "response-status",
-        pro: true,
         blocks: [
           {
             kind: "p",
@@ -469,7 +458,6 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
       },
       {
         id: "response-callbacks",
-        pro: true,
         blocks: [
           {
             kind: "p",
@@ -507,7 +495,6 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
   },
   {
     id: "activity-api",
-    pro: true,
     lead: "A Live Activity is a stateful card on the Lock Screen and in the Dynamic Island. Start one, push partial updates as work progresses, then end it. Same webhook token, nested routes.",
     subsections: [
       {
@@ -678,7 +665,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
               },
               {
                 name: "deviceIds",
-                type: "string[], Pro",
+                type: "string[]",
                 detail: "1 to 50 device IDs. Omit to target every capable device.",
               },
             ],
@@ -758,7 +745,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
-            text: "`replace` also displaces activities started by your other services or API tokens, so a stale card from another integration cannot deadlock a device, though a foreign `activityId` is never disclosed. When the start carries a `key`, your live activity holding that key is ended everywhere — even on devices the start does not target — so the key always transfers to the new run. The implicit ends are not billed against your notification allowance. Combined with reusable keys this makes `key` plus `replace: true` a fixed-key restart you can send on every run.",
+            text: "`replace` also displaces activities started by your other services or API tokens, so a stale card from another integration cannot deadlock a device, though a foreign `activityId` is never disclosed. When the start carries a `key`, your live activity holding that key is ended everywhere — even on devices the start does not target — so the key always transfers to the new run. Combined with reusable keys this makes `key` plus `replace: true` a fixed-key restart you can send on every run.",
           },
         ],
       },
@@ -771,7 +758,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
-            text: "Live Activity operations count against the same per-minute and monthly limits as notifications, so a chatty progress loop consumes the same budget. Throttle to meaningful state changes.",
+            text: "Live Activity operations count against the same per-minute limits as notifications, so a chatty progress loop consumes the same budget. Throttle to meaningful state changes.",
           },
           {
             kind: "note",
@@ -800,7 +787,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           {
             kind: "steps",
             items: [
-              "The CLI prints a short code and opens [hark.ryan.ceo](https://hark.ryan.ceo) in your browser.",
+              "The CLI prints a short code and opens [hark.abdeen.dev](https://hark.abdeen.dev) in your browser.",
               "Sign in and approve the requested scopes; every scope is shown before you approve.",
               "Credentials are written to an OS config file with mode `0600`, and the CLI polls until the approval lands.",
             ],
@@ -839,7 +826,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
     "title": "Release bot",
     "imageUrl": "https://example.com/bot.png"
   },
-  "webhookUrl": "https://hark.ryan.ceo/hooks/hook_..."
+  "webhookUrl": "https://hark.abdeen.dev/hooks/hook_..."
 }`,
           },
           {
@@ -882,7 +869,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
               {
                 name: "--device",
                 type: "id, repeatable",
-                detail: "Target specific iPhones. Requires Hark Pro.",
+                detail: "Target specific iPhones.",
               },
               {
                 name: "--idempotency-key",
@@ -898,7 +885,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "note",
-            text: "Sends from one connection share the webhook per-minute budgets — the requester counts like a service, the account window spans everything — and the same monthly notification allowance.",
+            text: "Sends from one connection share the webhook per-minute budgets — the requester counts like a service, and the account window spans everything.",
           },
         ],
       },

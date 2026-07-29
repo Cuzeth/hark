@@ -3,24 +3,56 @@ import { resolve } from "node:path";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { app } from "./app";
-import { sqlite } from "./db";
+import { auth } from "./auth";
+import { db, sqlite } from "./db";
 import { runMigrations } from "./db/migrate";
+import { user as userTable } from "./db/schema";
 import { assertRuntimeEnv, env } from "./env";
 import { pruneAnalytics } from "./lib/analytics";
 import { startInteractionCallbackWorker } from "./lib/interaction-callbacks";
 
 assertRuntimeEnv();
 runMigrations();
+await seedAdminAccount();
 // Bounds the analytics log at startup; long-running processes prune opportunistically.
 pruneAnalytics();
 startInteractionCallbackWorker();
+
+/**
+ * Creates the single account this instance serves. Runs only while the user
+ * table is empty, so restarts never touch an existing account and the
+ * sign-up guard in auth.ts keeps refusing every other creation path.
+ */
+async function seedAdminAccount(): Promise<void> {
+  const [existing] = await db.select({ id: userTable.id }).from(userTable).limit(1);
+  if (existing) return;
+  if (!env.ADMIN_PASSWORD) {
+    console.warn(
+      "[auth] No account exists and ADMIN_PASSWORD is unset — nobody can sign in. Set ADMIN_PASSWORD (at least 8 characters) and restart.",
+    );
+    return;
+  }
+  try {
+    await auth.api.signUpEmail({
+      body: {
+        email: env.ADMIN_EMAIL ?? `${env.ADMIN_USERNAME}@hark.local`,
+        password: env.ADMIN_PASSWORD,
+        name: env.ADMIN_USERNAME,
+        username: env.ADMIN_USERNAME,
+      },
+    });
+    console.log(`[auth] Created the admin account "${env.ADMIN_USERNAME}".`);
+  } catch (error) {
+    console.error("[auth] Could not create the admin account", error);
+  }
+}
 
 // In production the same process serves prerendered public pages and explicit
 // noindex shells for private application routes. Unknown paths remain real 404s
 // instead of becoming indexable soft-404 copies of the home page.
 const clientDir = resolve(process.cwd(), "dist/client");
 if (existsSync(clientDir)) {
-  const documentRoutes = ["/", "/docs", "/pricing", "/privacy", "/terms", "/dashboard"];
+  const documentRoutes = ["/", "/docs", "/dashboard"];
   for (const path of documentRoutes) {
     const file = path === "/" ? "index.html" : `${path.slice(1)}/index.html`;
     if (existsSync(resolve(clientDir, file))) {

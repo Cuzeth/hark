@@ -21,7 +21,7 @@ import {
   service as serviceTable,
   user as userTable,
 } from "../db/schema";
-import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
+import { env } from "../env";
 import { newId } from "../lib/id";
 import { hashWebhookToken } from "../lib/token";
 import {
@@ -36,7 +36,6 @@ import {
 } from "./activities";
 
 type ServiceRow = typeof serviceTable.$inferSelect;
-type UserRow = typeof userTable.$inferSelect;
 type DeliveryRow = typeof liveActivityDelivery.$inferSelect;
 type DeliveryResult = { accepted: number; failed: number; errors: string[] };
 
@@ -50,16 +49,14 @@ function idempotencyKey(value: string | undefined): string | undefined | null {
   return normalized && normalized.length <= 200 ? normalized : null;
 }
 
-async function authenticate(
-  token: string,
-): Promise<{ service: ServiceRow; owner: UserRow } | null> {
+async function authenticate(token: string): Promise<ServiceRow | null> {
   const [match] = await db
-    .select({ service: serviceTable, owner: userTable })
+    .select({ service: serviceTable })
     .from(serviceTable)
     .innerJoin(userTable, eq(serviceTable.userId, userTable.id))
     .where(eq(serviceTable.tokenHash, hashWebhookToken(token)))
     .limit(1);
-  return match ?? null;
+  return match?.service ?? null;
 }
 
 async function ownedActivity(
@@ -108,8 +105,7 @@ async function operationReplay(serviceId: string, key: string | undefined, reque
   return row ? ({ conflict: false, operation, row } as const) : undefined;
 }
 
-async function enforceRateLimit(service: ServiceRow, owner: UserRow) {
-  const billing = await getBilling(owner, true);
+async function enforceRateLimit(service: ServiceRow) {
   const since = new Date(Date.now() - 60_000);
   const [
     [serviceEvents],
@@ -150,7 +146,7 @@ async function enforceRateLimit(service: ServiceRow, owner: UserRow) {
   ]);
   if (
     (serviceEvents?.value ?? 0) + (serviceActivities?.value ?? 0) >=
-    billing.limits.servicePerMinute
+    env.SERVICE_RATE_LIMIT_PER_MINUTE
   ) {
     return { error: "Service rate limit exceeded", retryAfterSeconds: 60 as const };
   }
@@ -158,7 +154,7 @@ async function enforceRateLimit(service: ServiceRow, owner: UserRow) {
     (accountEvents?.value ?? 0) +
       (accountInteractions?.value ?? 0) +
       (accountActivities?.value ?? 0) >=
-    billing.limits.accountPerMinute
+    env.ACCOUNT_RATE_LIMIT_PER_MINUTE
   ) {
     return { error: "Account rate limit exceeded", retryAfterSeconds: 60 as const };
   }
@@ -182,16 +178,8 @@ function response(row: ActivityRow, result?: DeliveryResult, extras: Record<stri
   };
 }
 
-async function eligibleDevices(
-  service: ServiceRow,
-  owner: UserRow,
-  requestedIds: string[] | undefined,
-) {
-  const billing = await getBilling(owner, true);
-  if (requestedIds && !billing.features.deviceRouting) {
-    return { error: "Device routing requires Hark Pro", status: 402 as const };
-  }
-  let targets = await db
+async function eligibleDevices(service: ServiceRow, requestedIds: string[] | undefined) {
+  const targets = await db
     .select()
     .from(device)
     .where(
@@ -206,8 +194,6 @@ async function eligibleDevices(
   if (requestedIds && targets.length !== requestedIds.length) {
     return { error: "Invalid device selection", status: 400 as const };
   }
-  if (!requestedIds && billing.limits.devices !== null)
-    targets = targets.slice(0, billing.limits.devices);
   return {
     targets: targets.filter(
       (target) =>
@@ -235,7 +221,7 @@ export const activityHooksRoute = new Hono()
   .post("/:token/live-activities", async (c) => {
     const authenticated = await authenticate(c.req.param("token"));
     if (!authenticated) return c.json({ ok: false, error: "Unknown webhook" }, 404);
-    const { service, owner } = authenticated;
+    const service = authenticated;
     const parsed = liveActivityStartSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       return c.json(
@@ -274,19 +260,12 @@ export const activityHooksRoute = new Hono()
         );
       }
     }
-    const billing = await getBilling(owner, true);
-    if (billing.plan !== "pro") {
-      return c.json({ ok: false, error: "Live Activities require Hark Pro" }, 402);
-    }
-    const limited = await enforceRateLimit(service, owner);
+    const limited = await enforceRateLimit(service);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json({ ok: false, ...limited }, 429);
     }
-    if (!(await checkNotificationAllowance(service.userId))) {
-      return c.json({ ok: false, error: "Monthly notification limit reached" }, 429);
-    }
-    const targetResult = await eligibleDevices(service, owner, parsed.data.deviceIds);
+    const targetResult = await eligibleDevices(service, parsed.data.deviceIds);
     if ("error" in targetResult) {
       return c.json({ ok: false, error: targetResult.error }, targetResult.status);
     }
@@ -477,7 +456,6 @@ export const activityHooksRoute = new Hono()
       result,
       service.id,
     );
-    if (result.accepted > 0) await trackNotification(service.userId, operationId);
     return c.json(
       response(row ?? created.row, result, {
         ...(parsed.data.replace ? { replaced } : {}),
@@ -491,14 +469,14 @@ export const activityHooksRoute = new Hono()
   .get("/:token/live-activities/:identifier", async (c) => {
     const authenticated = await authenticate(c.req.param("token"));
     if (!authenticated) return c.json({ ok: false, error: "Unknown webhook" }, 404);
-    const row = await ownedActivity(authenticated.service.id, c.req.param("identifier"));
+    const row = await ownedActivity(authenticated.id, c.req.param("identifier"));
     if (!row) return c.json({ ok: false, error: "Live Activity not found" }, 404);
     return c.json(response(row));
   })
   .patch("/:token/live-activities/:identifier", async (c) => {
     const authenticated = await authenticate(c.req.param("token"));
     if (!authenticated) return c.json({ ok: false, error: "Unknown webhook" }, 404);
-    const { service, owner } = authenticated;
+    const service = authenticated;
     const parsed = liveActivityUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       return c.json(
@@ -537,13 +515,10 @@ export const activityHooksRoute = new Hono()
     if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
       return c.json({ ...response(current), ok: false, error: "Sequence conflict" }, 409);
     }
-    const limited = await enforceRateLimit(service, owner);
+    const limited = await enforceRateLimit(service);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json({ ok: false, ...limited }, 429);
-    }
-    if (!(await checkNotificationAllowance(service.userId))) {
-      return c.json({ ok: false, error: "Monthly notification limit reached" }, 429);
     }
     const now = new Date();
     const previous = liveActivityPropsSchema.parse(current.props);
@@ -670,13 +645,12 @@ export const activityHooksRoute = new Hono()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    if (result.accepted > 0) await trackNotification(service.userId, operationId);
     return c.json(response(updated ?? row, result));
   })
   .post("/:token/live-activities/:identifier/end", async (c) => {
     const authenticated = await authenticate(c.req.param("token"));
     if (!authenticated) return c.json({ ok: false, error: "Unknown webhook" }, 404);
-    const { service, owner } = authenticated;
+    const service = authenticated;
     const parsed = liveActivityEndSchema.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) {
       return c.json(
@@ -715,7 +689,7 @@ export const activityHooksRoute = new Hono()
     if (parsed.data.ifSequence !== undefined && parsed.data.ifSequence !== current.sequence) {
       return c.json({ ...response(current), ok: false, error: "Sequence conflict" }, 409);
     }
-    const limited = await enforceRateLimit(service, owner);
+    const limited = await enforceRateLimit(service);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json({ ok: false, ...limited }, 429);
@@ -823,6 +797,5 @@ export const activityHooksRoute = new Hono()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    if (result.accepted > 0) await trackNotification(service.userId, operationId);
     return c.json(response(updated ?? row, result));
   });

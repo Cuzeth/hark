@@ -16,8 +16,6 @@ import {
 } from "./content";
 import { docLabel } from "./nav";
 
-const PRO_LINE = "**Hark Pro** — requires a paid plan.";
-
 /** Pipe tables cannot contain a raw `|` or a newline. */
 function cell(text: string): string {
   return text.replace(/\s*\n\s*/g, " ").replaceAll("|", "\\|");
@@ -51,8 +49,8 @@ function tableBlock(block: DocTableBlock): string {
       );
     case "plan":
       return table(
-        ["Limit", "Free", "Pro"],
-        block.rows.map((row) => [row.limit, row.free, row.pro]),
+        ["Limit", "Value"],
+        block.rows.map((row) => [row.limit, row.value]),
       );
   }
 }
@@ -87,12 +85,10 @@ export function docsMarkdown(): string {
 
   for (const section of DOC_CONTENT) {
     parts.push(`## ${docLabel(section.id)}`);
-    if (section.pro) parts.push(PRO_LINE);
     parts.push(section.lead);
 
     for (const subsection of section.subsections) {
       parts.push(`### ${docLabel(subsection.id)}`);
-      if (subsection.pro) parts.push(PRO_LINE);
       for (const block of subsection.blocks) parts.push(blockToMarkdown(block));
     }
   }
@@ -114,20 +110,13 @@ export function llmsTxt(): string {
 - [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API.
 - [Documentation as markdown](${DOCS_MARKDOWN_URL}): the same content as plain markdown.
 
-## Product
+## Source
 
-- [Home](https://hark.ryan.ceo/): product overview and webhook example.
-- [Pricing](https://hark.ryan.ceo/pricing): current Free and Pro capabilities.
-- [Source](https://github.com/R44VC0RP/hark): Hark website, iOS app, CLI, and agent skill.
-
-## Agent tools
-
-- [Hark agent skill](https://skills.sh/r44vc0rp/hark/hark): install Hark for compatible coding agents.
-- [harkctl](https://www.npmjs.com/package/harkctl): CLI for notifications, approvals, replies, Live Activities, and webhook services.
+- [Source](https://github.com/Cuzeth/hark): Hark website, iOS app, CLI, and agent skill.
 
 ## Notes
 
 - Every request is authenticated by the webhook token in the URL; treat it as a credential.
-- Device routing, interactive responses, and Live Activities require a paid Hark Pro plan.
+- This is a private single-user instance: every capability is available to the account.
 `;
 }

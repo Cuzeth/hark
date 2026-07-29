@@ -46,20 +46,15 @@ export interface BuildPushInput {
   resolved: ResolvedNotification;
 }
 
-const WELCOME_AVATAR_URL =
-  "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg";
+const WELCOME_AVATAR_URL = `${env.APP_URL}/favicon.png`;
 const WELCOME_MESSAGES = [
   {
-    body: "hey! my name is ryan and I made hark!",
-    url: "https://x.com/ryanvogel",
+    body: "Welcome to Hark — this iPhone is registered.",
+    url: env.APP_URL,
   },
   {
-    body: "easily send notifications via a webhook",
-    url: "https://hark.ryan.ceo",
-  },
-  {
-    body: "get started here (click me)",
-    url: "https://hark.ryan.ceo",
+    body: "Create a service in the dashboard and point any webhook at it.",
+    url: `${env.APP_URL}/dashboard`,
   },
 ] as const;
 
@@ -69,15 +64,15 @@ export function buildWelcomePushMessages(to: string): ExpoPushMessage[] {
       v: PUSH_SCHEMA_VERSION,
       eventId: `hark-welcome-${index + 1}`,
       serviceId: "hark-welcome",
-      sourceId: "ryan",
-      sourceName: "Ryan",
+      sourceId: "hark",
+      sourceName: "Hark",
       avatarUrl: WELCOME_AVATAR_URL,
       url: message.url,
-      conversationId: "hark-welcome-ryan",
+      conversationId: "hark-welcome",
     };
     return {
       to,
-      title: "Ryan",
+      title: "Hark",
       body: message.body,
       priority: "high",
       mutableContent: true,

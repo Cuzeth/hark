@@ -2,11 +2,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
+process.env.SERVICE_RATE_LIMIT_PER_MINUTE = "20";
+process.env.ACCOUNT_RATE_LIMIT_PER_MINUTE = "1000";
+
+const REQUESTER_RATE_LIMIT = 20;
 
 const authState = vi.hoisted(() => ({ userId: "activity_user_1" as string | null }));
 const apnsCalls = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const apnsState = vi.hoisted(() => ({ rejectEvent: null as string | null }));
-const billingState = vi.hoisted(() => ({ pro: true, serviceRate: 1000, accountRate: 1000 }));
 
 vi.mock("../auth", () => ({
   auth: {
@@ -25,24 +28,6 @@ vi.mock("../auth", () => ({
           : null,
     },
   },
-}));
-
-vi.mock("../lib/billing", () => ({
-  getBilling: async () => ({
-    plan: billingState.pro ? "pro" : "free",
-    features: { deviceRouting: billingState.pro },
-    limits: {
-      devices: billingState.pro ? null : 1,
-      servicePerMinute: billingState.serviceRate,
-      accountPerMinute: billingState.accountRate,
-    },
-  }),
-  checkNotificationAllowance: async () => true,
-  trackNotification: async () => undefined,
-  hasAutumn: () => false,
-  clearBillingCache: () => undefined,
-  createCheckout: async () => "https://example.test",
-  createBillingPortal: async () => "https://example.test",
 }));
 
 vi.mock("../lib/apns", () => ({
@@ -174,9 +159,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   authState.userId = "activity_user_1";
-  billingState.pro = true;
-  billingState.serviceRate = 1000;
-  billingState.accountRate = 1000;
   apnsCalls.length = 0;
   apnsState.rejectEvent = null;
   await db.delete(schema.liveActivity);
@@ -309,21 +291,16 @@ describe("Live Activity agent routes", () => {
     );
   });
 
-  it("applies Free device caps and makes targeted routing Pro-only", async () => {
-    billingState.pro = false;
-    expect(await (await start({ title: "Free", status: "Start" })).json()).toMatchObject({
-      accepted: 1,
-    });
-    expect(apnsCalls).toHaveLength(1);
+  it("routes to the requested devices and rejects foreign ones", async () => {
     const targeted = await start({
-      title: "Free",
+      title: "Targeted",
       status: "Start",
       deviceIds: ["activity_dev_2"],
     });
-    expect(targeted.status).toBe(402);
-    billingState.pro = true;
+    expect(await targeted.json()).toMatchObject({ accepted: 1 });
+    expect(apnsCalls).toHaveLength(1);
     const foreign = await start({
-      title: "Pro",
+      title: "Foreign",
       status: "Start",
       deviceIds: ["activity_dev_foreign"],
     });
@@ -331,8 +308,19 @@ describe("Live Activity agent routes", () => {
   });
 
   it("enforces requester rate limits", async () => {
-    billingState.serviceRate = 0;
+    const now = new Date();
+    await db.insert(schema.agentNotification).values(
+      Array.from({ length: REQUESTER_RATE_LIMIT }, (_, index) => ({
+        id: `activity_rate_${index}`,
+        userId: "activity_user_1",
+        requesterTokenId: "activity_tok_write",
+        title: "Rate",
+        body: "Rate",
+        createdAt: now,
+      })),
+    );
     const response = await start();
+    await db.delete(schema.agentNotification);
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("60");
     expect(await response.json()).toMatchObject({ error: "Requester rate limit exceeded" });

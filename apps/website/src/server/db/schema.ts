@@ -11,6 +11,10 @@ export const user = sqliteTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
   image: text("image"),
+  /** Normalized sign-in handle owned by the Better Auth username plugin. */
+  username: text("username").unique(),
+  /** The handle as typed, preserved for display. */
+  displayUsername: text("display_username"),
   welcomeNotificationSentAt: integer("welcome_notification_sent_at", { mode: "timestamp_ms" }),
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
@@ -55,29 +59,6 @@ export const verification = sqliteTable("verification", {
   createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
 });
-
-/** Native Apple grants are separate from Better Auth accounts so refresh tokens stay encrypted. */
-export const appleNativeGrant = sqliteTable(
-  "apple_native_grant",
-  {
-    id: text("id").primaryKey(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    appleSubject: text("apple_subject").notNull(),
-    clientId: text("client_id").notNull(),
-    refreshTokenCiphertext: text("refresh_token_ciphertext").notNull(),
-    /** Domain-separated digest of Apple's single-use authorization code. */
-    authorizationCodeHash: text("authorization_code_hash").notNull(),
-    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
-    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
-  },
-  (table) => [
-    uniqueIndex("apple_native_grant_user_unique").on(table.userId),
-    uniqueIndex("apple_native_grant_code_hash_unique").on(table.authorizationCodeHash),
-    index("apple_native_grant_subject_idx").on(table.appleSubject),
-  ],
-);
 
 // ---------------------------------------------------------------------------
 // Hark domain tables
@@ -498,7 +479,7 @@ export const analyticsEvent = sqliteTable(
     userId: text("user_id"),
     serviceId: text("service_id"),
     deviceId: text("device_id"),
-    /** Billing plan observed when the event happened: `free` or `pro`. */
+    /** Legacy plan column. Retained for historical rows and never written. */
     plan: text("plan"),
     /** Coarse outcome bucket, e.g. `accepted`, `no_devices`, `push_rejected`. */
     outcome: text("outcome"),

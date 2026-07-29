@@ -2,34 +2,10 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
+process.env.SERVICE_RATE_LIMIT_PER_MINUTE = "60";
+process.env.ACCOUNT_RATE_LIMIT_PER_MINUTE = "100";
 
 const sent: Array<Record<string, unknown>> = [];
-const billingTestState = vi.hoisted(() => ({
-  pro: false,
-  accountPerMinute: null as number | null,
-}));
-
-vi.mock("../lib/billing", () => ({
-  getBilling: async () => ({
-    configured: true,
-    plan: billingTestState.pro ? "pro" : "free",
-    priceMonthly: 8,
-    features: { deviceRouting: billingTestState.pro },
-    limits: {
-      devices: billingTestState.pro ? null : 1,
-      notificationsPerMonth: billingTestState.pro ? 100_000 : 10_000,
-      servicePerMinute: billingTestState.pro ? 300 : 60,
-      accountPerMinute: billingTestState.accountPerMinute ?? (billingTestState.pro ? 1500 : 300),
-    },
-    usage: { notificationsRemaining: 10_000 },
-  }),
-  checkNotificationAllowance: async () => true,
-  trackNotification: async () => undefined,
-  hasAutumn: () => false,
-  clearBillingCache: () => undefined,
-  createCheckout: async () => "https://example.com/checkout",
-  createBillingPortal: async () => "https://example.com/portal",
-}));
 
 vi.mock("expo-server-sdk", () => {
   class Expo {
@@ -162,7 +138,7 @@ describe("POST /hooks/:token", () => {
     expect(JSON.stringify(sent[0])).not.toContain("user_1");
   });
 
-  it("delivers to all active devices by default on Pro", async () => {
+  it("delivers to all active devices by default", async () => {
     const now = new Date();
     await db.insert(schema.device).values({
       id: "dev_2",
@@ -175,10 +151,8 @@ describe("POST /hooks/:token", () => {
       lastSeenAt: now,
     });
 
-    billingTestState.pro = true;
     sent.length = 0;
     const res = await post(TOKEN, { body: "Everyone" });
-    billingTestState.pro = false;
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, delivered: 2 });
@@ -188,11 +162,9 @@ describe("POST /hooks/:token", () => {
     ]);
   });
 
-  it("routes a Pro notification only to selected devices", async () => {
-    billingTestState.pro = true;
+  it("routes a notification only to selected devices", async () => {
     sent.length = 0;
     const res = await post(TOKEN, { body: "Only A", deviceIds: ["dev_1"] });
-    billingTestState.pro = false;
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, delivered: 1 });
@@ -200,8 +172,7 @@ describe("POST /hooks/:token", () => {
     expect(sent[0]?.to).toBe("ExponentPushToken[a]");
   });
 
-  it("creates and resolves a Pro approval through the webhook event", async () => {
-    billingTestState.pro = true;
+  it("creates and resolves an approval through the webhook event", async () => {
     sent.length = 0;
     const created = await post(TOKEN, {
       body: "Deploy production?",
@@ -218,7 +189,6 @@ describe("POST /hooks/:token", () => {
         },
       },
     });
-    billingTestState.pro = false;
     expect(created.status).toBe(200);
     const createdBody = (await created.json()) as { eventId: string };
     expect(createdBody).toMatchObject({
@@ -270,27 +240,13 @@ describe("POST /hooks/:token", () => {
     });
   });
 
-  it("requires Pro for webhook responses", async () => {
-    const response = await post(TOKEN, {
-      body: "Deploy?",
-      response: { type: "approval" },
-    });
-    expect(response.status).toBe(402);
-    expect(await response.json()).toMatchObject({
-      ok: false,
-      error: "Interactive responses require Hark Pro",
-    });
-  });
-
   it("records credential text responses as replied", async () => {
-    billingTestState.pro = true;
     sent.length = 0;
     const created = await post(TOKEN, {
       body: "Reply?",
       deviceIds: ["dev_1"],
       response: { type: "text" },
     });
-    billingTestState.pro = false;
     const createdBody = (await created.json()) as { eventId: string };
     const data = sent[0]?.data as { interactionId: string; responseToken: string };
     const response = await app.request(`/api/interaction-responses/${data.interactionId}/respond`, {
@@ -307,15 +263,6 @@ describe("POST /hooks/:token", () => {
     const status = await app.request(`/hooks/${TOKEN}/events/${createdBody.eventId}`);
     expect(await status.json()).toMatchObject({
       event: { response: { status: "replied", action: "reply", text: "Build 11 works" } },
-    });
-  });
-
-  it("requires Pro for targeted device routing", async () => {
-    const res = await post(TOKEN, { body: "Only A", deviceIds: ["dev_1"] });
-    expect(res.status).toBe(402);
-    expect(await res.json()).toMatchObject({
-      ok: false,
-      error: "Device routing requires Hark Pro",
     });
   });
 
@@ -339,10 +286,8 @@ describe("POST /hooks/:token", () => {
       lastSeenAt: now,
     });
 
-    billingTestState.pro = true;
     sent.length = 0;
     const res = await post(TOKEN, { body: "No leak", deviceIds: ["dev_foreign"] });
-    billingTestState.pro = false;
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ ok: false, error: "Invalid device selection" });
@@ -350,11 +295,9 @@ describe("POST /hooks/:token", () => {
   });
 
   it("treats reordered device IDs as the same idempotent request", async () => {
-    billingTestState.pro = true;
     sent.length = 0;
     const first = await post(TOKEN, { body: "Both", deviceIds: ["dev_1", "dev_2"] }, "targeted-1");
     const second = await post(TOKEN, { body: "Both", deviceIds: ["dev_2", "dev_1"] }, "targeted-1");
-    billingTestState.pro = false;
 
     expect(first.status).toBe(200);
     expect(second.status).toBe(200);
@@ -377,7 +320,8 @@ describe("POST /hooks/:token", () => {
     expect(second.status).toBe(200);
     expect(secondJson.eventId).toBe(firstJson.eventId);
     expect(secondJson.idempotent).toBe(true);
-    expect(sent).toHaveLength(1);
+    // One fan-out across both registered devices, not a second delivery.
+    expect(sent).toHaveLength(2);
   });
 
   it("rejects an idempotency key reused with a different payload", async () => {
@@ -401,9 +345,7 @@ describe("POST /hooks/:token", () => {
       lastSeenAt: now,
     });
 
-    billingTestState.pro = true;
     const res = await post(TOKEN, { body: "ping" });
-    billingTestState.pro = false;
     expect(res.status).toBe(200);
 
     const { eq } = await import("drizzle-orm");
@@ -519,23 +461,23 @@ describe("POST /hooks/:token", () => {
       scopes: ["interactions:create"],
       createdAt: now,
     });
-    await db.insert(schema.interaction).values({
-      id: "int_hook_combined_rate",
-      userId: "user_hook_combined_rate",
-      requesterTokenId: "tok_hook_combined_rate",
-      title: "Recent",
-      prompt: "Count this",
-      kind: "approval",
-      status: "pending",
-      choices: ["approve", "deny"],
-      actionDigest: "combined-rate-digest",
-      expiresAt: new Date(now.getTime() + 60_000),
-      createdAt: now,
-    });
+    await db.insert(schema.interaction).values(
+      Array.from({ length: 100 }, (_, index) => ({
+        id: `int_hook_combined_rate_${index}`,
+        userId: "user_hook_combined_rate",
+        requesterTokenId: "tok_hook_combined_rate",
+        title: "Recent",
+        prompt: "Count this",
+        kind: "approval",
+        status: "pending",
+        choices: ["approve", "deny"],
+        actionDigest: `combined-rate-digest-${index}`,
+        expiresAt: new Date(now.getTime() + 60_000),
+        createdAt: now,
+      })),
+    );
 
-    billingTestState.accountPerMinute = 1;
     const response = await post(combinedToken, { body: "one too many" });
-    billingTestState.accountPerMinute = null;
     expect(response.status).toBe(429);
     expect(await response.json()).toMatchObject({ error: "Account rate limit exceeded" });
   });

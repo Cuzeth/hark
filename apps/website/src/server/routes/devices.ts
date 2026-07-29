@@ -11,7 +11,6 @@ import { Hono } from "hono";
 import { db } from "../db";
 import { device, liveActivity, liveActivityDelivery, user as userTable } from "../db/schema";
 import { track } from "../lib/analytics";
-import { getBilling } from "../lib/billing";
 import { newId } from "../lib/id";
 import { buildWelcomePushMessages, sendPushMessages } from "../lib/push";
 import { encryptLiveActivityToken } from "../lib/token";
@@ -189,26 +188,11 @@ export const devicesRoute = new Hono<AuthedEnv>()
     if (!parsed.success) {
       return c.json({ error: "Invalid device registration", issues: parsed.error.issues }, 400);
     }
-    const [existing, activeDevices, billing] = await Promise.all([
-      db
-        .select({ id: device.id, userId: device.userId, active: device.active })
-        .from(device)
-        .where(eq(device.expoPushToken, parsed.data.expoPushToken))
-        .limit(1),
-      db
-        .select({ id: device.id })
-        .from(device)
-        .where(and(eq(device.userId, user.id), eq(device.active, true))),
-      getBilling(user),
-    ]);
-    const isAlreadyActiveForUser = existing[0]?.userId === user.id && existing[0].active;
-    if (
-      !isAlreadyActiveForUser &&
-      billing.limits.devices !== null &&
-      activeDevices.length >= billing.limits.devices
-    ) {
-      return c.json({ error: "This account has reached its active device limit." }, 402);
-    }
+    const existing = await db
+      .select({ id: device.id, userId: device.userId, active: device.active })
+      .from(device)
+      .where(eq(device.expoPushToken, parsed.data.expoPushToken))
+      .limit(1);
     const now = new Date();
     const registration = db.transaction((tx) => {
       const previous = tx
@@ -287,7 +271,6 @@ export const devicesRoute = new Hono<AuthedEnv>()
       name: "device_registered",
       userId: user.id,
       deviceId: row.id,
-      plan: billing.plan,
       outcome: existing[0] ? "reregistered" : "created",
     });
     let responseRow = row;
@@ -307,7 +290,6 @@ export const devicesRoute = new Hono<AuthedEnv>()
             name: "device_deactivated_stale",
             userId: user.id,
             deviceId: row.id,
-            plan: billing.plan,
             outcome: "onboarding",
             value: 1,
           });
@@ -319,7 +301,6 @@ export const devicesRoute = new Hono<AuthedEnv>()
         name: "onboarding_welcome_sent",
         userId: user.id,
         deviceId: row.id,
-        plan: billing.plan,
         outcome: sentWelcome === messages.length ? "complete" : "partial",
         value: sentWelcome,
       });

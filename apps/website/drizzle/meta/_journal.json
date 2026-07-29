@@ -127,6 +127,13 @@
       "when": 1785248570248,
       "tag": "0017_outstanding_mandroid",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1785348076058,
+      "tag": "0018_lowly_wild_pack",
+      "breakpoints": true
     }
   ]
 }

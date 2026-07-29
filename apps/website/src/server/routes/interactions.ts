@@ -27,8 +27,8 @@ import {
   service,
   user as userTable,
 } from "../db/schema";
+import { env } from "../env";
 import { failureBucket, track } from "../lib/analytics";
-import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import { deliverInteractionCallbacks } from "../lib/interaction-callbacks";
 import { verifyLiveActivityInteractionCredential } from "../lib/live-activity-interaction";
@@ -326,10 +326,6 @@ export const agentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const billing = await getBilling(owner, true);
-    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
-      return c.json({ error: "Device routing requires Hark Pro" }, 402);
-    }
 
     let selectedDevices: (typeof device.$inferSelect)[];
     if (parsed.data.deviceIds) {
@@ -349,18 +345,12 @@ export const agentRoute = new Hono<AgentEnv>()
           and(eq(device.userId, token.userId), eq(device.active, true), eq(device.platform, "ios")),
         )
         .orderBy(desc(device.lastSeenAt));
-      if (billing.limits.devices !== null) {
-        selectedDevices = selectedDevices.slice(0, billing.limits.devices);
-      }
     }
 
-    const limited = await enforceAgentRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
-    }
-    if (!(await checkNotificationAllowance(token.userId))) {
-      return c.json({ error: "Monthly notification limit reached" }, 429);
     }
 
     const notificationId = newId("anot");
@@ -396,7 +386,6 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "agent_notification_created",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "no_devices",
       });
       return c.json(
@@ -436,7 +425,6 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "device_deactivated_stale",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "agent_notification",
         value: result.staleTokens.length,
       });
@@ -444,7 +432,6 @@ export const agentRoute = new Hono<AgentEnv>()
     track({
       name: "agent_notification_created",
       userId: token.userId,
-      plan: billing.plan,
       outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
       value: result.accepted,
       metadata: { targets: messages.length },
@@ -453,11 +440,9 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "notification_sent",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "agent_notification",
         value: result.accepted,
       });
-      await trackNotification(token.userId, notificationId);
     }
     await db
       .update(agentNotification)
@@ -520,10 +505,6 @@ export const agentRoute = new Hono<AgentEnv>()
       .where(eq(userTable.id, token.userId))
       .limit(1);
     if (!owner) return c.json({ error: "Account not found" }, 404);
-    const billing = await getBilling(owner, true);
-    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
-      return c.json({ error: "Device routing requires Hark Pro" }, 402);
-    }
 
     let selectedDevices: (typeof device.$inferSelect)[];
     if (parsed.data.deviceIds) {
@@ -543,9 +524,6 @@ export const agentRoute = new Hono<AgentEnv>()
           and(eq(device.userId, token.userId), eq(device.active, true), eq(device.platform, "ios")),
         )
         .orderBy(desc(device.lastSeenAt));
-      if (billing.limits.devices !== null) {
-        selectedDevices = selectedDevices.slice(0, billing.limits.devices);
-      }
     }
 
     const since = new Date(Date.now() - 60_000);
@@ -594,25 +572,22 @@ export const agentRoute = new Hono<AgentEnv>()
     ]);
     if (
       (requesterUsage?.value ?? 0) + (requesterActivityUsage?.value ?? 0) >=
-      billing.limits.servicePerMinute
+      env.SERVICE_RATE_LIMIT_PER_MINUTE
     ) {
       c.header("Retry-After", "60");
       return c.json({ error: "Requester rate limit exceeded", retryAfterSeconds: 60 }, 429);
     }
     if (
       (webhookUsage?.value ?? 0) + (interactionUsage?.value ?? 0) + (activityUsage?.value ?? 0) >=
-      billing.limits.accountPerMinute
+      env.ACCOUNT_RATE_LIMIT_PER_MINUTE
     ) {
       c.header("Retry-After", "60");
       return c.json({ error: "Account rate limit exceeded", retryAfterSeconds: 60 }, 429);
     }
-    const limited = await enforceAgentRateLimit(token, owner);
+    const limited = await enforceAgentRateLimit(token);
     if (limited) {
       c.header("Retry-After", "60");
       return c.json(limited, 429);
-    }
-    if (!(await checkNotificationAllowance(token.userId))) {
-      return c.json({ error: "Monthly notification limit reached" }, 429);
     }
 
     const now = new Date();
@@ -696,7 +671,6 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "interaction_created",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "no_devices",
         metadata: { kind: parsed.data.kind },
       });
@@ -720,7 +694,6 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "interaction_created",
         userId: token.userId,
-        plan: billing.plan,
         outcome: liveResult.accepted > 0 ? "accepted" : failureBucket(liveResult.errors[0]),
         value: liveResult.accepted,
         metadata: { kind: parsed.data.kind, presentation: "live_activity" },
@@ -729,11 +702,9 @@ export const agentRoute = new Hono<AgentEnv>()
         track({
           name: "notification_sent",
           userId: token.userId,
-          plan: billing.plan,
           outcome: "interaction_live_activity",
           value: liveResult.accepted,
         });
-        await trackNotification(token.userId, row.id);
       }
       return c.json(
         {
@@ -766,7 +737,6 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "device_deactivated_stale",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "interaction",
         value: result.staleTokens.length,
       });
@@ -780,7 +750,6 @@ export const agentRoute = new Hono<AgentEnv>()
     track({
       name: "interaction_created",
       userId: token.userId,
-      plan: billing.plan,
       outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
       value: result.accepted,
       metadata: { kind: parsed.data.kind, targets: messages.length },
@@ -789,11 +758,9 @@ export const agentRoute = new Hono<AgentEnv>()
       track({
         name: "notification_sent",
         userId: token.userId,
-        plan: billing.plan,
         outcome: "interaction",
         value: result.accepted,
       });
-      await trackNotification(token.userId, row.id);
     }
     return c.json(
       {

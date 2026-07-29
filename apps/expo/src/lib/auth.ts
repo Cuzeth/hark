@@ -1,5 +1,6 @@
 import { expoClient } from "@better-auth/expo/client";
 import type { BetterAuthClientPlugin } from "better-auth";
+import { usernameClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import * as SecureStore from "expo-secure-store";
 
@@ -20,7 +21,7 @@ const expoPlugin = expoClient({
 
 export const authClient = createAuthClient({
   baseURL: API_URL,
-  plugins: [expoPlugin],
+  plugins: [expoPlugin, usernameClient()],
 });
 
 /** Session cookie header value managed by the Better Auth Expo plugin. */

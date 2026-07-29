@@ -1,10 +1,9 @@
 import type { DeviceAuthorizationRequestDto } from "@hark/contracts";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { AppleButton } from "../components/AppleButton";
-import { GoogleButton } from "../components/GoogleButton";
+import { SignInForm } from "../components/SignInForm";
 import { api } from "../lib/api";
-import { signInWithApple, signInWithGoogle, useSession } from "../lib/auth";
+import { useSession } from "../lib/auth";
 
 export function CliAuthorize() {
   const initialCode = new URLSearchParams(window.location.search).get("code") ?? "";
@@ -62,8 +61,6 @@ export function CliAuthorize() {
     }
   };
 
-  const callbackURL = `/cli/authorize?code=${encodeURIComponent(submittedCode || code.trim())}`;
-
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="mx-auto flex h-20 w-full max-w-3xl items-center justify-between px-6">
@@ -116,10 +113,7 @@ export function CliAuthorize() {
                 Sign in to choose whether this client may access your Hark account. Signing in does
                 not authorize it.
               </p>
-              <div className="flex flex-wrap gap-3">
-                <AppleButton onClick={() => void signInWithApple(callbackURL)} />
-                <GoogleButton onClick={() => void signInWithGoogle(callbackURL)} />
-              </div>
+              <SignInForm />
             </div>
           ) : loading ? (
             <p className="mt-6 text-sm text-ink-faint">Loading authorization request…</p>

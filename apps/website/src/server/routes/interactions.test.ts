@@ -2,40 +2,16 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
+process.env.SERVICE_RATE_LIMIT_PER_MINUTE = "100";
+process.env.ACCOUNT_RATE_LIMIT_PER_MINUTE = "200";
+
+const REQUESTER_RATE_LIMIT = 100;
+const ACCOUNT_RATE_LIMIT = 200;
 
 const authState = vi.hoisted(() => ({ userId: "user_1" as string | null }));
 const sent = vi.hoisted(() => [] as Array<Record<string, unknown>>);
-const tracked = vi.hoisted(() => [] as string[]);
 const liveActivityPushes = vi.hoisted(() => [] as Array<Record<string, unknown>>);
-const billingState = vi.hoisted(() => ({
-  pro: true,
-  servicePerMinute: 10_000,
-  accountPerMinute: 10_000,
-  allowance: true,
-  acceptPush: true,
-}));
-
-vi.mock("../lib/billing", () => ({
-  getBilling: async () => ({
-    configured: true,
-    plan: billingState.pro ? "pro" : "free",
-    priceMonthly: 8,
-    features: { deviceRouting: billingState.pro },
-    limits: {
-      devices: billingState.pro ? null : 1,
-      notificationsPerMonth: billingState.pro ? 100_000 : 10_000,
-      servicePerMinute: billingState.servicePerMinute,
-      accountPerMinute: billingState.accountPerMinute,
-    },
-    usage: { notificationsRemaining: billingState.allowance ? 100 : 0 },
-  }),
-  checkNotificationAllowance: async () => billingState.allowance,
-  trackNotification: async (_userId: string, eventId: string) => tracked.push(eventId),
-  hasAutumn: () => false,
-  clearBillingCache: () => undefined,
-  createCheckout: async () => "https://example.com/checkout",
-  createBillingPortal: async () => "https://example.com/portal",
-}));
+const pushState = vi.hoisted(() => ({ acceptPush: true }));
 
 vi.mock("../auth", () => ({
   auth: {
@@ -64,7 +40,7 @@ vi.mock("expo-server-sdk", () => {
     async sendPushNotificationsAsync(messages: Array<Record<string, unknown>>) {
       sent.push(...messages);
       return messages.map(() =>
-        billingState.acceptPush
+        pushState.acceptPush
           ? { status: "ok", id: "ticket" }
           : { status: "error", message: "rejected" },
       );
@@ -87,12 +63,7 @@ vi.mock("../lib/apns", () => ({
 
 afterEach(() => {
   authState.userId = "user_1";
-  billingState.pro = true;
-  billingState.servicePerMinute = 10_000;
-  billingState.accountPerMinute = 10_000;
-  billingState.allowance = true;
-  billingState.acceptPush = true;
-  tracked.length = 0;
+  pushState.acceptPush = true;
   liveActivityPushes.length = 0;
 });
 
@@ -237,6 +208,33 @@ async function createInteraction(body: Record<string, unknown>, key?: string) {
     headers: key ? { "Idempotency-Key": key } : undefined,
     body: JSON.stringify(body),
   });
+}
+
+/** Fills a per-minute window with prior interactions so the next request trips a limit. */
+async function seedInteractions(prefix: string, tokenId: string, count: number) {
+  const now = new Date();
+  const ids = Array.from({ length: count }, (_, index) => `${prefix}_${index}`);
+  await db.insert(schema.interaction).values(
+    ids.map((id) => ({
+      id,
+      userId: "user_1",
+      requesterTokenId: tokenId,
+      title: "Seeded",
+      prompt: "Seeded",
+      kind: "approval",
+      status: "pending",
+      choices: ["approve", "deny"],
+      actionDigest: id,
+      expiresAt: new Date(now.getTime() + 60_000),
+      createdAt: now,
+    })),
+  );
+  return ids;
+}
+
+async function deleteInteractions(ids: string[]) {
+  const { inArray } = await import("drizzle-orm");
+  await db.delete(schema.interaction).where(inArray(schema.interaction.id, ids));
 }
 
 describe("agent token authentication", () => {
@@ -473,7 +471,6 @@ describe("interactions", () => {
       categoryId: "HARK_APPROVAL_V1",
       data: { actionDigest: expect.stringMatching(/^[a-f0-9]{64}$/) },
     });
-    expect(tracked).toHaveLength(1);
   });
 
   it("creates and resolves a device-bound interactive Live Activity", async () => {
@@ -616,65 +613,39 @@ describe("interactions", () => {
     expect([first.status, second.status].sort()).toEqual([201, 409]);
   });
 
-  it("applies free device limits and reserves targeted routing for Pro", async () => {
-    billingState.pro = false;
+  it("routes targeted interactions to the requested device", async () => {
     sent.length = 0;
-    const free = await createInteraction({ title: "Free", prompt: "One device", kind: "reply" });
-    expect(await free.json()).toMatchObject({ accepted: 1 });
-    expect(sent).toHaveLength(1);
-
-    const targetedFree = await createInteraction({
-      title: "Free",
+    const targeted = await createInteraction({
+      title: "Targeted",
       prompt: "Target device",
       kind: "reply",
       deviceIds: ["dev_2"],
     });
-    expect(targetedFree.status).toBe(402);
-
-    billingState.pro = true;
-    sent.length = 0;
-    const targetedPro = await createInteraction({
-      title: "Pro",
-      prompt: "Target device",
-      kind: "reply",
-      deviceIds: ["dev_2"],
-    });
-    expect(await targetedPro.json()).toMatchObject({ accepted: 1 });
+    expect(await targeted.json()).toMatchObject({ accepted: 1 });
     expect(sent[0]).toMatchObject({ to: "ExponentPushToken[b]" });
   });
 
-  it("enforces requester, combined account, and monthly limits before creation", async () => {
-    billingState.servicePerMinute = 0;
+  it("enforces requester and account rate limits before creation", async () => {
+    const requesterIds = await seedInteractions("rate_requester", "tok_full", REQUESTER_RATE_LIMIT);
     const requesterLimited = await createInteraction({
       title: "Limited",
       prompt: "Requester",
       kind: "approval",
     });
+    await deleteInteractions(requesterIds);
     expect(requesterLimited.status).toBe(429);
     expect(requesterLimited.headers.get("Retry-After")).toBe("60");
     expect(await requesterLimited.json()).toMatchObject({ error: "Requester rate limit exceeded" });
 
-    billingState.servicePerMinute = 10_000;
-    billingState.accountPerMinute = 0;
+    const accountIds = await seedInteractions("rate_account", "tok_other", ACCOUNT_RATE_LIMIT);
     const accountLimited = await createInteraction({
       title: "Limited",
       prompt: "Account",
       kind: "approval",
     });
+    await deleteInteractions(accountIds);
     expect(accountLimited.status).toBe(429);
     expect(await accountLimited.json()).toMatchObject({ error: "Account rate limit exceeded" });
-
-    billingState.accountPerMinute = 10_000;
-    billingState.allowance = false;
-    const monthlyLimited = await createInteraction({
-      title: "Limited",
-      prompt: "Monthly",
-      kind: "approval",
-    });
-    expect(monthlyLimited.status).toBe(429);
-    expect(await monthlyLimited.json()).toMatchObject({
-      error: "Monthly notification limit reached",
-    });
   });
 
   it("counts webhook events toward the interaction account rate limit", async () => {
@@ -687,44 +658,25 @@ describe("interactions", () => {
       createdAt: now,
       updatedAt: now,
     });
-    const { and, count, eq, gte } = await import("drizzle-orm");
-    const [recentInteractions] = await db
-      .select({ value: count() })
-      .from(schema.interaction)
-      .where(
-        and(
-          eq(schema.interaction.userId, "user_1"),
-          gte(schema.interaction.createdAt, new Date(Date.now() - 60_000)),
-        ),
-      );
-    await db.insert(schema.event).values({
-      id: "evt_interaction_rate",
-      serviceId: "svc_interaction_rate",
-      title: "Rate",
-      body: "Count me",
-      status: "accepted",
-      createdAt: now,
-    });
-    billingState.accountPerMinute = (recentInteractions?.value ?? 0) + 1;
+    await db.insert(schema.event).values(
+      Array.from({ length: ACCOUNT_RATE_LIMIT }, (_, index) => ({
+        id: `evt_interaction_rate_${index}`,
+        serviceId: "svc_interaction_rate",
+        title: "Rate",
+        body: "Count me",
+        status: "accepted",
+        createdAt: now,
+      })),
+    );
     const response = await createInteraction({
       title: "Limited",
       prompt: "Combined usage",
       kind: "approval",
     });
+    const { eq } = await import("drizzle-orm");
+    await db.delete(schema.event).where(eq(schema.event.serviceId, "svc_interaction_rate"));
     expect(response.status).toBe(429);
     expect(await response.json()).toMatchObject({ error: "Account rate limit exceeded" });
-  });
-
-  it("tracks monthly usage once only when at least one push is accepted", async () => {
-    const accepted = await createInteraction({ title: "Track", prompt: "Accepted", kind: "reply" });
-    expect(accepted.status).toBe(201);
-    expect(tracked).toHaveLength(1);
-
-    tracked.length = 0;
-    billingState.acceptPush = false;
-    const rejected = await createInteraction({ title: "Track", prompt: "Rejected", kind: "reply" });
-    expect(await rejected.json()).toMatchObject({ accepted: 0 });
-    expect(tracked).toHaveLength(0);
   });
 
   it("does not expose interactions to a different token and rejects foreign devices", async () => {
@@ -1002,7 +954,6 @@ describe("agent notifications", () => {
         url: "https://example.com/runs/1",
       },
     });
-    expect(tracked).toHaveLength(1);
   });
 
   it("defaults the title to Hark and requires the notifications:send scope", async () => {
@@ -1014,28 +965,11 @@ describe("agent notifications", () => {
     expect(await scoped.json()).toMatchObject({ error: "Insufficient scope" });
   });
 
-  it("reserves device routing for Pro and caps free delivery at one device", async () => {
-    billingState.pro = false;
-    const targeted = await createNotification({ body: "Routed", deviceIds: ["dev_1"] });
-    expect(targeted.status).toBe(402);
-
-    sent.length = 0;
-    const capped = await createNotification({ body: "Capped" });
-    expect(await capped.json()).toMatchObject({ accepted: 1 });
-    expect(sent).toHaveLength(1);
-
-    billingState.pro = true;
+  it("routes notifications to the requested device", async () => {
     sent.length = 0;
     const routed = await createNotification({ body: "Routed", deviceIds: ["dev_2"] });
     expect(await routed.json()).toMatchObject({ accepted: 1 });
     expect(sent[0]).toMatchObject({ to: "ExponentPushToken[b]" });
-  });
-
-  it("returns 429 when the monthly notification allowance is exhausted", async () => {
-    billingState.allowance = false;
-    const response = await createNotification({ body: "Over quota" });
-    expect(response.status).toBe(429);
-    expect(await response.json()).toMatchObject({ error: "Monthly notification limit reached" });
   });
 
   it("threads notifications per sender name and enforces the shared per-minute budget", async () => {
@@ -1068,24 +1002,15 @@ describe("agent notifications", () => {
       conversationId,
     );
 
-    billingState.servicePerMinute = 3;
+    const seeded = await seedInteractions("budget_requester", "tok_full", REQUESTER_RATE_LIMIT);
     const limited = await createNotification({ body: "Four" });
+    await deleteInteractions(seeded);
     expect(limited.status).toBe(429);
     expect(limited.headers.get("Retry-After")).toBe("60");
     expect(await limited.json()).toMatchObject({
       error: "Requester rate limit exceeded",
       retryAfterSeconds: 60,
     });
-
-    billingState.servicePerMinute = 10_000;
-    billingState.accountPerMinute = 3;
-    const accountLimited = await createInteraction({
-      title: "Ship it",
-      prompt: "Ship it?",
-      kind: "approval",
-    });
-    expect(accountLimited.status).toBe(429);
-    expect(await accountLimited.json()).toMatchObject({ error: "Account rate limit exceeded" });
   });
 
   it("creates yes/no prompts with the matching choices and push kind", async () => {
@@ -1125,14 +1050,13 @@ describe("agent notifications", () => {
     });
   });
 
-  it("reports accepted 0 with a message and skips usage tracking when Expo rejects", async () => {
-    billingState.acceptPush = false;
+  it("reports accepted 0 with a message when Expo rejects", async () => {
+    pushState.acceptPush = false;
     const response = await createNotification({ body: "Rejected" });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
       accepted: 0,
       message: "No notifications were accepted by Expo.",
     });
-    expect(tracked).toHaveLength(0);
   });
 });

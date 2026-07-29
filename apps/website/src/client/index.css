@@ -249,12 +249,6 @@ address {
   animation: hark-panel-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
-.hark-plan-panel {
-  width: min(100%, 42rem);
-  max-height: calc(100dvh - 2rem);
-  overflow-y: auto;
-}
-
 .hark-modal-dismiss {
   position: absolute;
   inset: 0;
@@ -317,19 +311,5 @@ address {
   .hark-modal-backdrop.is-closing,
   .hark-modal-backdrop.is-closing .hark-modal-panel {
     animation-duration: 0.01ms;
-  }
-}
-
-/* Liquid-glass surfaces fall back to a solid panel when the user asks for
-   less transparency. This file is imported after Tailwind, so these rules win
-   over the utility classes; LiquidGlassLayer separately skips its inline
-   refraction filter under the same media query. */
-@media (prefers-reduced-transparency: reduce) {
-  .hark-liquid-glass {
-    background: var(--color-surface);
-  }
-  .hark-liquid-glass-effect {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
 }

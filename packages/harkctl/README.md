@@ -14,10 +14,16 @@ harkctl
 └─ services     create · list
 ```
 
+`harkctl` is not published to npm. Install it globally from a checkout of this repo:
+
+```sh
+npm install -g ./packages/harkctl
+```
+
 Start a browser authorization flow and approve the requested scopes with your signed-in Hark account:
 
 ```sh
-npx harkctl auth login
+harkctl auth login
 harkctl auth status
 harkctl notify "Deploy finished ✅" --title "Deploy bot" --image https://example.com/bot.png \
   --url https://example.com/runs/1
@@ -46,7 +52,7 @@ keeps stdout to one machine-readable object while browser instructions remain on
 
 `harkctl notify <body>` sends a one-shot push to your registered iPhones. `--title` sets the sender
 name (defaults to “Hark”), `--image` sets the avatar shown with the notification, `--url` is opened
-when the notification is tapped, and repeatable `--device` routes to specific device IDs (Hark Pro).
+when the notification is tapped, and repeatable `--device` routes to specific device IDs.
 Use `--idempotency-key` for safe retries and `--stdin` to merge a JSON payload from stdin under any
 explicit flags. The command exits `7` when no push was accepted.
 
@@ -101,12 +107,11 @@ inspect state, `--idempotency-key` for retries, and `--if-sequence` to reject st
 is a number from 0 to 1. `--accent-color` accepts `#RRGGBB`. `--style` on `activity start` and
 `activity update` picks the widget layout: `standard` (default), `ring`, `hero`, `terminal`, or
 `steps`; app builds that predate a style render the standard layout until updated. Activities default to an eight-hour
-expiry and become stale after four hours without an update. Repeated `--device` targeting requires
-Hark Pro, and Hark permits one active task activity per device; pass `--replace` on `activity start`
-to silently end whatever task occupies the device and take the slot (the response reports the count
-as `replaced`). Interactive approval activities may coexist with that task. A `--key` becomes
-reusable once its activity ends, so `activity start --key deploy --replace` works as a fixed-key
-restart.
+expiry and become stale after four hours without an update. Hark permits one active task activity
+per device; pass `--replace` on `activity start` to silently end whatever task occupies the device
+and take the slot (the response reports the count as `replaced`). Interactive approval activities
+may coexist with that task. A `--key` becomes reusable once its activity ends, so
+`activity start --key deploy --replace` works as a fixed-key restart.
 
 ## Configuration
 
@@ -118,8 +123,9 @@ with mode `0600`:
 - Linux: `${XDG_CONFIG_HOME:-~/.config}/hark/config.json`
 - Windows: `%APPDATA%\hark\config.json`
 
-Use `HARK_API_URL` for a self-hosted API. Tokens are never accepted on the command line or printed to
-stdout. All successful command output is one stable JSON object; diagnostics use stderr.
+Requests go to `https://hark.abdeen.dev` by default; set `HARK_API_URL` to point at another Hark
+instance. Tokens are never accepted on the command line or printed to stdout. All successful command
+output is one stable JSON object; diagnostics use stderr.
 
 Exit codes: `0` success/approved/yes/replied, `1` API error, `2` usage error, `3` authentication or
 scope error, `4` timeout/canceled/expired, `5` denied/no, `6` network error, `7` no push accepted.

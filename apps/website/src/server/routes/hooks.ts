@@ -12,8 +12,8 @@ import {
   service as serviceTable,
   user as userTable,
 } from "../db/schema";
+import { env } from "../env";
 import { failureBucket, track } from "../lib/analytics";
-import { checkNotificationAllowance, getBilling, trackNotification } from "../lib/billing";
 import { newId } from "../lib/id";
 import {
   buildInteractionPushMessages,
@@ -77,7 +77,7 @@ export const hooksRoute = new Hono()
   .post("/:token", async (c) => {
     const token = c.req.param("token");
     const [match] = await db
-      .select({ service: serviceTable, owner: userTable })
+      .select({ service: serviceTable })
       .from(serviceTable)
       .innerJoin(userTable, eq(serviceTable.userId, userTable.id))
       .where(eq(serviceTable.tokenHash, hashWebhookToken(token)))
@@ -86,7 +86,6 @@ export const hooksRoute = new Hono()
       return c.json<WebhookResponse>({ ok: false, error: "Unknown webhook" }, 404);
     }
     const svc = match.service;
-    const owner = match.owner;
 
     const json = await c.req.json().catch(() => null);
     const parsed = webhookRequestSchema.safeParse(json);
@@ -125,22 +124,11 @@ export const hooksRoute = new Hono()
       }
     }
 
-    const billing = await getBilling(owner, true);
     track({
       name: "webhook_received",
       userId: svc.userId,
       serviceId: svc.id,
-      plan: billing.plan,
     });
-    if (parsed.data.deviceIds && !billing.features.deviceRouting) {
-      return c.json<WebhookResponse>({ ok: false, error: "Device routing requires Hark Pro" }, 402);
-    }
-    if (parsed.data.response && billing.plan !== "pro") {
-      return c.json<WebhookResponse>(
-        { ok: false, error: "Interactive responses require Hark Pro" },
-        402,
-      );
-    }
 
     let targetedDevices: (typeof device.$inferSelect)[] | undefined;
     if (parsed.data.deviceIds) {
@@ -181,13 +169,12 @@ export const hooksRoute = new Hono()
           ),
       ]);
 
-    if ((serviceUsage?.value ?? 0) >= billing.limits.servicePerMinute) {
+    if ((serviceUsage?.value ?? 0) >= env.SERVICE_RATE_LIMIT_PER_MINUTE) {
       c.header("Retry-After", "60");
       track({
         name: "webhook_rate_limited",
         userId: svc.userId,
         serviceId: svc.id,
-        plan: billing.plan,
         outcome: "service",
       });
       return c.json<WebhookResponse>(
@@ -199,31 +186,17 @@ export const hooksRoute = new Hono()
       (accountEventUsage?.value ?? 0) +
         (accountInteractionUsage?.value ?? 0) +
         (accountActivityUsage?.value ?? 0) >=
-      billing.limits.accountPerMinute
+      env.ACCOUNT_RATE_LIMIT_PER_MINUTE
     ) {
       c.header("Retry-After", "60");
       track({
         name: "webhook_rate_limited",
         userId: svc.userId,
         serviceId: svc.id,
-        plan: billing.plan,
         outcome: "account",
       });
       return c.json<WebhookResponse>(
         { ok: false, error: "Account rate limit exceeded", retryAfterSeconds: 60 },
-        429,
-      );
-    }
-
-    if (!(await checkNotificationAllowance(svc.userId))) {
-      track({
-        name: "webhook_quota_exceeded",
-        userId: svc.userId,
-        serviceId: svc.id,
-        plan: billing.plan,
-      });
-      return c.json<WebhookResponse>(
-        { ok: false, error: "Monthly notification limit reached" },
         429,
       );
     }
@@ -266,17 +239,13 @@ export const hooksRoute = new Hono()
     if (targetedDevices) {
       devices = targetedDevices;
     } else {
-      const activeDevices = await db
+      devices = await db
         .select()
         .from(device)
         .where(
           and(eq(device.userId, svc.userId), eq(device.active, true), eq(device.platform, "ios")),
         )
         .orderBy(desc(device.lastSeenAt));
-      devices =
-        billing.limits.devices === null
-          ? activeDevices
-          : activeDevices.slice(0, billing.limits.devices);
     }
 
     let interactionId: string | undefined;
@@ -334,7 +303,6 @@ export const hooksRoute = new Hono()
         name: "webhook_delivered",
         userId: svc.userId,
         serviceId: svc.id,
-        plan: billing.plan,
         outcome: "no_devices",
       });
       return c.json<WebhookResponse>({
@@ -382,7 +350,6 @@ export const hooksRoute = new Hono()
       track({
         name: "device_deactivated_stale",
         userId: svc.userId,
-        plan: billing.plan,
         outcome: "webhook",
         value: result.staleTokens.length,
       });
@@ -408,7 +375,6 @@ export const hooksRoute = new Hono()
         name: "webhook_failed",
         userId: svc.userId,
         serviceId: svc.id,
-        plan: billing.plan,
         outcome: failureBucket(result.errors[0]),
         metadata: { targets: messages.length },
       });
@@ -421,7 +387,6 @@ export const hooksRoute = new Hono()
       name: "webhook_delivered",
       userId: svc.userId,
       serviceId: svc.id,
-      plan: billing.plan,
       outcome: status,
       value: result.accepted,
       metadata: { targets: messages.length },
@@ -430,12 +395,9 @@ export const hooksRoute = new Hono()
       name: "notification_sent",
       userId: svc.userId,
       serviceId: svc.id,
-      plan: billing.plan,
       outcome: "webhook",
       value: result.accepted,
     });
-
-    await trackNotification(svc.userId, eventId);
 
     return c.json<WebhookResponse>({
       ok: true,

@@ -23,8 +23,7 @@ Commands:
   services [--limit 20]       Busiest services by webhook volume
   devices                     Device inventory and registration activity
   notifications [--days 30]   Accepted pushes per day and per surface
-  errors [--days 7]           Failures, rate limits and quota blocks
-  plans                       Last observed plan mix and billing intent
+  errors [--days 7]           Failures and rate limits
   events --name <name>        Daily counts for one analytics event
          [--days 30]
   names                       Event names present in the database
@@ -366,7 +365,7 @@ function commandErrors(database, flags) {
       database,
       `SELECT name, COALESCE(outcome, 'none') AS outcome, COUNT(*) AS events
        FROM analytics_event
-       WHERE name IN ('webhook_failed', 'webhook_rate_limited', 'webhook_quota_exceeded',
+       WHERE name IN ('webhook_failed', 'webhook_rate_limited',
                       'live_activity_failed', 'device_deactivated_stale')
          AND created_at >= ?
        GROUP BY name, outcome
@@ -385,34 +384,6 @@ function commandErrors(database, flags) {
        FROM live_activity_delivery_attempt
        WHERE created_at >= ? AND apns_reason IS NOT NULL
        GROUP BY reason ORDER BY attempts DESC LIMIT 20`,
-      msAgo(days),
-    ),
-  };
-}
-
-function commandPlans(database, flags) {
-  const days = intFlag(flags, "days", 30);
-  return {
-    windowDays: days,
-    note: "Plan is the last value observed on an analytics event; billing state lives in Autumn.",
-    lastObservedPlan: all(
-      database,
-      `SELECT plan, COUNT(*) AS users FROM (
-         SELECT user_id, plan,
-                ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) AS rank
-         FROM analytics_event
-         WHERE plan IS NOT NULL AND user_id IS NOT NULL AND created_at >= ?
-       ) WHERE rank = 1
-       GROUP BY plan ORDER BY users DESC`,
-      msAgo(days),
-    ),
-    billingIntent: all(
-      database,
-      `SELECT name, COUNT(*) AS events, COUNT(DISTINCT user_id) AS users
-       FROM analytics_event
-       WHERE name IN ('plan_checkout_started', 'plan_upgraded', 'billing_portal_opened')
-         AND created_at >= ?
-       GROUP BY name ORDER BY events DESC`,
       msAgo(days),
     ),
   };
@@ -492,7 +463,6 @@ const COMMANDS = {
   devices: commandDevices,
   notifications: commandNotifications,
   errors: commandErrors,
-  plans: commandPlans,
   events: commandEvents,
   names: commandNames,
 };

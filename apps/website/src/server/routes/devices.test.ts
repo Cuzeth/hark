@@ -22,28 +22,6 @@ vi.mock("../auth", () => ({
   },
 }));
 
-vi.mock("../lib/billing", () => ({
-  getBilling: async () => ({
-    configured: true,
-    plan: "pro",
-    priceMonthly: 8,
-    features: { deviceRouting: true },
-    limits: {
-      devices: null,
-      notificationsPerMonth: 100_000,
-      servicePerMinute: 300,
-      accountPerMinute: 1500,
-    },
-    usage: { notificationsRemaining: 100_000 },
-  }),
-  checkNotificationAllowance: async () => true,
-  trackNotification: async () => undefined,
-  hasAutumn: () => false,
-  clearBillingCache: () => undefined,
-  createCheckout: async () => "https://example.com/checkout",
-  createBillingPortal: async () => "https://example.com/portal",
-}));
-
 vi.mock("expo-server-sdk", () => {
   class Expo {
     // biome-ignore lint/complexity/noUselessConstructor: mock parity with the SDK
@@ -62,10 +40,12 @@ vi.mock("expo-server-sdk", () => {
 let app: typeof import("../app")["app"];
 let db: typeof import("../db")["db"];
 let schema: typeof import("../db/schema");
+let env: typeof import("../env")["env"];
 
 beforeAll(async () => {
   ({ app } = await import("../app"));
   ({ db } = await import("../db"));
+  ({ env } = await import("../env"));
   schema = await import("../db/schema");
   const { runMigrations } = await import("../db/migrate");
   runMigrations();
@@ -108,30 +88,26 @@ describe("POST /api/devices onboarding", () => {
     await vi.advanceTimersByTimeAsync(4_000);
     const first = await firstRequest;
     expect(first.status).toBe(201);
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(2);
     expect(sent[0]).toMatchObject({
       to: "ExponentPushToken[welcome-a]",
-      title: "Ryan",
-      body: "hey! my name is ryan and I made hark!",
+      title: "Hark",
+      body: "Welcome to Hark — this iPhone is registered.",
       data: {
-        sourceName: "Ryan",
-        url: "https://x.com/ryanvogel",
+        sourceName: "Hark",
+        url: env.APP_URL,
       },
     });
     expect(sent[1]).toMatchObject({
-      body: "easily send notifications via a webhook",
-      data: { url: "https://hark.ryan.ceo" },
-    });
-    expect(sent[2]).toMatchObject({
-      body: "get started here (click me)",
-      data: { url: "https://hark.ryan.ceo" },
+      body: "Create a service in the dashboard and point any webhook at it.",
+      data: { url: `${env.APP_URL}/dashboard` },
     });
 
     const refresh = await register("ExponentPushToken[welcome-a]");
     const secondPhone = await register("ExponentPushToken[welcome-b]");
     expect(refresh.status).toBe(201);
     expect(secondPhone.status).toBe(201);
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(2);
 
     const [account] = await db.select().from(schema.user);
     expect(account?.welcomeNotificationSentAt).toBeInstanceOf(Date);

@@ -1,99 +1,115 @@
-import * as AppleAuthentication from "expo-apple-authentication";
 import { Redirect } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { signInWithApple } from "../src/lib/apple-auth";
 import { authClient, useSession } from "../src/lib/auth";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
 
 export default function SignInScreen() {
   const { data: session, isPending } = useSession();
-  const [busy, setBusy] = useState<"apple" | "google" | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Keep the sign-in screen mounted until the native authorization code is
-  // exchanged and its revocation token is safely stored server-side.
-  if (session && busy !== "apple") return <Redirect href="/home" />;
+  if (session) return <Redirect href="/home" />;
 
-  const signInWithGoogle = async () => {
-    setBusy("google");
+  const submit = async () => {
+    if (busy) return;
+    if (!username || !password) {
+      setError("Enter your username and password.");
+      return;
+    }
+    setBusy(true);
     setError(null);
     try {
-      const result = await authClient.signIn.social({ provider: "google", callbackURL: "/home" });
-      if (result.error) throw new Error(result.error.message ?? "Google sign-in failed");
+      const result = await authClient.signIn.username({ username, password });
+      if (result.error) throw new Error(result.error.message ?? "Sign-in failed");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
-      setBusy(null);
-    }
-  };
-
-  const continueWithApple = async () => {
-    setBusy("apple");
-    setError(null);
-    try {
-      await signInWithApple();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Apple sign-in failed");
-    } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
-      <View style={styles.header}>
-        <View style={styles.brandMark} />
-        <Text style={styles.brand}>Hark</Text>
-      </View>
+      <KeyboardAvoidingView behavior="padding" style={styles.keyboardView}>
+        <View style={styles.header}>
+          <View style={styles.brandMark} />
+          <Text style={styles.brand}>Hark</Text>
+        </View>
 
-      <View style={styles.hero}>
-        <Text style={styles.eyebrow}>Webhooks to iPhone</Text>
-        <Text style={styles.title}>Let the important things find you.</Text>
-        <Text style={styles.subtitle}>
-          Sign in to receive source-branded notifications from every service you connect.
-        </Text>
-      </View>
+        <View style={styles.hero}>
+          <Text style={styles.title}>Sign in</Text>
+          <Text style={styles.subtitle}>
+            A private instance. Use the account credentials for this server.
+          </Text>
+        </View>
 
-      <View style={styles.footer}>
-        {isPending ? (
-          <ActivityIndicator color={colors.accent} />
-        ) : (
-          <>
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-              cornerRadius={26}
-              onPress={() => {
-                if (!busy) void continueWithApple();
-              }}
-              style={[styles.appleButton, busy && styles.buttonDisabled]}
-            />
-            {busy === "apple" ? (
-              <ActivityIndicator color={colors.ink} style={styles.appleSpinner} />
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              onPress={signInWithGoogle}
-              disabled={busy !== null}
-              style={({ pressed }) => [
-                styles.googleButton,
-                (pressed || busy !== null) && styles.googleButtonPressed,
-              ]}
-            >
-              {busy === "google" ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
-              )}
-            </Pressable>
-          </>
-        )}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-      </View>
+        <View style={styles.footer}>
+          {isPending ? (
+            <ActivityIndicator color={colors.accent} />
+          ) : (
+            <>
+              <TextInput
+                autoCapitalize="none"
+                autoComplete="username"
+                autoCorrect={false}
+                editable={!busy}
+                onChangeText={setUsername}
+                placeholder="Username"
+                placeholderTextColor={colors.soft}
+                returnKeyType="next"
+                style={styles.input}
+                textContentType="username"
+                value={username}
+              />
+              <TextInput
+                autoCapitalize="none"
+                autoComplete="current-password"
+                autoCorrect={false}
+                editable={!busy}
+                onChangeText={setPassword}
+                onSubmitEditing={() => void submit()}
+                placeholder="Password"
+                placeholderTextColor={colors.soft}
+                returnKeyType="go"
+                secureTextEntry
+                style={styles.input}
+                textContentType="password"
+                value={password}
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => void submit()}
+                style={({ pressed }) => [
+                  styles.submitButton,
+                  (pressed || busy) && styles.submitButtonPressed,
+                ]}
+              >
+                {busy ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Sign in</Text>
+                )}
+              </Pressable>
+            </>
+          )}
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -103,6 +119,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 24,
     backgroundColor: colors.paper,
+  },
+  keyboardView: {
+    flex: 1,
   },
   header: {
     minHeight: 64,
@@ -127,14 +146,6 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     justifyContent: "center",
   },
-  eyebrow: {
-    marginBottom: 14,
-    color: colors.accent,
-    fontFamily: fonts.medium,
-    fontSize: 12,
-    letterSpacing: tightTracking(12),
-    textTransform: "uppercase",
-  },
   title: {
     maxWidth: 330,
     color: colors.ink,
@@ -156,7 +167,19 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
     gap: 10,
   },
-  googleButton: {
+  input: {
+    minHeight: 52,
+    paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.line,
+    borderRadius: 26,
+    backgroundColor: colors.surface,
+    color: colors.ink,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+    letterSpacing: tightTracking(16),
+  },
+  submitButton: {
     minHeight: 52,
     flexDirection: "row",
     alignItems: "center",
@@ -165,23 +188,11 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     backgroundColor: colors.accent,
   },
-  appleButton: {
-    width: "100%",
-    height: 52,
-  },
-  appleSpinner: {
-    position: "absolute",
-    top: 17,
-    alignSelf: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.55,
-  },
-  googleButtonPressed: {
+  submitButtonPressed: {
     backgroundColor: colors.accentPressed,
     transform: [{ scale: 0.98 }],
   },
-  googleButtonText: {
+  submitButtonText: {
     color: "#FFFFFF",
     fontFamily: fonts.medium,
     fontSize: 16,

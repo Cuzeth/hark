@@ -4,28 +4,6 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
 
-vi.mock("../lib/billing", () => ({
-  getBilling: async () => ({
-    configured: true,
-    plan: "free",
-    priceMonthly: 8,
-    features: { deviceRouting: false },
-    limits: {
-      devices: 1,
-      notificationsPerMonth: 10_000,
-      servicePerMinute: 60,
-      accountPerMinute: 300,
-    },
-    usage: { notificationsRemaining: 10_000 },
-  }),
-  checkNotificationAllowance: async () => true,
-  trackNotification: async () => undefined,
-  hasAutumn: () => false,
-  clearBillingCache: () => undefined,
-  createCheckout: async () => "https://example.com/checkout",
-  createBillingPortal: async () => "https://example.com/portal",
-}));
-
 vi.mock("expo-server-sdk", () => {
   class Expo {
     // biome-ignore lint/complexity/noUselessConstructor: mock parity with the SDK
@@ -117,7 +95,6 @@ describe("webhook analytics", () => {
     expect(byName.get("webhook_received")).toMatchObject({
       userId: "user_analytics",
       serviceId: "svc_analytics",
-      plan: "free",
     });
     expect(byName.get("webhook_delivered")).toMatchObject({
       outcome: "accepted",

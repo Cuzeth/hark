@@ -811,54 +811,6 @@ export interface AgentNotificationCreateResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Billing
-// ---------------------------------------------------------------------------
-
-export interface BillingDto {
-  configured: boolean;
-  plan: "free" | "pro";
-  priceMonthly: number;
-  features: {
-    deviceRouting: boolean;
-  };
-  limits: {
-    devices: number | null;
-    notificationsPerMonth: number;
-    servicePerMinute: number;
-    accountPerMinute: number;
-  };
-  usage: {
-    notificationsRemaining: number | null;
-  };
-}
-
-export interface BillingRedirectResponse {
-  url: string;
-}
-
-/** One purchasable plan, as shown on the public pricing page. */
-export interface PricingPlanDto {
-  id: string;
-  name: string;
-  description: string | null;
-  /** USD per month; 0 for the free plan. */
-  priceMonthly: number;
-  /** null means unlimited. */
-  notificationsPerMonth: number | null;
-  /** null means unlimited. */
-  devices: number | null;
-  deviceRouting: boolean;
-  servicePerMinute: number;
-  accountPerMinute: number;
-}
-
-export interface PricingPlansDto {
-  /** Whether the plans were loaded live from the billing provider. */
-  source: "autumn" | "static";
-  plans: PricingPlanDto[];
-}
-
-// ---------------------------------------------------------------------------
 // Push data payload (delivered to the iOS app + notification service extension)
 // ---------------------------------------------------------------------------
 

@@ -28,15 +28,14 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "../src/lib/api";
-import { useSession } from "../src/lib/auth";
+import { API_URL, useSession } from "../src/lib/auth";
 import { previewActive, previewActivity, previewPending } from "../src/lib/inbox-preview";
 import { DEVICE_ID_KEY, submitInteractionResponse } from "../src/lib/interactions";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
 
 type ActivityFilter = "all" | InboxActivityKind;
 
-const PLACEHOLDER_AVATAR_URL =
-  "https://pbs.twimg.com/profile_images/2070959207273082880/HZoVBuA2_400x400.jpg";
+const PLACEHOLDER_AVATAR_URL = `${API_URL}/favicon.png`;
 
 const ACTIVITY_PAGE_SIZE = 20;
 

@@ -4,10 +4,10 @@
   "description": "CLI for Hark agent approvals and replies",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/R44VC0RP/hark.git",
+    "url": "git+https://github.com/Cuzeth/hark.git",
     "directory": "packages/harkctl"
   },
-  "homepage": "https://github.com/R44VC0RP/hark#readme",
+  "homepage": "https://github.com/Cuzeth/hark#readme",
   "keywords": [
     "hark",
     "approval",

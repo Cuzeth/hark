@@ -13,11 +13,9 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "biome check .",
-    "format": "biome format --write .",
-    "teaser:send": "node scripts/send-teaser.mjs"
+    "format": "biome format --write ."
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.5",
-    "atmn": "1.1.15"
+    "@biomejs/biome": "2.5.5"
   }
 }

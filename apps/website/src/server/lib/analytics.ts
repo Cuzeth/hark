@@ -20,7 +20,6 @@ export const ANALYTICS_EVENT_NAMES = [
   "webhook_delivered",
   "webhook_failed",
   "webhook_rate_limited",
-  "webhook_quota_exceeded",
   "device_registered",
   "device_unregistered",
   "device_deactivated_stale",
@@ -34,9 +33,6 @@ export const ANALYTICS_EVENT_NAMES = [
   "live_activity_updated",
   "live_activity_ended",
   "live_activity_failed",
-  "plan_upgraded",
-  "plan_checkout_started",
-  "billing_portal_opened",
   "api_token_created",
   "api_token_revoked",
   "cli_authorization_approved",
@@ -60,7 +56,6 @@ export interface TrackInput {
   userId?: string | null;
   serviceId?: string | null;
   deviceId?: string | null;
-  plan?: string | null;
   outcome?: string | null;
   /** Counter carried by the event (accepted pushes, deleted devices, ...). */
   value?: number;
@@ -161,7 +156,6 @@ export function track(input: TrackInput): void {
         userId: input.userId ?? null,
         serviceId: input.serviceId ?? null,
         deviceId: input.deviceId ?? null,
-        plan: input.plan ?? null,
         outcome: input.outcome ?? null,
         value,
         metadata: metadata.ok ? metadata.value : null,
