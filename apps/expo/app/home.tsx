@@ -5,6 +5,7 @@ import * as Notifications from "expo-notifications";
 import { Redirect, useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { StatusBar } from "expo-status-bar";
+import { SymbolView } from "expo-symbols";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -388,41 +389,63 @@ function ActivityLog({
         <Text style={styles.emptyActivity}>No webhook activity yet.</Text>
       ) : null}
       {events?.map((activityEvent) => (
-        <View style={styles.activityRow} key={activityEvent.id}>
-          <View style={styles.activityAvatarWrap}>
-            {activityEvent.imageUrl ? (
-              <Image source={{ uri: activityEvent.imageUrl }} style={styles.activityAvatar} />
-            ) : (
-              <View style={styles.activityAvatarFallback}>
-                <Text style={styles.activityAvatarFallbackText}>
-                  {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
-                </Text>
-              </View>
-            )}
-            <View style={styles.activityStatusBadge}>
-              <View style={[styles.activityDot, activityDotStyle(activityEvent.status)]} />
-            </View>
-          </View>
-          <View style={styles.activityCopy}>
-            <View style={styles.activityTopLine}>
-              <Text style={styles.activityName} numberOfLines={1}>
-                {activityEvent.serviceTitle} · {activityEvent.title}
-              </Text>
-              <Text style={styles.activityTime}>
-                {new Date(activityEvent.createdAt).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </Text>
-            </View>
-            <Text style={styles.activityBody} numberOfLines={1}>
-              {activityEvent.body}
-            </Text>
-            <Text style={styles.activityStatus}>{activityStatus(activityEvent)}</Text>
-          </View>
-        </View>
+        <ActivityLogRow activityEvent={activityEvent} key={activityEvent.id} />
       ))}
     </View>
+  );
+}
+
+function ActivityLogRow({ activityEvent }: { activityEvent: EventDto }) {
+  const [expanded, setExpanded] = useState(false);
+  const expandable = activityEvent.body.length > 0;
+  return (
+    <Pressable
+      accessibilityRole={expandable ? "button" : undefined}
+      disabled={!expandable}
+      onPress={() => setExpanded((current) => !current)}
+      style={styles.activityRow}
+    >
+      <View style={styles.activityAvatarWrap}>
+        {activityEvent.imageUrl ? (
+          <Image source={{ uri: activityEvent.imageUrl }} style={styles.activityAvatar} />
+        ) : (
+          <View style={styles.activityAvatarFallback}>
+            <Text style={styles.activityAvatarFallbackText}>
+              {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+        )}
+        <View style={styles.activityStatusBadge}>
+          <View style={[styles.activityDot, activityDotStyle(activityEvent.status)]} />
+        </View>
+      </View>
+      <View style={styles.activityCopy}>
+        <View style={styles.activityTopLine}>
+          <Text style={styles.activityName} numberOfLines={expanded ? undefined : 1}>
+            {activityEvent.serviceTitle} · {activityEvent.title}
+          </Text>
+          <Text style={styles.activityTime}>
+            {new Date(activityEvent.createdAt).toLocaleTimeString([], {
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          </Text>
+        </View>
+        <Text style={styles.activityBody} numberOfLines={expanded ? undefined : 1}>
+          {activityEvent.body}
+        </Text>
+        <Text style={styles.activityStatus}>{activityStatus(activityEvent)}</Text>
+      </View>
+      {expandable ? (
+        <SymbolView
+          name={expanded ? "chevron.up" : "chevron.down"}
+          size={11}
+          style={styles.activityChevron}
+          tintColor={colors.soft}
+          weight="semibold"
+        />
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -689,6 +712,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     letterSpacing: tightTracking(12),
+  },
+  activityChevron: {
+    marginTop: 4,
   },
   activityStatus: {
     marginTop: 1,

@@ -548,13 +548,25 @@ function ActiveRow({ item, first }: { item: InboxLiveActivityDto; first: boolean
 }
 
 function ActivityRow({ item, first }: { item: InboxActivityDto; first: boolean }) {
+  const [expanded, setExpanded] = useState(false);
+  const expandable = item.detail !== null && item.detail.length > 0;
   return (
-    <View style={[styles.recentRow, first && styles.firstRow]}>
+    <Pressable
+      accessibilityRole={expandable ? "button" : undefined}
+      disabled={!expandable}
+      onPress={() => setExpanded((current) => !current)}
+      style={[styles.recentRow, first && styles.firstRow, expanded && styles.recentRowExpanded]}
+    >
       <SourceAvatar size={30} url={item.sourceImageUrl} />
       <View style={styles.recentCopy}>
-        <Text style={styles.recentTitle} numberOfLines={1}>
+        <Text style={styles.recentTitle} numberOfLines={expanded ? undefined : 1}>
           {item.title}
         </Text>
+        {expandable ? (
+          <Text style={styles.recentDetail} numberOfLines={expanded ? undefined : 1}>
+            {item.detail}
+          </Text>
+        ) : null}
         <Text style={styles.recentMeta} numberOfLines={1}>
           {item.sourceName} · {activityKindLabel(item.kind)} · {formatActivityTime(item.createdAt)}
         </Text>
@@ -565,7 +577,15 @@ function ActivityRow({ item, first }: { item: InboxActivityDto; first: boolean }
           <Text style={styles.resultText}>{item.result}</Text>
         </View>
       ) : null}
-    </View>
+      {expandable ? (
+        <SymbolView
+          name={expanded ? "chevron.up" : "chevron.down"}
+          size={11}
+          tintColor={colors.soft}
+          weight="semibold"
+        />
+      ) : null}
+    </Pressable>
   );
 }
 
@@ -960,6 +980,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 17,
     letterSpacing: tightTracking(13),
+  },
+  recentRowExpanded: {
+    paddingVertical: 12,
+  },
+  recentDetail: {
+    marginTop: 2,
+    color: colors.muted,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: tightTracking(12),
   },
   recentMeta: {
     marginTop: 2,
