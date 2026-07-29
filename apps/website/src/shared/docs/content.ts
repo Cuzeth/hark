@@ -164,7 +164,7 @@ export const DOC_CONTENT: DocSection[] = [
           },
           {
             kind: "p",
-            text: "`eventId` identifies the event in the dashboard activity log and, for interactive notifications, is the handle used to read or cancel the pending response. `delivered` is the number of push requests accepted by Expo.",
+            text: "`eventId` identifies the event in the dashboard activity log and, for interactive notifications, is the handle used to read or cancel the pending response. `delivered` is the number of push requests accepted by Apple's APNs, which Hark talks to directly.",
           },
           {
             kind: "note",
@@ -332,7 +332,7 @@ export const DOC_CONTENT: DocSection[] = [
               { name: "404", type: "error", detail: "Unknown webhook token." },
               { name: "409", type: "error", detail: "Idempotency key reused with a new payload." },
               { name: "429", type: "error", detail: "Rate limit exhausted." },
-              { name: "502", type: "error", detail: "Every push target was rejected by Expo." },
+              { name: "502", type: "error", detail: "Every push target was rejected by APNs." },
             ],
           },
           {

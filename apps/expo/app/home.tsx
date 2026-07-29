@@ -1,5 +1,4 @@
 import type { EventDto } from "@hark/contracts";
-import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Redirect, useRouter } from "expo-router";
@@ -32,8 +31,9 @@ import { colors, fonts, tightTracking } from "../src/lib/theme";
 type PermissionState = "unknown" | "undetermined" | "granted" | "denied";
 type RegistrationState = "idle" | "working" | "registered" | "error";
 
-const EXPO_TOKEN_KEY = "hark.device.expoPushToken";
 const APNS_TOKEN_KEY = "hark.device.apnsToken";
+/** Written by builds that registered an Expo push token; cleaned up on re-registration. */
+const LEGACY_EXPO_TOKEN_KEY = "hark.device.expoPushToken";
 
 export default function HomeScreen() {
   const { data: session, isPending } = useSession();
@@ -41,7 +41,7 @@ export default function HomeScreen() {
 
   const [permission, setPermission] = useState<PermissionState>("unknown");
   const [registration, setRegistration] = useState<RegistrationState>("idle");
-  const [expoPushToken, setExpoPushToken] = useState<string | null>(null);
+  const [apnsToken, setApnsToken] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [events, setEvents] = useState<EventDto[] | null>(null);
   const [storageHydrated, setStorageHydrated] = useState(false);
@@ -57,10 +57,10 @@ export default function HomeScreen() {
   }, [refreshPermission]);
 
   useEffect(() => {
-    void SecureStore.getItemAsync(EXPO_TOKEN_KEY)
-      .then((storedExpoToken) => {
-        if (storedExpoToken) {
-          setExpoPushToken(storedExpoToken);
+    void SecureStore.getItemAsync(APNS_TOKEN_KEY)
+      .then((storedApnsToken) => {
+        if (storedApnsToken) {
+          setApnsToken(storedApnsToken);
           setRegistration("registered");
         }
       })
@@ -81,25 +81,16 @@ export default function HomeScreen() {
       if (!Device.isDevice) {
         throw new Error("Push notifications require a physical iPhone.");
       }
-      const projectId =
-        (Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined)?.projectId ||
-        process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
-      const expoToken = (
-        await Notifications.getExpoPushTokenAsync(projectId ? { projectId } : undefined)
-      ).data;
-
-      let apns: string | null = null;
-      try {
-        const nativeToken = await Notifications.getDevicePushTokenAsync();
-        apns = typeof nativeToken.data === "string" ? nativeToken.data : null;
-      } catch {
-        // APNs token is optional; delivery uses the Expo push token.
+      // The server pushes straight to APNs, so the raw device token is the identity.
+      const nativeToken = await Notifications.getDevicePushTokenAsync();
+      const apns = typeof nativeToken.data === "string" ? nativeToken.data : null;
+      if (!apns) {
+        throw new Error("iOS did not return an APNs device token. Try again in a moment.");
       }
 
       await registerInteractionCategories();
       const registered = await api.registerDevice({
-        expoPushToken: expoToken,
-        ...(apns ? { apnsToken: apns } : {}),
+        apnsToken: apns,
         platform: "ios",
         deviceName: Device.deviceName ?? undefined,
         interactionSchemaVersion: 1,
@@ -108,15 +99,11 @@ export default function HomeScreen() {
           : {}),
       });
 
-      await SecureStore.setItemAsync(EXPO_TOKEN_KEY, expoToken);
+      await SecureStore.setItemAsync(APNS_TOKEN_KEY, apns);
       await SecureStore.setItemAsync(DEVICE_ID_KEY, registered.device.id);
-      if (apns) {
-        await SecureStore.setItemAsync(APNS_TOKEN_KEY, apns);
-      } else {
-        await SecureStore.deleteItemAsync(APNS_TOKEN_KEY);
-      }
+      await SecureStore.deleteItemAsync(LEGACY_EXPO_TOKEN_KEY);
 
-      setExpoPushToken(expoToken);
+      setApnsToken(apns);
       setRegistration("registered");
       void flushInteractionResponses();
       refreshLiveActivityTokenSync(registered.device.id);
@@ -172,15 +159,15 @@ export default function HomeScreen() {
         onPress: () => {
           void (async () => {
             try {
-              if (expoPushToken) {
-                await api.unregisterDevice({ expoPushToken });
+              if (apnsToken) {
+                await api.unregisterDevice({ apnsToken });
               }
             } catch {
               // Best effort — the server also deactivates stale tokens.
             }
             await Promise.all([
-              SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
               SecureStore.deleteItemAsync(APNS_TOKEN_KEY),
+              SecureStore.deleteItemAsync(LEGACY_EXPO_TOKEN_KEY),
               SecureStore.deleteItemAsync(DEVICE_ID_KEY),
               clearInteractionResponses(),
             ]);

@@ -189,8 +189,8 @@ export interface EventDto {
 // ---------------------------------------------------------------------------
 
 export const deviceRegisterSchema = z.object({
-  expoPushToken: z.string().min(1).max(400),
-  apnsToken: z.string().min(1).max(400).optional(),
+  /** Raw APNs device token, lowercase hex as iOS hands it to the app. */
+  apnsToken: z.string().regex(/^[0-9a-fA-F]{32,400}$/),
   platform: z.literal("ios"),
   deviceName: z.string().trim().max(80).optional(),
   interactionSchemaVersion: z.literal(1).optional(),
@@ -199,7 +199,7 @@ export const deviceRegisterSchema = z.object({
 export type DeviceRegisterInput = z.infer<typeof deviceRegisterSchema>;
 
 export const deviceUnregisterSchema = z.object({
-  expoPushToken: z.string().min(1).max(400),
+  apnsToken: z.string().regex(/^[0-9a-fA-F]{32,400}$/),
 });
 export type DeviceUnregisterInput = z.infer<typeof deviceUnregisterSchema>;
 
@@ -768,7 +768,7 @@ export interface InboxActivityPageDto {
 
 export interface InteractionCreateResponse {
   interaction: InteractionDto;
-  /** Requests accepted by Expo or APNs, depending on presentation; not proof of device display. */
+  /** Requests APNs accepted, whatever the presentation; not proof of device display. */
   accepted: number;
   idempotent?: boolean;
   liveActivityId?: string;
@@ -804,7 +804,7 @@ export interface AgentNotificationDto {
 
 export interface AgentNotificationCreateResponse {
   notification: AgentNotificationDto;
-  /** Number of notification requests accepted by Expo, not proof of device delivery. */
+  /** Number of notification requests APNs accepted, not proof of device delivery. */
   accepted: number;
   idempotent?: boolean;
   message?: string;

@@ -18,9 +18,9 @@ route to specific devices when more than one iPhone is registered.
 Copy `.env.example` to `.env`, which documents every variable. At minimum set `ADMIN_USERNAME` and
 `ADMIN_PASSWORD` (the single account, seeded on first boot, 8+ characters), `BETTER_AUTH_SECRET`
 (`openssl rand -base64 32`), `APP_URL` (the public origin, used for sign-in and webhook URLs), and
-the APNs credentials Live Activities need (`APNS_KEY_ID`, `APPLE_TEAM_ID`, `APNS_PRIVATE_KEY`).
-`EXPO_ACCESS_TOKEN` is optional and authenticates requests to the Expo Push Service. Then bring it
-up:
+the APNs credentials every notification needs (`APNS_KEY_ID`, `APPLE_TEAM_ID`, `APNS_PRIVATE_KEY`).
+Delivery runs from your server straight to Apple's APNs with your own `.p8` key — no push relay
+sits in between, so Apple is the only third party involved. Then bring it up:
 
 ```sh
 docker compose up -d
@@ -109,10 +109,12 @@ Cursor, or another compatible agent how to drive the CLI.
 
 ## iOS app
 
-The app in [`apps/expo`](./apps/expo) is not on the App Store — build and install it yourself with
-Expo/EAS under bundle id `dev.abdeen.hark`.
+The app in [`apps/expo`](./apps/expo) is not on the App Store — build and install it yourself under
+bundle id `dev.abdeen.hark`. Generate the native project with `npx expo prebuild -p ios`, then open
+`apps/expo/ios/Hark.xcworkspace` in Xcode and run it on your iPhone. No Expo or EAS account is
+needed.
 
-- Set `APPLE_TEAM_ID` to your own Apple Developer team, and run `eas init` to get `EAS_PROJECT_ID`.
+- Set `APPLE_TEAM_ID` to your own Apple Developer team.
 - Point `EXPO_PUBLIC_API_URL` at this instance, or at your machine's LAN IP in development so a
   physical iPhone can reach the dev server.
 - The APNs key the server uses must belong to the same team, and `APNS_BUNDLE_ID` must match.

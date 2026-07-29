@@ -13,8 +13,8 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     bundleIdentifier: "dev.abdeen.hark",
     icon: "./assets/icon.png",
     supportsTablet: false,
-    // Communication Notifications + SiriKit. `aps-environment` is managed by
-    // EAS capability sync but included so bare prebuilds get push entitlements.
+    // Communication Notifications + SiriKit. `aps-environment` is declared here
+    // so a local `expo prebuild` emits the push entitlement without Xcode edits.
     entitlements: {
       "aps-environment": "development",
       "com.apple.developer.usernotifications.communication": true,
@@ -60,9 +60,4 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
       },
     ],
   ],
-  extra: {
-    eas: {
-      projectId: process.env.EAS_PROJECT_ID ?? "",
-    },
-  },
 });

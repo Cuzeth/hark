@@ -8,6 +8,10 @@ process.env.ACCOUNT_RATE_LIMIT_PER_MINUTE = "200";
 const REQUESTER_RATE_LIMIT = 100;
 const ACCOUNT_RATE_LIMIT = 200;
 
+const TOKEN_A = "a".repeat(64);
+const TOKEN_B = "b".repeat(64);
+const TOKEN_FOREIGN = "f".repeat(64);
+
 const authState = vi.hoisted(() => ({ userId: "user_1" as string | null }));
 const sent = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 const liveActivityPushes = vi.hoisted(() => [] as Array<Record<string, unknown>>);
@@ -32,23 +36,6 @@ vi.mock("../auth", () => ({
   },
 }));
 
-vi.mock("expo-server-sdk", () => {
-  class Expo {
-    chunkPushNotifications(messages: Array<Record<string, unknown>>) {
-      return [messages];
-    }
-    async sendPushNotificationsAsync(messages: Array<Record<string, unknown>>) {
-      sent.push(...messages);
-      return messages.map(() =>
-        pushState.acceptPush
-          ? { status: "ok", id: "ticket" }
-          : { status: "error", message: "rejected" },
-      );
-    }
-  }
-  return { Expo, default: Expo };
-});
-
 vi.mock("../lib/apns", () => ({
   isInvalidApnsTokenReason: () => false,
   sendLiveActivityPush: async (
@@ -58,6 +45,24 @@ vi.mock("../lib/apns", () => ({
   ) => {
     liveActivityPushes.push({ token, environment, input });
     return { status: 200, apnsId: "apns-id", reason: null, accepted: true };
+  },
+  sendAlertPush: async (token: string, payload: Record<string, unknown>) => {
+    const aps = payload.aps as {
+      alert: { title: string; body: string };
+      category?: string;
+      "thread-id"?: string;
+    };
+    sent.push({
+      to: token,
+      title: aps.alert.title,
+      body: aps.alert.body,
+      categoryId: aps.category,
+      conversationId: aps["thread-id"],
+      data: payload.body,
+    });
+    return pushState.acceptPush
+      ? { status: 200, apnsId: "apns-id", reason: null, accepted: true }
+      : { status: 400, apnsId: null, reason: "BadRequest", accepted: false };
   },
 }));
 
@@ -111,7 +116,7 @@ beforeAll(async () => {
     {
       id: "dev_1",
       userId: "user_1",
-      expoPushToken: "ExponentPushToken[a]",
+      token: TOKEN_A,
       platform: "ios",
       active: true,
       liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("ab".repeat(32)),
@@ -124,7 +129,7 @@ beforeAll(async () => {
     {
       id: "dev_2",
       userId: "user_1",
-      expoPushToken: "ExponentPushToken[b]",
+      token: TOKEN_B,
       platform: "ios",
       active: true,
       liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("cd".repeat(32)),
@@ -137,7 +142,7 @@ beforeAll(async () => {
     {
       id: "dev_foreign",
       userId: "user_2",
-      expoPushToken: "ExponentPushToken[foreign]",
+      token: TOKEN_FOREIGN,
       platform: "ios",
       active: true,
       createdAt: now,
@@ -405,7 +410,6 @@ describe("agent services", () => {
     expect(sent[0]).toMatchObject({
       title: "Release bot",
       body: "Release shipped",
-      richContent: { image: "https://example.com/bot.png" },
       data: { avatarUrl: "https://example.com/bot.png" },
     });
   });
@@ -622,7 +626,7 @@ describe("interactions", () => {
       deviceIds: ["dev_2"],
     });
     expect(await targeted.json()).toMatchObject({ accepted: 1 });
-    expect(sent[0]).toMatchObject({ to: "ExponentPushToken[b]" });
+    expect(sent[0]).toMatchObject({ to: TOKEN_B });
   });
 
   it("enforces requester and account rate limits before creation", async () => {
@@ -886,10 +890,7 @@ describe("interactions", () => {
       .where(eq(schema.interaction.id, body.interaction.id));
     expect(row?.imageUrl).toBe("https://example.com/avatar.png");
 
-    expect(sent[0]).toMatchObject({
-      richContent: { image: "https://example.com/avatar.png" },
-      data: { avatarUrl: "https://example.com/avatar.png" },
-    });
+    expect(sent[0]).toMatchObject({ data: { avatarUrl: "https://example.com/avatar.png" } });
 
     const fetched = await agent(`/interactions/${body.interaction.id}`);
     expect(await fetched.json()).toMatchObject({
@@ -947,7 +948,6 @@ describe("agent notifications", () => {
     expect(sent[0]).toMatchObject({
       title: "Deploy bot",
       body: "Deploy finished",
-      richContent: { image: "https://example.com/bot.png" },
       data: {
         sourceName: "Deploy bot",
         avatarUrl: "https://example.com/bot.png",
@@ -969,7 +969,7 @@ describe("agent notifications", () => {
     sent.length = 0;
     const routed = await createNotification({ body: "Routed", deviceIds: ["dev_2"] });
     expect(await routed.json()).toMatchObject({ accepted: 1 });
-    expect(sent[0]).toMatchObject({ to: "ExponentPushToken[b]" });
+    expect(sent[0]).toMatchObject({ to: TOKEN_B });
   });
 
   it("threads notifications per sender name and enforces the shared per-minute budget", async () => {
@@ -1050,13 +1050,13 @@ describe("agent notifications", () => {
     });
   });
 
-  it("reports accepted 0 with a message when Expo rejects", async () => {
+  it("reports accepted 0 with a message when APNs rejects", async () => {
     pushState.acceptPush = false;
     const response = await createNotification({ body: "Rejected" });
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
       accepted: 0,
-      message: "No notifications were accepted by Expo.",
+      message: "No notifications were accepted by APNs.",
     });
   });
 });

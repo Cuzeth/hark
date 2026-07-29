@@ -20,7 +20,6 @@
     "better-auth": "^1.6.25",
     "better-sqlite3": "^13.0.1",
     "drizzle-orm": "^0.45.2",
-    "expo-server-sdk": "^6.1.0",
     "hono": "^4.12.31",
     "jose": "^6.2.4",
     "zod": "^4.4.3"

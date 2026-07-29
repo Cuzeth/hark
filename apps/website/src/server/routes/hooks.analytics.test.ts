@@ -4,19 +4,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 process.env.NODE_ENV = "test";
 process.env.DATABASE_URL = ":memory:";
 
-vi.mock("expo-server-sdk", () => {
-  class Expo {
-    // biome-ignore lint/complexity/noUselessConstructor: mock parity with the SDK
-    constructor(_options?: unknown) {}
-    chunkPushNotifications(messages: Array<Record<string, unknown>>) {
-      return [messages];
-    }
-    async sendPushNotificationsAsync(chunk: Array<Record<string, unknown>>) {
-      return chunk.map(() => ({ status: "ok", id: "ticket" }));
-    }
-  }
-  return { Expo, default: Expo };
-});
+vi.mock("../lib/apns", () => ({
+  sendAlertPush: async () => ({
+    status: 200,
+    apnsId: "apns-id",
+    reason: null,
+    accepted: true,
+  }),
+}));
 
 let app: typeof import("../app")["app"];
 let db: typeof import("../db")["db"];
@@ -25,6 +20,7 @@ let schema: typeof import("../db/schema");
 let analytics: typeof import("../lib/analytics");
 
 const TOKEN = "whk_analytics-token-abcdefghijklmnop";
+const DEVICE_TOKEN = "a".repeat(64);
 const SECRET_BODY = "deploy failed for customer alice@example.com";
 
 beforeAll(async () => {
@@ -56,7 +52,7 @@ beforeAll(async () => {
   await db.insert(schema.device).values({
     id: "dev_analytics",
     userId: "user_analytics",
-    expoPushToken: "ExponentPushToken[analytics]",
+    token: DEVICE_TOKEN,
     platform: "ios",
     active: true,
     createdAt: now,
@@ -124,7 +120,7 @@ describe("webhook analytics", () => {
       "Deploy 42",
       "https://example.com/build",
       TOKEN,
-      "ExponentPushToken[analytics]",
+      DEVICE_TOKEN,
       "analytics@example.com",
     ]) {
       expect(serialized).not.toContain(secret);

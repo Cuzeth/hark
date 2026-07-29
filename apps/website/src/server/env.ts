@@ -16,9 +16,7 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).optional(),
   /** Better Auth stores an email internally; defaults to `${ADMIN_USERNAME}@hark.local`. */
   ADMIN_EMAIL: z.string().optional(),
-  /** Optional. Enables authenticated requests to the Expo Push Service. */
-  EXPO_ACCESS_TOKEN: z.string().optional(),
-  /** Optional direct APNs credentials for Live Activity start/update/end delivery. */
+  /** Direct APNs provider credentials. Every push Hark sends needs them. */
   APNS_KEY_ID: z.string().optional(),
   APPLE_TEAM_ID: z.string().optional(),
   APNS_PRIVATE_KEY: z.string().optional(),
@@ -55,12 +53,9 @@ export function assertRuntimeEnv(): void {
   if (env.BETTER_AUTH_SECRET === DEV_SECRET) {
     problems.push("BETTER_AUTH_SECRET is using the insecure development default.");
   }
-  if (!env.EXPO_ACCESS_TOKEN) {
-    problems.push("EXPO_ACCESS_TOKEN is not set — push requests to Expo will be unauthenticated.");
-  }
   if (!env.APNS_KEY_ID || !env.APPLE_TEAM_ID || !env.APNS_PRIVATE_KEY) {
     problems.push(
-      "APNS_KEY_ID / APPLE_TEAM_ID / APNS_PRIVATE_KEY are not all set — Live Activity delivery will be unavailable.",
+      "APNS_KEY_ID / APPLE_TEAM_ID / APNS_PRIVATE_KEY are not all set — no notifications can be delivered, neither alerts nor Live Activities.",
     );
   }
 

@@ -3,6 +3,7 @@ import {
   agentNotificationCreateSchema,
   appleNativeTokenExchangeSchema,
   deviceRegisterSchema,
+  deviceUnregisterSchema,
   interactionCreateSchema,
   interactionResponseSchema,
   LIVE_ACTIVITY_SCHEMA_VERSION,
@@ -438,17 +439,22 @@ describe("serviceCreateSchema", () => {
 });
 
 describe("deviceRegisterSchema", () => {
+  const apnsToken = "a".repeat(64);
+
   it("constrains platform to ios", () => {
+    expect(deviceRegisterSchema.safeParse({ apnsToken, platform: "ios" }).success).toBe(true);
+    expect(deviceRegisterSchema.safeParse({ apnsToken, platform: "android" }).success).toBe(false);
+  });
+
+  it("only accepts raw hex APNs device tokens", () => {
     expect(
-      deviceRegisterSchema.safeParse({ expoPushToken: "ExponentPushToken[x]", platform: "ios" })
+      deviceRegisterSchema.safeParse({ apnsToken: "ExponentPushToken[x]", platform: "ios" })
         .success,
-    ).toBe(true);
-    expect(
-      deviceRegisterSchema.safeParse({
-        expoPushToken: "ExponentPushToken[x]",
-        platform: "android",
-      }).success,
     ).toBe(false);
+    expect(deviceRegisterSchema.safeParse({ apnsToken: "abc", platform: "ios" }).success).toBe(
+      false,
+    );
+    expect(deviceUnregisterSchema.safeParse({ apnsToken }).success).toBe(true);
   });
 });
 

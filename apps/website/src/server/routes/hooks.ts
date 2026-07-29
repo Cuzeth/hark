@@ -323,7 +323,7 @@ export const hooksRoute = new Hono()
 
     const messages = parsed.data.response
       ? buildInteractionPushMessages({
-          to: devices.map((registeredDevice) => registeredDevice.expoPushToken),
+          to: devices.map((registeredDevice) => registeredDevice.token),
           interactionId: interactionId as string,
           eventId,
           kind: parsed.data.response.type === "text" ? "reply" : parsed.data.response.type,
@@ -335,7 +335,7 @@ export const hooksRoute = new Hono()
           url: resolved.url,
         })
       : buildPushMessages({
-          to: devices.map((registeredDevice) => registeredDevice.expoPushToken),
+          to: devices.map((registeredDevice) => registeredDevice.token),
           eventId,
           serviceId: svc.id,
           resolved,
@@ -346,7 +346,7 @@ export const hooksRoute = new Hono()
       await db
         .update(device)
         .set({ active: false })
-        .where(inArray(device.expoPushToken, result.staleTokens));
+        .where(inArray(device.token, result.staleTokens));
       track({
         name: "device_deactivated_stale",
         userId: svc.userId,

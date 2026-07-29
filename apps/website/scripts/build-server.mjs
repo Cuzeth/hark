@@ -7,8 +7,8 @@ await build({
   target: "node22",
   format: "esm",
   outfile: "dist/server/index.js",
-  // better-sqlite3 is a native module; expo-server-sdk reads its own package.json at runtime.
-  external: ["better-sqlite3", "expo-server-sdk"],
+  // better-sqlite3 is a native module and cannot be bundled.
+  external: ["better-sqlite3"],
   banner: {
     js: [
       "import { createRequire as __createRequire } from 'node:module';",

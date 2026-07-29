@@ -8,8 +8,18 @@ import {
   type PushData,
   type WebhookRequest,
 } from "@hark/contracts";
-import { Expo, type ExpoPushMessage, type ExpoPushTicket } from "expo-server-sdk";
 import { env } from "../env";
+import { type ApnsResult, sendAlertPush } from "./apns";
+
+/** One alert push, addressed to a raw APNs device token. */
+export interface ApnsAlertMessage {
+  to: string;
+  title: string;
+  body: string;
+  categoryId?: string;
+  conversationId?: string;
+  data: PushData | InteractionPushData;
+}
 
 export interface ServiceDefaults {
   title: string;
@@ -58,7 +68,7 @@ const WELCOME_MESSAGES = [
   },
 ] as const;
 
-export function buildWelcomePushMessages(to: string): ExpoPushMessage[] {
+export function buildWelcomePushMessages(to: string): ApnsAlertMessage[] {
   return WELCOME_MESSAGES.map((message, index) => {
     const data: PushData = {
       v: PUSH_SCHEMA_VERSION,
@@ -74,15 +84,13 @@ export function buildWelcomePushMessages(to: string): ExpoPushMessage[] {
       to,
       title: "Hark",
       body: message.body,
-      priority: "high",
-      mutableContent: true,
-      richContent: { image: WELCOME_AVATAR_URL },
+      conversationId: data.conversationId,
       data,
     };
   });
 }
 
-export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
+export function buildPushMessages(input: BuildPushInput): ApnsAlertMessage[] {
   const { to, eventId, serviceId, conversationKey, resolved } = input;
   const data: PushData = {
     v: PUSH_SCHEMA_VERSION,
@@ -99,9 +107,7 @@ export function buildPushMessages(input: BuildPushInput): ExpoPushMessage[] {
     to: token,
     title: resolved.title,
     body: resolved.body,
-    priority: "high",
-    mutableContent: true,
-    ...(resolved.imageUrl ? { richContent: { image: resolved.imageUrl } } : {}),
+    conversationId: data.conversationId,
     data,
   }));
 }
@@ -119,7 +125,7 @@ export interface BuildInteractionPushInput {
   url?: string;
 }
 
-export function buildInteractionPushMessages(input: BuildInteractionPushInput): ExpoPushMessage[] {
+export function buildInteractionPushMessages(input: BuildInteractionPushInput): ApnsAlertMessage[] {
   const categoryId =
     input.kind === "approval"
       ? HARK_APPROVAL_CATEGORY_ID
@@ -144,53 +150,74 @@ export function buildInteractionPushMessages(input: BuildInteractionPushInput): 
     title: input.title,
     body: input.prompt,
     categoryId,
-    priority: "high",
-    mutableContent: true,
-    ...(input.imageUrl ? { richContent: { image: input.imageUrl } } : {}),
+    conversationId: data.conversationId,
     data,
   }));
 }
 
-let expoClient: Expo | undefined;
-function getExpo(): Expo {
-  if (!expoClient) {
-    expoClient = new Expo(env.EXPO_ACCESS_TOKEN ? { accessToken: env.EXPO_ACCESS_TOKEN } : {});
-  }
-  return expoClient;
+/**
+ * The notification-service extension reads `userInfo["body"]` first and falls
+ * back to the top-level keys, and expo-notifications surfaces `body` as the
+ * on-device `content.data`. Both slots carry the same object.
+ */
+export function buildAlertPayload(message: ApnsAlertMessage): Record<string, unknown> {
+  return {
+    aps: {
+      alert: { title: message.title, body: message.body },
+      sound: "default",
+      "mutable-content": 1,
+      ...(message.categoryId ? { category: message.categoryId } : {}),
+      ...(message.conversationId ? { "thread-id": message.conversationId } : {}),
+    },
+    body: message.data,
+    ...message.data,
+  };
 }
 
+/** APNs rejections that mean the token will never work again. */
+const STALE_APNS_REASONS = new Set(["Unregistered", "BadDeviceToken", "ExpiredToken"]);
+
+/** Parallel APNs streams. Each message opens its own short-lived connection. */
+const PUSH_CONCURRENCY = 10;
+
 export interface SendResult {
-  /** Requests accepted by Expo. This is not a device-delivery receipt. */
+  /** Requests APNs accepted. This is not a device-delivery receipt. */
   accepted: number;
   errors: string[];
-  /** Expo push tokens that Expo reported as no longer registered. */
+  /** APNs device tokens Apple reported as no longer registered. */
   staleTokens: string[];
 }
 
-export async function sendPushMessages(messages: ExpoPushMessage[]): Promise<SendResult> {
-  const expo = getExpo();
-  const result: SendResult = { accepted: 0, errors: [], staleTokens: [] };
-
-  for (const chunk of expo.chunkPushNotifications(messages)) {
-    let tickets: ExpoPushTicket[];
-    try {
-      tickets = await expo.sendPushNotificationsAsync(chunk);
-    } catch (error) {
-      result.errors.push(error instanceof Error ? error.message : "Expo push request failed");
-      continue;
-    }
-    tickets.forEach((ticket, index) => {
-      if (ticket.status === "ok") {
-        result.accepted += 1;
-        return;
-      }
-      result.errors.push(ticket.message ?? "Unknown push error");
-      const to = chunk[index]?.to;
-      if (ticket.details?.error === "DeviceNotRegistered" && typeof to === "string") {
-        result.staleTokens.push(to);
-      }
-    });
+function describeApnsFailure(result: ApnsResult): string {
+  if (result.status > 0) {
+    return result.reason ? `APNs ${result.status} ${result.reason}` : `APNs ${result.status}`;
   }
+  return `APNs request failed: ${result.reason ?? "unknown error"}`;
+}
+
+export async function sendPushMessages(messages: ApnsAlertMessage[]): Promise<SendResult> {
+  const result: SendResult = { accepted: 0, errors: [], staleTokens: [] };
+  let cursor = 0;
+
+  const worker = async () => {
+    while (cursor < messages.length) {
+      const message = messages[cursor++];
+      if (!message) return;
+      const outcome = await sendAlertPush(message.to, buildAlertPayload(message));
+      if (outcome.accepted) {
+        result.accepted += 1;
+        continue;
+      }
+      result.errors.push(describeApnsFailure(outcome));
+      if (outcome.status === 410 || STALE_APNS_REASONS.has(outcome.reason ?? "")) {
+        result.staleTokens.push(message.to);
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(PUSH_CONCURRENCY, messages.length) }, () => worker()),
+  );
 
   return result;
 }

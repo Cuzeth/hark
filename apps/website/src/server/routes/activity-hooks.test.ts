@@ -36,6 +36,12 @@ vi.mock("../lib/apns", () => ({
     apnsCalls.push({ token, environment, input, priority });
     return { status: 200, apnsId: `hook-apns-${apnsCalls.length}`, reason: null, accepted: true };
   },
+  sendAlertPush: async () => ({
+    status: 200,
+    apnsId: "hook-apns-alert",
+    reason: null,
+    accepted: true,
+  }),
 }));
 
 let app: typeof import("../app")["app"];
@@ -84,7 +90,7 @@ beforeAll(async () => {
   await db.insert(schema.device).values({
     id: "hook_activity_device",
     userId: "hook_activity_user",
-    expoPushToken: "ExponentPushToken[hook-activity]",
+    token: "a".repeat(64),
     platform: "ios",
     active: true,
     liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("aa".repeat(32)),

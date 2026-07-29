@@ -102,6 +102,14 @@ export function encodeLiveActivityPayload(input: LiveActivityPayloadInput): Buff
   return payload;
 }
 
+export function encodeAlertPayload(payload: Record<string, unknown>): Buffer {
+  const encoded = Buffer.from(JSON.stringify(payload));
+  if (encoded.byteLength > MAX_APNS_PAYLOAD_BYTES) {
+    throw new Error(`Alert APNs payload exceeds ${MAX_APNS_PAYLOAD_BYTES} bytes`);
+  }
+  return encoded;
+}
+
 export function apnsHost(environment: ApnsProviderConfig["environment"]): string {
   return environment === "production"
     ? "https://api.push.apple.com"
@@ -121,6 +129,26 @@ export function liveActivityHeaders(
     "apns-push-type": "liveactivity",
     "apns-topic": `${config.bundleId}.push-type.liveactivity`,
     "apns-priority": String(priority),
+  };
+}
+
+/**
+ * Alerts are addressed to the plain bundle id — only Live Activity pushes carry
+ * a `.push-type.*` topic suffix.
+ */
+export function alertHeaders(
+  config: Pick<ApnsProviderConfig, "bundleId">,
+  token: string,
+  jwt: string,
+): Record<string, string> {
+  return {
+    ":method": "POST",
+    ":path": `/3/device/${token}`,
+    authorization: `bearer ${jwt}`,
+    "apns-push-type": "alert",
+    "apns-topic": config.bundleId,
+    "apns-priority": "10",
+    "apns-expiration": "0",
   };
 }
 
@@ -151,6 +179,67 @@ function providerJwt(config: ApnsProviderConfig): string {
   return value;
 }
 
+function sendApnsRequest(
+  config: ApnsProviderConfig,
+  headers: Record<string, string>,
+  payload: Buffer,
+): Promise<ApnsResult> {
+  return new Promise<ApnsResult>((resolve) => {
+    const client = connect(apnsHost(config.environment));
+    let request: ReturnType<typeof client.request> | null = null;
+    let settled = false;
+    const finish = (result: ApnsResult) => {
+      if (settled) return;
+      settled = true;
+      request?.close();
+      client.close();
+      client.destroy();
+      resolve(result);
+    };
+    client.setTimeout(10_000, () =>
+      finish({ status: 0, apnsId: null, reason: "Timeout", accepted: false }),
+    );
+    client.on("error", (error) =>
+      finish({ status: 0, apnsId: null, reason: error.message, accepted: false }),
+    );
+
+    request = client.request(headers);
+    let status = 0;
+    let apnsId: string | null = null;
+    const chunks: Buffer[] = [];
+    request.on("response", (responseHeaders) => {
+      status = Number(responseHeaders[":status"] ?? 0);
+      apnsId = typeof responseHeaders["apns-id"] === "string" ? responseHeaders["apns-id"] : null;
+    });
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("error", (error) =>
+      finish({ status: 0, apnsId, reason: error.message, accepted: false }),
+    );
+    request.on("end", () => {
+      let reason: string | null = null;
+      if (chunks.length > 0) {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { reason?: unknown };
+          if (typeof body.reason === "string") reason = body.reason;
+        } catch {
+          reason = "InvalidApnsResponse";
+        }
+      }
+      finish({ status, apnsId, reason, accepted: status === 200 });
+    });
+    request.end(payload);
+  });
+}
+
+function configurationFailure(error: unknown): ApnsResult {
+  return {
+    status: 0,
+    apnsId: null,
+    reason: error instanceof Error ? error.message : "InvalidProviderConfiguration",
+    accepted: false,
+  };
+}
+
 export async function sendLiveActivityPush(
   token: string,
   tokenEnvironment: "sandbox" | "production",
@@ -171,57 +260,30 @@ export async function sendLiveActivityPush(
     payload = encodeLiveActivityPayload(input);
     jwt = providerJwt(config);
   } catch (error) {
-    return {
-      status: 0,
-      apnsId: null,
-      reason: error instanceof Error ? error.message : "InvalidProviderConfiguration",
-      accepted: false,
-    };
+    return configurationFailure(error);
   }
 
-  return new Promise<ApnsResult>((resolve) => {
-    const client = connect(apnsHost(config.environment));
-    let request: ReturnType<typeof client.request> | null = null;
-    let settled = false;
-    const finish = (result: ApnsResult) => {
-      if (settled) return;
-      settled = true;
-      request?.close();
-      client.close();
-      client.destroy();
-      resolve(result);
-    };
-    client.setTimeout(10_000, () =>
-      finish({ status: 0, apnsId: null, reason: "Timeout", accepted: false }),
-    );
-    client.on("error", (error) =>
-      finish({ status: 0, apnsId: null, reason: error.message, accepted: false }),
-    );
+  return sendApnsRequest(config, liveActivityHeaders(config, token, jwt, priority), payload);
+}
 
-    request = client.request(liveActivityHeaders(config, token, jwt, priority));
-    let status = 0;
-    let apnsId: string | null = null;
-    const chunks: Buffer[] = [];
-    request.on("response", (headers) => {
-      status = Number(headers[":status"] ?? 0);
-      apnsId = typeof headers["apns-id"] === "string" ? headers["apns-id"] : null;
-    });
-    request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("error", (error) =>
-      finish({ status: 0, apnsId, reason: error.message, accepted: false }),
-    );
-    request.on("end", () => {
-      let reason: string | null = null;
-      if (chunks.length > 0) {
-        try {
-          const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { reason?: unknown };
-          if (typeof body.reason === "string") reason = body.reason;
-        } catch {
-          reason = "InvalidApnsResponse";
-        }
-      }
-      finish({ status, apnsId, reason, accepted: status === 200 });
-    });
-    request.end(payload);
-  });
+/** Sends one user-visible alert to a raw APNs device token. */
+export async function sendAlertPush(
+  token: string,
+  payload: Record<string, unknown>,
+): Promise<ApnsResult> {
+  const config = providerConfig();
+  if (!config) {
+    return { status: 0, apnsId: null, reason: "ProviderNotConfigured", accepted: false };
+  }
+
+  let encoded: Buffer;
+  let jwt: string;
+  try {
+    encoded = encodeAlertPayload(payload);
+    jwt = providerJwt(config);
+  } catch (error) {
+    return configurationFailure(error);
+  }
+
+  return sendApnsRequest(config, alertHeaders(config, token, jwt), encoded);
 }

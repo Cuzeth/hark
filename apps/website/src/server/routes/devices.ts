@@ -188,17 +188,18 @@ export const devicesRoute = new Hono<AuthedEnv>()
     if (!parsed.success) {
       return c.json({ error: "Invalid device registration", issues: parsed.error.issues }, 400);
     }
+    const apnsToken = parsed.data.apnsToken.toLowerCase();
     const existing = await db
       .select({ id: device.id, userId: device.userId, active: device.active })
       .from(device)
-      .where(eq(device.expoPushToken, parsed.data.expoPushToken))
+      .where(eq(device.token, apnsToken))
       .limit(1);
     const now = new Date();
     const registration = db.transaction((tx) => {
       const previous = tx
         .select({ id: device.id, userId: device.userId })
         .from(device)
-        .where(eq(device.expoPushToken, parsed.data.expoPushToken))
+        .where(eq(device.token, apnsToken))
         .get();
       const ownerChanged = Boolean(previous && previous.userId !== user.id);
       const registered = tx
@@ -206,8 +207,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
         .values({
           id: newId("dev"),
           userId: user.id,
-          expoPushToken: parsed.data.expoPushToken,
-          apnsToken: parsed.data.apnsToken ?? null,
+          token: apnsToken,
           platform: "ios",
           deviceName: parsed.data.deviceName ?? null,
           interactionSchemaVersion: parsed.data.interactionSchemaVersion ?? null,
@@ -217,10 +217,9 @@ export const devicesRoute = new Hono<AuthedEnv>()
           lastSeenAt: now,
         })
         .onConflictDoUpdate({
-          target: device.expoPushToken,
+          target: device.token,
           set: {
             userId: user.id,
-            apnsToken: parsed.data.apnsToken ?? null,
             deviceName: parsed.data.deviceName ?? null,
             interactionSchemaVersion: parsed.data.interactionSchemaVersion ?? null,
             liveActivityInteractionVersion: parsed.data.liveActivityInteractionVersion ?? null,
@@ -275,7 +274,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
     });
     let responseRow = row;
     if (shouldSendWelcome) {
-      const messages = buildWelcomePushMessages(parsed.data.expoPushToken);
+      const messages = buildWelcomePushMessages(apnsToken);
       let sentWelcome = 0;
       for (const [index, message] of messages.entries()) {
         if (index > 0) await wait(2_000);
@@ -332,7 +331,7 @@ export const devicesRoute = new Hono<AuthedEnv>()
     }
     const removed = await db
       .delete(device)
-      .where(and(eq(device.userId, user.id), eq(device.expoPushToken, parsed.data.expoPushToken)))
+      .where(and(eq(device.userId, user.id), eq(device.token, parsed.data.apnsToken.toLowerCase())))
       .returning({ id: device.id });
     if (removed.length > 0) {
       track({

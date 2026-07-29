@@ -89,8 +89,8 @@ export const device = sqliteTable("device", {
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
-  expoPushToken: text("expo_push_token").notNull().unique(),
-  apnsToken: text("apns_token"),
+  /** Raw APNs device token, lowercase hex. Every push is addressed to it. */
+  token: text("token").notNull().unique(),
   platform: text("platform").notNull().default("ios"),
   deviceName: text("device_name"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),

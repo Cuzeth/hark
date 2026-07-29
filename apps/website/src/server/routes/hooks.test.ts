@@ -7,28 +7,31 @@ process.env.ACCOUNT_RATE_LIMIT_PER_MINUTE = "100";
 
 const sent: Array<Record<string, unknown>> = [];
 
-vi.mock("expo-server-sdk", () => {
-  class Expo {
-    // biome-ignore lint/complexity/noUselessConstructor: mock parity with the SDK
-    constructor(_options?: unknown) {}
-    chunkPushNotifications(messages: Array<Record<string, unknown>>) {
-      return [messages];
-    }
-    async sendPushNotificationsAsync(chunk: Array<Record<string, unknown>>) {
-      sent.push(...chunk);
-      return chunk.map((message) =>
-        message.to === "ExponentPushToken[stale]"
-          ? {
-              status: "error",
-              message: "device gone",
-              details: { error: "DeviceNotRegistered" },
-            }
-          : { status: "ok", id: "ticket" },
-      );
-    }
-  }
-  return { Expo, default: Expo };
-});
+const TOKEN_A = "a".repeat(64);
+const TOKEN_B = "b".repeat(64);
+const TOKEN_FOREIGN = "f".repeat(64);
+const TOKEN_STALE = "c".repeat(64);
+
+vi.mock("../lib/apns", () => ({
+  sendAlertPush: async (token: string, payload: Record<string, unknown>) => {
+    const aps = payload.aps as {
+      alert: { title: string; body: string };
+      category?: string;
+      "thread-id"?: string;
+    };
+    sent.push({
+      to: token,
+      title: aps.alert.title,
+      body: aps.alert.body,
+      categoryId: aps.category,
+      conversationId: aps["thread-id"],
+      data: payload.body,
+    });
+    return token === TOKEN_STALE
+      ? { status: 410, apnsId: null, reason: "Unregistered", accepted: false }
+      : { status: 200, apnsId: "apns-id", reason: null, accepted: true };
+  },
+}));
 
 let app: typeof import("../app")["app"];
 let db: typeof import("../db")["db"];
@@ -106,7 +109,7 @@ describe("POST /hooks/:token", () => {
     await db.insert(schema.device).values({
       id: "dev_1",
       userId: "user_1",
-      expoPushToken: "ExponentPushToken[a]",
+      token: TOKEN_A,
       platform: "ios",
       active: true,
       interactionSchemaVersion: 1,
@@ -124,15 +127,14 @@ describe("POST /hooks/:token", () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0]).toMatchObject({
-      to: "ExponentPushToken[a]",
+      to: TOKEN_A,
       title: "CI",
       body: "Build failed",
-      mutableContent: true,
-      priority: "high",
-      // Falls back to the service image when the webhook has no override.
-      richContent: { image: "https://example.com/default.png" },
+      conversationId: "hark-svc_1",
     });
     const data = sent[0]?.data as Record<string, unknown>;
+    // Falls back to the service image when the webhook has no override.
+    expect(data.avatarUrl).toBe("https://example.com/default.png");
     expect(data.sourceName).toBe("CI");
     expect(data.conversationId).toBe("hark-svc_1");
     expect(JSON.stringify(sent[0])).not.toContain("user_1");
@@ -143,7 +145,7 @@ describe("POST /hooks/:token", () => {
     await db.insert(schema.device).values({
       id: "dev_2",
       userId: "user_1",
-      expoPushToken: "ExponentPushToken[b]",
+      token: TOKEN_B,
       platform: "ios",
       active: true,
       interactionSchemaVersion: 1,
@@ -156,10 +158,7 @@ describe("POST /hooks/:token", () => {
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, delivered: 2 });
-    expect(sent.map((message) => message.to).sort()).toEqual([
-      "ExponentPushToken[a]",
-      "ExponentPushToken[b]",
-    ]);
+    expect(sent.map((message) => message.to).sort()).toEqual([TOKEN_A, TOKEN_B]);
   });
 
   it("routes a notification only to selected devices", async () => {
@@ -169,7 +168,7 @@ describe("POST /hooks/:token", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, delivered: 1 });
     expect(sent).toHaveLength(1);
-    expect(sent[0]?.to).toBe("ExponentPushToken[a]");
+    expect(sent[0]?.to).toBe(TOKEN_A);
   });
 
   it("creates and resolves an approval through the webhook event", async () => {
@@ -197,10 +196,7 @@ describe("POST /hooks/:token", () => {
       response: { status: "pending" },
     });
     expect(sent).toHaveLength(1);
-    expect(sent[0]).toMatchObject({
-      categoryId: "HARK_APPROVAL_V1",
-      richContent: { image: "https://example.com/ci.png" },
-    });
+    expect(sent[0]).toMatchObject({ categoryId: "HARK_APPROVAL_V1" });
     const data = sent[0]?.data as {
       interactionId: string;
       responseToken: string;
@@ -279,7 +275,7 @@ describe("POST /hooks/:token", () => {
     await db.insert(schema.device).values({
       id: "dev_foreign",
       userId: "user_2",
-      expoPushToken: "ExponentPushToken[foreign]",
+      token: TOKEN_FOREIGN,
       platform: "ios",
       active: true,
       createdAt: now,
@@ -333,12 +329,12 @@ describe("POST /hooks/:token", () => {
     });
   });
 
-  it("deactivates devices Expo reports as unregistered", async () => {
+  it("deactivates devices APNs reports as unregistered", async () => {
     const now = new Date();
     await db.insert(schema.device).values({
       id: "dev_stale",
       userId: "user_1",
-      expoPushToken: "ExponentPushToken[stale]",
+      token: TOKEN_STALE,
       platform: "ios",
       active: true,
       createdAt: now,
@@ -372,15 +368,13 @@ describe("POST /hooks/:token", () => {
       createdAt: now,
       updatedAt: now,
     });
-    // The Expo mock only fails this token, and it is unique across devices.
+    // The APNs mock only rejects this token, and it is unique across devices.
     const { eq } = await import("drizzle-orm");
-    await db
-      .delete(schema.device)
-      .where(eq(schema.device.expoPushToken, "ExponentPushToken[stale]"));
+    await db.delete(schema.device).where(eq(schema.device.token, TOKEN_STALE));
     await db.insert(schema.device).values({
       id: "dev_fail_only",
       userId: "user_fail",
-      expoPushToken: "ExponentPushToken[stale]",
+      token: TOKEN_STALE,
       platform: "ios",
       active: true,
       createdAt: now,
@@ -390,8 +384,8 @@ describe("POST /hooks/:token", () => {
     const res = await post(failToken, { body: "ping" });
     expect(res.status).toBe(502);
     const raw = await res.text();
-    expect(raw).not.toContain("ExponentPushToken");
-    expect(raw).not.toContain("device gone");
+    expect(raw).not.toContain(TOKEN_STALE);
+    expect(raw).not.toContain("Unregistered");
     expect(JSON.parse(raw)).toEqual({ ok: false, error: "Push delivery failed" });
   });
 

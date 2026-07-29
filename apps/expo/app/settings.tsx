@@ -11,8 +11,9 @@ import { authClient, useSession } from "../src/lib/auth";
 import { clearInteractionResponses, DEVICE_ID_KEY } from "../src/lib/interactions";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
 
-const EXPO_TOKEN_KEY = "hark.device.expoPushToken";
 const APNS_TOKEN_KEY = "hark.device.apnsToken";
+/** Written by builds that registered an Expo push token; cleared alongside the APNs one. */
+const LEGACY_EXPO_TOKEN_KEY = "hark.device.expoPushToken";
 
 export default function SettingsScreen() {
   const { data: session, isPending } = useSession();
@@ -40,8 +41,8 @@ export default function SettingsScreen() {
 
   const clearDevice = async () => {
     await Promise.all([
-      SecureStore.deleteItemAsync(EXPO_TOKEN_KEY),
       SecureStore.deleteItemAsync(APNS_TOKEN_KEY),
+      SecureStore.deleteItemAsync(LEGACY_EXPO_TOKEN_KEY),
       SecureStore.deleteItemAsync(DEVICE_ID_KEY),
       clearInteractionResponses(),
       Notifications.setBadgeCountAsync(0),
@@ -56,9 +57,9 @@ export default function SettingsScreen() {
         style: "destructive",
         onPress: () => {
           void (async () => {
-            const expoPushToken = await SecureStore.getItemAsync(EXPO_TOKEN_KEY);
+            const apnsToken = await SecureStore.getItemAsync(APNS_TOKEN_KEY);
             try {
-              if (expoPushToken) await api.unregisterDevice({ expoPushToken });
+              if (apnsToken) await api.unregisterDevice({ apnsToken });
             } catch {
               // Best effort; stale tokens are also deactivated server-side.
             }

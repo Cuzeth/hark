@@ -44,6 +44,12 @@ vi.mock("../lib/apns", () => ({
     }
     return { status: 200, apnsId: `apns-${apnsCalls.length}`, reason: null, accepted: true };
   },
+  sendAlertPush: async () => ({
+    status: 200,
+    apnsId: "apns-alert",
+    reason: null,
+    accepted: true,
+  }),
 }));
 
 let app: typeof import("../app")["app"];
@@ -89,7 +95,7 @@ beforeAll(async () => {
     {
       id: "activity_dev_1",
       userId: "activity_user_1",
-      expoPushToken: "ExponentPushToken[activity-1]",
+      token: "a".repeat(64),
       platform: "ios",
       active: true,
       liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("aa".repeat(32)),
@@ -102,7 +108,7 @@ beforeAll(async () => {
     {
       id: "activity_dev_2",
       userId: "activity_user_1",
-      expoPushToken: "ExponentPushToken[activity-2]",
+      token: "b".repeat(64),
       platform: "ios",
       active: true,
       liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("bb".repeat(32)),
@@ -115,7 +121,7 @@ beforeAll(async () => {
     {
       id: "activity_dev_foreign",
       userId: "activity_user_2",
-      expoPushToken: "ExponentPushToken[activity-foreign]",
+      token: "f".repeat(64),
       platform: "ios",
       active: true,
       liveActivityPushToStartTokenCiphertext: encryptLiveActivityToken("cc".repeat(32)),
@@ -664,7 +670,7 @@ describe("Live Activity agent routes", () => {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        expoPushToken: "ExponentPushToken[activity-2]",
+        apnsToken: "b".repeat(64),
         platform: "ios",
         deviceName: "Transferred phone",
       }),

@@ -399,7 +399,7 @@ export const agentRoute = new Hono<AgentEnv>()
     }
 
     const messages = buildPushMessages({
-      to: selectedDevices.map((selected) => selected.expoPushToken),
+      to: selectedDevices.map((selected) => selected.token),
       eventId: notificationId,
       serviceId: token.id,
       // Thread per sender name: each distinct --title from an agent
@@ -421,7 +421,7 @@ export const agentRoute = new Hono<AgentEnv>()
       await db
         .update(device)
         .set({ active: false })
-        .where(inArray(device.expoPushToken, result.staleTokens));
+        .where(inArray(device.token, result.staleTokens));
       track({
         name: "device_deactivated_stale",
         userId: token.userId,
@@ -453,7 +453,7 @@ export const agentRoute = new Hono<AgentEnv>()
         notification: toNotificationDto({ ...outcome.row, acceptedCount: result.accepted }),
         accepted: result.accepted,
         // Provider errors can embed push tokens, so the reason is deliberately coarse.
-        ...(result.accepted === 0 ? { message: "No notifications were accepted by Expo." } : {}),
+        ...(result.accepted === 0 ? { message: "No notifications were accepted by APNs." } : {}),
       },
       201,
     );
@@ -719,7 +719,7 @@ export const agentRoute = new Hono<AgentEnv>()
       );
     }
     const messages = buildInteractionPushMessages({
-      to: selectedDevices.map((selected) => selected.expoPushToken),
+      to: selectedDevices.map((selected) => selected.token),
       interactionId: row.id,
       kind: parsed.data.kind,
       title: parsed.data.title,
@@ -733,7 +733,7 @@ export const agentRoute = new Hono<AgentEnv>()
       await db
         .update(device)
         .set({ active: false })
-        .where(inArray(device.expoPushToken, result.staleTokens));
+        .where(inArray(device.token, result.staleTokens));
       track({
         name: "device_deactivated_stale",
         userId: token.userId,
@@ -767,7 +767,7 @@ export const agentRoute = new Hono<AgentEnv>()
         interaction: toDto(row),
         accepted: result.accepted,
         // Provider errors can embed push tokens, so the reason is deliberately coarse.
-        ...(result.accepted === 0 ? { message: "No notifications were accepted by Expo." } : {}),
+        ...(result.accepted === 0 ? { message: "No notifications were accepted by APNs." } : {}),
       },
       201,
     );
