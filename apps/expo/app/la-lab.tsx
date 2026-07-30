@@ -74,29 +74,33 @@ function Lab() {
     (async () => {
       try {
         const existing = HarkAgentActivity.getInstances();
-        const isApproval = styleParam.data === "approval";
+        const isInteractive =
+          styleParam.data === "approval" ||
+          styleParam.data === "shell" ||
+          styleParam.data === "verdict" ||
+          styleParam.data === "signal";
         const nextProps: LiveActivityProps = {
           schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
           activityId: `lab-style-${styleParam.data}-${params.ts ?? "manual"}`,
           title: "Deploy #184",
-          status: isApproval ? "Approval needed" : "Building",
-          detail: isApproval
+          status: isInteractive ? "Approval needed" : "Building",
+          detail: isInteractive
             ? "harkctl requests approval to deploy to production"
             : "Compiling packages/website-runtime on raven-cobra",
-          ...(isApproval ? {} : { progress: 0.25 }),
+          ...(isInteractive ? {} : { progress: 0.25 }),
           updatedAt: new Date().toISOString(),
-          symbol: isApproval ? "terminal" : "build",
+          symbol: isInteractive ? "terminal" : "build",
           privacyMode: "standard",
           accentColor: LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR,
           style: styleParam.data,
-          ...(isApproval
+          ...(isInteractive
             ? {
                 interaction: {
                   id: "lab-style-approval-interaction",
                   kind: "approval" as const,
                   prompt: "Deploy build #184 to production on raven-cobra?",
-                  primaryLabel: "Approve",
-                  secondaryLabel: "Deny",
+                  primaryLabel: styleParam.data === "verdict" ? "Allow" : "Approve",
+                  secondaryLabel: styleParam.data === "verdict" ? "Don’t Allow" : "Deny",
                   primaryAction: "approve",
                   secondaryAction: "deny",
                   state: "pending" as const,

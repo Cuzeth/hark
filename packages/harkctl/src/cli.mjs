@@ -43,10 +43,20 @@ function parseAccentColor(value) {
 }
 
 const ACTIVITY_STYLES = ["standard", "ring", "hero", "terminal", "steps"];
+const INTERACTIVE_ACTIVITY_STYLES = ["approval", "shell", "verdict", "signal"];
 
 function parseStyle(value) {
   if (!ACTIVITY_STYLES.includes(String(value))) {
     throw new UsageError(`--style must be one of: ${ACTIVITY_STYLES.join(", ")}`);
+  }
+  return String(value);
+}
+
+function parseInteractiveStyle(value) {
+  if (!INTERACTIVE_ACTIVITY_STYLES.includes(String(value))) {
+    throw new UsageError(
+      `--style must be one of: ${INTERACTIVE_ACTIVITY_STYLES.join(", ")} for --live-activity`,
+    );
   }
   return String(value);
 }
@@ -387,7 +397,8 @@ function help() {
                  [--idempotency-key <key>] [--stdin]
   harkctl notify ask <prompt> (--approval|--yes-no|--text) [--title <name>] [--image <url>]
                   [--url <url>] [--device <id>] [--expires-in <duration>]
-                  [--live-activity [--primary-label <label>] [--secondary-label <label>]]
+                  [--live-activity [--style <approval|shell|verdict|signal>]
+                                   [--primary-label <label>] [--secondary-label <label>]]
                   [--idempotency-key <key>] [--stdin] [--wait [--timeout <duration>] | --poll]
   harkctl interaction get <id>
   harkctl interaction wait <id> [--timeout <duration>]
@@ -667,6 +678,9 @@ export async function execute(argv, env = process.env, overrides = {}) {
       if (!liveActivity && (options["primary-label"] || options["secondary-label"])) {
         throw new UsageError("custom action labels require --live-activity");
       }
+      if (!liveActivity && options.style) {
+        throw new UsageError("interactive --style requires --live-activity");
+      }
       if (liveActivity && expiresInSeconds > 28_800) {
         throw new UsageError("--live-activity requests must expire within 8 hours");
       }
@@ -677,6 +691,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
         kind: selectors[0],
         expiresInSeconds,
         ...(liveActivity ? { presentation: "live_activity" } : {}),
+        ...(liveActivity && options.style ? { style: parseInteractiveStyle(options.style) } : {}),
         ...(options["primary-label"]
           ? { primaryLabel: parseActionLabel(options["primary-label"], "primary-label") }
           : {}),

@@ -246,9 +246,15 @@ export const LIVE_ACTIVITY_STYLES = [
   "terminal",
   "steps",
   "approval",
+  "shell",
+  "verdict",
+  "signal",
 ] as const;
 export const liveActivityStyleSchema = z.enum(LIVE_ACTIVITY_STYLES);
 export type LiveActivityStyle = z.infer<typeof liveActivityStyleSchema>;
+export const INTERACTIVE_LIVE_ACTIVITY_STYLES = ["approval", "shell", "verdict", "signal"] as const;
+export const interactiveLiveActivityStyleSchema = z.enum(INTERACTIVE_LIVE_ACTIVITY_STYLES);
+export type InteractiveLiveActivityStyle = z.infer<typeof interactiveLiveActivityStyleSchema>;
 export const LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR = "#5ED8B7" as const;
 export const LIVE_ACTIVITY_DEFAULT_EXPIRES_IN_SECONDS = 28_800 as const;
 export const LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS = 14_400 as const;
@@ -299,11 +305,17 @@ export const liveActivityPropsSchema = z
     interaction: liveActivityInteractionSchema.optional(),
   })
   .superRefine((value, context) => {
-    if (value.style === "approval" && !value.interaction) {
+    if (
+      (value.style === "approval" ||
+        value.style === "shell" ||
+        value.style === "verdict" ||
+        value.style === "signal") &&
+      !value.interaction
+    ) {
       context.addIssue({
         code: "custom",
         path: ["interaction"],
-        message: "Approval Live Activities require an interaction",
+        message: "Interactive Live Activity styles require an interaction",
       });
     }
   });
@@ -344,11 +356,16 @@ export const liveActivityStartSchema = z
       .default(LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS),
   })
   .superRefine((value, context) => {
-    if (value.style === "approval") {
+    if (
+      value.style === "approval" ||
+      value.style === "shell" ||
+      value.style === "verdict" ||
+      value.style === "signal"
+    ) {
       context.addIssue({
         code: "custom",
         path: ["style"],
-        message: "Use an interaction with live_activity presentation for approval Live Activities",
+        message: "Use an interaction with live_activity presentation for interactive styles",
       });
     }
   });
@@ -372,11 +389,16 @@ export const liveActivityUpdateSchema = z
     "At least one activity field is required",
   )
   .superRefine((value, context) => {
-    if (value.style === "approval") {
+    if (
+      value.style === "approval" ||
+      value.style === "shell" ||
+      value.style === "verdict" ||
+      value.style === "signal"
+    ) {
       context.addIssue({
         code: "custom",
         path: ["style"],
-        message: "Approval style is managed by interactive Live Activity requests",
+        message: "Interactive styles are managed by interactive Live Activity requests",
       });
     }
   });
@@ -621,6 +643,7 @@ export const interactionCreateSchema = z
       .optional(),
     expiresInSeconds: z.number().int().min(30).max(86_400).default(900),
     presentation: interactionPresentationSchema.optional(),
+    style: interactiveLiveActivityStyleSchema.optional(),
     primaryLabel: interactionActionLabelSchema.optional(),
     secondaryLabel: interactionActionLabelSchema.optional(),
   })
@@ -665,6 +688,13 @@ export const interactionCreateSchema = z
         code: "custom",
         path: ["presentation"],
         message: "Custom action labels require live_activity presentation",
+      });
+    }
+    if (presentation !== "live_activity" && value.style !== undefined) {
+      context.addIssue({
+        code: "custom",
+        path: ["style"],
+        message: "Interactive Live Activity styles require live_activity presentation",
       });
     }
   });

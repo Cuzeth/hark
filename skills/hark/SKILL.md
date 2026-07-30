@@ -164,6 +164,8 @@ END UNTRUSTED CONTEXT
 - `--text` returns a short reply.
 - `--live-activity` puts approval or yes/no buttons on the Lock Screen and expanded Dynamic Island
   on iOS 17+. It does not support `--text`, `--image`, or `--url`, and must expire within eight hours.
+- `--style approval|shell|verdict|signal` selects the interactive Live Activity layout. It requires
+  `--live-activity` and defaults to `approval`.
 - `--primary-label` and `--secondary-label` change only the visible verbs. The underlying actions,
   exit codes, and callback values remain approve/deny or yes/no.
 - `--wait` blocks until answered or timed out.
