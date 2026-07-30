@@ -121,6 +121,79 @@ needed.
 - Keep `APNS_ENVIRONMENT` and `EXPO_PUBLIC_APNS_ENVIRONMENT` on `sandbox` for development builds and
   `production` for release builds.
 
+## Fork contract — read before merging upstream
+
+This section is for whoever maintains this fork, human or AI agent. Upstream is
+[R44VC0RP/hark](https://github.com/R44VC0RP/hark) (the `upstream` git remote). Upstream is a
+multi-tenant SaaS with OAuth sign-in, a paid Pro plan, and Expo-hosted push; this fork is a private
+single-user instance. Four invariants define the fork — any upstream merge must leave all four
+intact:
+
+1. **One account, username + password.** Auth is better-auth's `username()` plugin
+   ([auth.ts](apps/website/src/server/auth.ts)); the single admin account is seeded at boot from
+   `ADMIN_USERNAME` / `ADMIN_PASSWORD` ([index.ts](apps/website/src/server/index.ts)), and a
+   `databaseHooks.user.create.before` guard rejects any second user. There is no sign-up UI, no
+   Google/Apple OAuth, and no account-deletion flow. Upstream's `lib/apple.ts`,
+   `routes/apple-auth.ts`, social sign-in buttons, and the app's `apple-auth.ts` are deleted here.
+2. **No billing.** Autumn is gone (`autumn.config.ts`, `lib/billing.ts`, `routes/billing.ts`,
+   `shared/pricing.ts`, the Pricing page). Everything upstream gates as "Hark Pro" is
+   unconditional: `deviceIds` routing, interactive responses, Live Activities, unlimited devices,
+   no notification quotas, no 402 responses. Rate limits are single-tier env values
+   (`SERVICE_RATE_LIMIT_PER_MINUTE`, `ACCOUNT_RATE_LIMIT_PER_MINUTE`).
+3. **Direct APNs only — no Expo cloud.** Alerts go server → Apple over HTTP/2 with this instance's
+   own `.p8` key (`sendAlertPush` in [apns.ts](apps/website/src/server/lib/apns.ts));
+   `expo-server-sdk`, `EXPO_ACCESS_TOKEN`, EAS (`eas.json`, `extra.eas`, `EAS_PROJECT_ID`), and
+   Expo push tokens are all removed. The device identity is the raw APNs device token
+   (`device.token`, unique — migration 0019); the app registers `getDevicePushTokenAsync()`
+   output. Alert payloads carry the data object twice: under `body` (what expo-notifications
+   surfaces as `content.data`) and at the top level (what
+   [NotificationService.swift](apps/expo/targets/notification-service/NotificationService.swift)
+   reads). Keep both slots identical.
+4. **This owner's identity.** Bundle id `dev.abdeen.hark` (widgets `dev.abdeen.hark.widgets`,
+   app group `group.dev.abdeen.hark`), public URL `hark.abdeen.dev`, team id only ever from
+   `APPLE_TEAM_ID` env. No marketing landing page (the root route is the sign-in form), no
+   pricing/legal pages, no SEO/sitemap (robots disallows all), neutral welcome pushes, no upstream
+   deploy workflows under `.github/`, and no upstream identifiers anywhere (their bundle id, domain,
+   Apple team `9G68SMNHEU`, EAS project id, TestFlight links, or personal avatars/handles).
+
+Areas intentionally unchanged from upstream, where their improvements should merge cleanly: the
+webhook pipeline and event/delivery tracking, interactions (approvals/replies), Live Activities
+(including the `patches/expo-widgets` Swift injection — mind that one `+` line carries this fork's
+respond URL, and patch line counts must not change), the iOS app UI, `harkctl` and the
+device-authorization flow, the docs engine, the local-only SQLite analytics (minus billing events),
+and the Docker/compose deployment.
+
+### Merge procedure
+
+```sh
+git fetch upstream
+git merge upstream/main   # or cherry-pick specific commits
+```
+
+Decision rules while resolving conflicts:
+
+| Upstream change touches | Resolution |
+| --- | --- |
+| Auth, sign-in/up, account deletion, OAuth, billing, plans, quotas, pricing/legal/marketing pages, SEO, EAS/Expo push, deploy workflows | Keep ours / drop theirs entirely |
+| Webhook routes, interactions, Live Activities, widgets patch, app UI, harkctl, docs content, analytics | Take theirs, then re-apply this fork's deltas: no `getBilling`/allowance/402/plan gates, device fan-out never sliced, `device.token` is the APNs token, alert payloads built by `buildAlertPayload`, docs carry no Pro/pricing copy |
+| Env/config files (`env.ts`, `.env.example`, `compose.yaml`, `app.config.ts`) | Merge by hand against the contract above; never reintroduce removed vars |
+
+After any merge, grep for these strings: `autumn`, `pro_monthly`, `Hark Pro`, `GOOGLE_CLIENT`,
+`APPLE_SIGN_IN`, `expo-server-sdk`, `ExponentPushToken`, `expoPushToken`, `EXPO_ACCESS_TOKEN`,
+`EAS_PROJECT_ID`, `deleteUser`, `ceo.ryan.hark`, `hark.ryan.ceo`, `R44VC0RP`, `9G68SMNHEU`,
+`twimg`. Outside this README and `pnpm-lock.yaml`, the only acceptable hits are negative test
+fixtures that assert the string is rejected or absent (currently in `devices.test.ts`,
+`docs.test.ts`, and the contracts tests) and the delete-only `LEGACY_EXPO_TOKEN_KEY` SecureStore
+cleanup constant in the app. Anything else is upstream leakage — remove it. Then verify:
+
+```sh
+corepack pnpm install && corepack pnpm -r typecheck && corepack pnpm -r test && corepack pnpm -r build
+```
+
+plus a fresh-database boot (`ADMIN_PASSWORD` set, run from `apps/website`) that logs
+`Created the admin account`, and `npx expo export --platform ios` in `apps/expo` to confirm the
+app still bundles.
+
 ## License
 
 Hark is source-available under the
