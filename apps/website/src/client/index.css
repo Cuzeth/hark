@@ -83,6 +83,7 @@
   --hark-backdrop: oklch(0.21 0.02 260 / 0.2);
   --hark-panel-border: var(--color-line);
   --hark-panel-shadow: 0 24px 70px oklch(0.21 0.02 260 / 0.15);
+  --hark-ambient-glow: oklch(0.63 0.09 173 / 0.18);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -135,6 +136,7 @@
      from a light hairline ring plus a tight, deep shadow. */
     --hark-panel-border: oklch(1 0 0 / 0.1);
     --hark-panel-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04), 0 16px 50px oklch(0 0 0 / 0.55);
+    --hark-ambient-glow: oklch(0.67 0.1 173 / 0.15);
   }
 }
 
@@ -211,6 +213,104 @@ body::after {
 #root {
   position: relative;
   z-index: 1;
+}
+
+.hark-landing {
+  position: relative;
+  isolation: isolate;
+}
+
+:root:has(.hark-landing) body::before {
+  background: none;
+}
+
+.hark-landing-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.hark-landing-ambient::before {
+  position: absolute;
+  top: 8%;
+  left: 12%;
+  width: min(70vw, 60rem);
+  height: min(54vw, 44rem);
+  content: "";
+  background: radial-gradient(
+    ellipse closest-side at center,
+    var(--hark-ambient-glow),
+    transparent
+  );
+  filter: blur(54px);
+  animation: hark-haze-drift-a 34s ease-in-out infinite alternate;
+}
+
+.hark-landing-ambient::after {
+  position: absolute;
+  right: 8%;
+  bottom: 2%;
+  width: min(62vw, 52rem);
+  height: min(48vw, 40rem);
+  content: "";
+  background: radial-gradient(
+    ellipse closest-side at center,
+    var(--hark-ambient-glow),
+    transparent
+  );
+  filter: blur(64px);
+  opacity: 0.78;
+  animation: hark-haze-drift-b 39s ease-in-out -18s infinite alternate;
+}
+
+.hark-demo-stage {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  overflow: visible;
+}
+
+.hark-demo-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 16%);
+  mask-image: linear-gradient(to bottom, transparent, black 16%);
+}
+
+/* Below the lg split, the phone (which sits left of its own shadow in the
+   render) gets an optical shift so it reads centered in the column. */
+@media (width < 64rem) {
+  .hark-demo-video {
+    transform: translateX(12%);
+  }
+}
+
+@keyframes hark-haze-drift-a {
+  from {
+    transform: translate3d(-7vw, -3vh, 0) rotate(-7deg) scale(0.92);
+  }
+  to {
+    transform: translate3d(13vw, 9vh, 0) rotate(9deg) scale(1.08);
+  }
+}
+
+@keyframes hark-haze-drift-b {
+  from {
+    transform: translate3d(8vw, 5vh, 0) rotate(8deg) scale(1.06);
+  }
+  to {
+    transform: translate3d(-12vw, -8vh, 0) rotate(-10deg) scale(0.9);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hark-landing-ambient::before,
+  .hark-landing-ambient::after {
+    animation: none;
+  }
 }
 
 button,
@@ -317,19 +417,5 @@ address {
   .hark-modal-backdrop.is-closing,
   .hark-modal-backdrop.is-closing .hark-modal-panel {
     animation-duration: 0.01ms;
-  }
-}
-
-/* Liquid-glass surfaces fall back to a solid panel when the user asks for
-   less transparency. This file is imported after Tailwind, so these rules win
-   over the utility classes; LiquidGlassLayer separately skips its inline
-   refraction filter under the same media query. */
-@media (prefers-reduced-transparency: reduce) {
-  .hark-liquid-glass {
-    background: var(--color-surface);
-  }
-  .hark-liquid-glass-effect {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
   }
 }
