@@ -1,4 +1,5 @@
-const IOS_APP_DOWNLOAD_URL = "https://testflight.apple.com/join/PjCnKETB";
+const IOS_APP_DOWNLOAD_URL =
+  "https://apps.apple.com/us/app/hark-developer-notifications/id6794121509";
 
 export function AppDownloadBanner() {
   return (
@@ -16,9 +17,9 @@ export function AppDownloadBanner() {
         className="size-10 shrink-0 rounded-[10px]"
       />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">Hark for iPhone is ready to test</span>
+        <span className="block text-sm font-semibold">Hark for iPhone is now available</span>
         <span className="mt-0.5 block truncate text-xs text-ink-subtle">
-          Install the latest test build on your phone to receive notifications.
+          Download it from the App Store to receive notifications.
         </span>
       </span>
       <span

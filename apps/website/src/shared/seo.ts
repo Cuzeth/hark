@@ -121,7 +121,7 @@ export function homeStructuredData(): Record<string, unknown> {
         operatingSystem: "iOS",
         image: SOCIAL_IMAGE_URL,
         screenshot: DEMO_POSTER_URL,
-        downloadUrl: "https://testflight.apple.com/join/PjCnKETB",
+        downloadUrl: "https://apps.apple.com/us/app/hark-developer-notifications/id6794121509",
         softwareHelp: `${SITE_URL}/docs`,
         provider: { "@id": `${SITE_URL}/#provider` },
         sameAs: ["https://github.com/R44VC0RP/hark", "https://skills.sh/r44vc0rp/hark/hark"],
