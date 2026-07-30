@@ -13,8 +13,9 @@ Hark maintainer performs the final on-device visual check before release.
 Read these files:
 
 - `packages/contracts/src/index.ts` — public style IDs and Live Activity payload limits.
-- `apps/expo/src/widgets/HarkAgentActivity.tsx` — the native widget layout and all presentation
-  slots.
+- `apps/expo/src/widgets/live-activities/` — one production style per file, including all of its
+  presentation choices.
+- `apps/expo/src/widgets/HarkAgentActivity.tsx` — the style registry.
 - `apps/expo/src/widgets/HarkAgentActivity.test.ts` — the local widget-runtime test harness.
 - `packages/harkctl/src/cli.mjs` — CLI style validation and help text.
 - `apps/website/src/shared/docs/content.ts` — API documentation and style metadata.
@@ -26,15 +27,17 @@ part of Hark's public API and must not be renamed later.
 
 ## Critical widget constraint
 
-`HarkAgentActivityLayout` is not a normal React component. Expo serializes the entire function to a
-string, evaluates it with JavaScriptCore inside the widget extension, and converts the resulting
+Live Activity style functions are not normal React components. Expo serializes every function
+marked with the `"widget"` directive to a string. `HarkAgentActivity.tsx` composes those sources,
+and JavaScriptCore evaluates the resulting layout inside the widget extension before converting its
 nodes to SwiftUI.
 
-Inside `HarkAgentActivityLayout`:
+Inside a production style function:
 
 - Do not call imported helper functions or components you created elsewhere.
 - Do not close over module constants, arrays, or objects.
-- Keep all template-specific constants and JSX inside the function.
+- Keep all template-specific constants and JSX inside the marked function.
+- Keep the `"widget"` directive as the function's first statement.
 - Use the existing proven-safe subset: local `const` values, conditionals, ternaries, template
   literals, `Math` calls, and the imported `@expo/ui/swift-ui` components and modifiers.
 - Avoid loops, `Array.map`, `String.repeat`, network calls, timers, state, hooks, event handlers, and
@@ -68,8 +71,10 @@ branch.
 
 ## 2. Build the native layout
 
-Work only inside `HarkAgentActivityLayout` in
-`apps/expo/src/widgets/HarkAgentActivity.tsx`.
+Create `apps/expo/src/widgets/live-activities/<style>.tsx` by following an existing style file. The
+file must return the complete `LiveActivityLayout`; explicitly select inherited `standard` slots so
+all presentation decisions remain visible in one place. Then import the function and add its branch
+to both registry paths in `apps/expo/src/widgets/HarkAgentActivity.tsx`.
 
 Use the existing privacy-safe derived values rather than raw payload fields:
 
@@ -186,11 +191,11 @@ pnpm --filter @hark/website exec vitest run src/shared/docs/docs.test.ts
 
 Contributors do not need this step. Maintainers use it before release.
 
-Temporarily set `style: "orbit"` in the props returned by `apps/expo/app/la-lab.tsx`, then run:
+Start the style directly through the reusable lab deep link, then run:
 
-```bash
-pnpm --filter @hark/expo ios
-xcrun simctl openurl booted "hark://la-lab"
+```sh
+xcrun simctl openurl booted "hark://la-lab?style=orbit&ts=$(date +%s)"
+/Users/vogel/dev/experiments/2026-07-30-la-captures/capture-la.sh orbit
 ```
 
 Start the activity and inspect the Lock Screen plus compact, minimal, and expanded Dynamic Island

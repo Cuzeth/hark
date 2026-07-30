@@ -154,8 +154,25 @@ describe("HarkAgentActivity layout styles", () => {
   });
 
   it("defines every slot for every style", () => {
-    for (const style of ["standard", "ring", "hero", "terminal", "steps"] as const) {
-      const slots = render({ ...baseProps, style });
+    for (const style of ["standard", "ring", "hero", "terminal", "steps", "approval"] as const) {
+      const props: LiveActivityProps =
+        style === "approval"
+          ? {
+              ...baseProps,
+              style,
+              interaction: {
+                id: "int_slots",
+                kind: "approval",
+                prompt: "Deploy to production?",
+                primaryLabel: "Approve",
+                secondaryLabel: "Deny",
+                primaryAction: "approve",
+                secondaryAction: "deny",
+                state: "pending",
+              },
+            }
+          : { ...baseProps, style };
+      const slots = render(props);
       for (const slot of SLOTS) {
         expect(slots[slot], `${style}.${slot}`).toBeDefined();
       }
@@ -188,10 +205,9 @@ describe("HarkAgentActivity layout styles", () => {
     });
     const buttons = findAll(slots.banner, "Button");
     expect(buttons).toHaveLength(2);
-    expect(buttons.map((button) => [button.props.label, button.props.target])).toEqual([
-      ["Send", "approve"],
-      ["Deny", "deny"],
-    ]);
+    expect(buttons.map((button) => button.props.target)).toEqual(["approve", "deny"]);
+    expect(texts(buttons[0])).toContain("Send");
+    expect(texts(buttons[1])).toContain("Deny");
     expect(buttons[0]?.props).toMatchObject({
       harkInteractionId: "int_1",
       harkInteractionCredential: "c".repeat(43),
@@ -203,7 +219,7 @@ describe("HarkAgentActivity layout styles", () => {
         expect.arrayContaining([
           expect.objectContaining({
             $modifier: "buttonBorderShape",
-            args: ["roundedRectangle", 6],
+            args: ["roundedRectangle", 8],
           }),
           expect.objectContaining({
             $modifier: "controlSize",
@@ -211,12 +227,18 @@ describe("HarkAgentActivity layout styles", () => {
           }),
           expect.objectContaining({
             $modifier: "frame",
-            args: [{ height: 36, maxWidth: Infinity }],
+            args: [{ height: 46, maxWidth: Infinity }],
           }),
         ]),
       );
     }
     expect(findAll(slots.expandedBottom, "Button")).toHaveLength(2);
+
+    const previewProps = {
+      ...props,
+      labInteractionPreview: true,
+    } as LiveActivityProps;
+    expect(findAll(render(previewProps).banner, "Button")).toHaveLength(2);
 
     const resolved = render({
       ...props,
