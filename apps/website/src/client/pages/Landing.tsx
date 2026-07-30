@@ -36,7 +36,7 @@ export function Landing() {
   return (
     <div className="hark-landing flex min-h-dvh flex-col">
       <div className="hark-landing-ambient" aria-hidden="true" />
-      <header className="mx-auto flex h-20 w-full max-w-3xl items-center justify-between px-6">
+      <header className="mx-auto flex h-20 w-full max-w-6xl items-center justify-between px-6">
         <Link to="/" className="flex items-center gap-1.5 text-lg font-semibold">
           <span aria-hidden="true" className="size-[18px] rounded-[5px] bg-[#035B49]" />
           <span>Hark</span>
@@ -60,8 +60,8 @@ export function Landing() {
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-6">
-        <div className="grid items-center gap-x-12 gap-y-8 pt-10 pb-10 lg:min-h-[calc(100dvh-5rem)] lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:pt-0 lg:pb-0">
-          <section>
+        <div className="grid items-center gap-y-8 pt-10 pb-10 lg:min-h-[calc(100dvh-5rem)] lg:grid-cols-[auto_auto] lg:justify-center lg:gap-x-24 lg:pt-0 lg:pb-0">
+          <section className="lg:max-w-md">
             <h1 className="text-4xl leading-[1.05] font-semibold tracking-[-0.04em] text-balance sm:text-5xl">
               From webhook to lock screen.
             </h1>

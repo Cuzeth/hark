@@ -265,27 +265,33 @@ body::after {
   animation: hark-haze-drift-b 39s ease-in-out -18s infinite alternate;
 }
 
+/* The stage is sized to the phone's opaque bounds inside the render
+   (x 100-629, y 0-621 of the 960x754 asset), so layout anchors on the phone
+   itself. The surrounding shadow and padding overflow the box freely. */
 .hark-demo-stage {
-  display: flex;
-  width: 100%;
-  justify-content: center;
-  overflow: visible;
+  position: relative;
+  width: min(100%, 24rem);
+  aspect-ratio: 529 / 621;
+  pointer-events: none;
+}
+
+/* In the desktop hero the demo sits in a content-sized grid track, where a
+   percentage width cannot resolve; the anchor needs a definite width there. */
+@media (width >= 64rem) {
+  .hark-demo-stage {
+    width: 24rem;
+  }
 }
 
 .hark-demo-video {
-  display: block;
-  width: 100%;
+  position: absolute;
+  top: 0;
+  left: -18.9036%; /* 100 / 529 */
+  width: 181.4745%; /* 960 / 529 */
+  max-width: none;
   height: auto;
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 16%);
   mask-image: linear-gradient(to bottom, transparent, black 16%);
-}
-
-/* Below the lg split, the phone (which sits left of its own shadow in the
-   render) gets an optical shift so it reads centered in the column. */
-@media (width < 64rem) {
-  .hark-demo-video {
-    transform: translateX(12%);
-  }
 }
 
 @keyframes hark-haze-drift-a {
