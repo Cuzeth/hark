@@ -139,6 +139,18 @@ The installable [`hark` agent skill](./skills/hark/SKILL.md) follows the open Ag
 used by [skills.sh](https://skills.sh/r44vc0rp/hark/hark) and supports OpenCode, Claude Code, Codex,
 Cursor, and other compatible agents.
 
+`harkctl` can route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to
+Hark with one setup command:
+
+```sh
+npm install --global harkctl
+harkctl auth login --client-name "Coding agent permissions"
+harkctl permissions setup all
+```
+
+Only an explicit phone approval allows a request. Other outcomes deny it, and raw commands, patches,
+prompts, file contents, and absolute paths are not sent to Hark.
+
 ## License
 
 Hark is source-available under the

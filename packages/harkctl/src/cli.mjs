@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, rm, stat } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
+import { main as permissionsMain } from "./permissions/cli.mjs";
 
 const DEFAULT_API_URL = "https://hark.ryan.ceo";
 const DEFAULT_SCOPES = [
@@ -412,6 +413,9 @@ function help() {
                          [--if-sequence <n>] [--idempotency-key <key>]
   harkctl activity get <id|key>
   harkctl activity list [--limit <n>]
+  harkctl permissions setup [claude|codex|opencode|all]
+  harkctl permissions uninstall [claude|codex|opencode|all]
+  harkctl permissions doctor
   harkctl devices list
   harkctl services list
   harkctl services create --title <title> [--image <url>] [--url <url>] [--stdin]
@@ -445,6 +449,12 @@ export async function execute(argv, env = process.env, overrides = {}) {
 
   if (group === "auth" && action === "login") {
     return { body: await login(options, env, runtime), exitCode: 0 };
+  }
+
+  if (group === "permissions") {
+    const body = await permissionsMain(positionals.slice(1));
+    if (body?.help) return { body, exitCode: 0, text: true };
+    return { body: body ?? { ok: true }, exitCode: 0 };
   }
 
   const config = await loadConfig(env);

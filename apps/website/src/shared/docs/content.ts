@@ -828,6 +828,20 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
             kind: "p",
             text: "Use repeatable `--scope` flags to narrow access, `--client-name` to label the connection, and `--expires-in` (default `90d`) to bound its lifetime. For CI or self-hosted setups, `HARK_TOKEN` and `HARK_API_URL` environment variables override the config file.",
           },
+          {
+            kind: "p",
+            text: "Route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to Hark with one setup command. Only an explicit phone approval grants a request, and it grants it once. Other outcomes deny it.",
+          },
+          {
+            kind: "code",
+            language: "bash",
+            code: `harkctl permissions setup all
+harkctl permissions doctor`,
+          },
+          {
+            kind: "p",
+            text: "Use `setup claude`, `setup codex`, or `setup opencode` for one integration. After Codex setup, review and trust the hook through `/hooks`. OpenCode setup installs both a V1 plugin connector and the V2 background connector on macOS. `harkctl permissions uninstall all` removes only Hark-owned hooks and services.",
+          },
         ],
       },
       {
