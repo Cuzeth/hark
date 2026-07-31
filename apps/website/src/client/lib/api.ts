@@ -5,7 +5,8 @@ import type {
   ApiTokenDto,
   DeviceAuthorizationRequestDto,
   DeviceDto,
-  EventDto,
+  InboxActivityKind,
+  InboxActivityPageDto,
   LiveActivityDto,
   ServiceCreatedResponse,
   ServiceCreateInput,
@@ -75,6 +76,9 @@ export const api = {
   deleteService: (id: string) => request<{ ok: true }>(`/api/services/${id}`, { method: "DELETE" }),
   listDevices: () => request<{ devices: DeviceDto[] }>("/api/devices"),
   removeDevice: (id: string) => request<{ ok: true }>(`/api/devices/${id}`, { method: "DELETE" }),
-  listEvents: (limit = 50) => request<{ events: EventDto[] }>(`/api/events?limit=${limit}`),
+  listActivityFeed: (filter: InboxActivityKind | "all" = "all", page = 0, pageSize = 20) =>
+    request<InboxActivityPageDto>(
+      `/api/activity-feed?filter=${filter}&page=${page}&pageSize=${pageSize}`,
+    ),
   listLiveActivities: () => request<{ activities: LiveActivityDto[] }>("/api/activities"),
 };

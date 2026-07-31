@@ -1,7 +1,9 @@
 import type {
   ApiTokenDto,
   DeviceDto,
-  EventDto,
+  InboxActivityDto,
+  InboxActivityKind,
+  InboxActivityPageDto,
   LiveActivityDto,
   ServiceCreatedResponse,
   ServiceDto,
@@ -12,6 +14,8 @@ import { useConfirm } from "../components/ConfirmDialog";
 import { CopyField } from "../components/CopyField";
 import { api } from "../lib/api";
 import { changePassword, signOut, useSession } from "../lib/auth";
+
+type ActivityFilter = "all" | InboxActivityKind;
 
 function curlExample(webhookUrl: string): string {
   return [
@@ -98,7 +102,9 @@ export function Dashboard() {
   const navigate = useNavigate();
 
   const [services, setServices] = useState<ServiceDto[] | null>(null);
-  const [events, setEvents] = useState<EventDto[] | null>(null);
+  const [activity, setActivity] = useState<InboxActivityPageDto | null>(null);
+  const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
+  const [activityPage, setActivityPage] = useState(0);
   const [liveActivities, setLiveActivities] = useState<LiveActivityDto[] | null>(null);
   const [devices, setDevices] = useState<DeviceDto[] | null>(null);
   const [apiTokens, setApiTokens] = useState<ApiTokenDto[] | null>(null);
@@ -111,18 +117,14 @@ export function Dashboard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [svc, dev, tokenState, activity, liveActivityState] = await Promise.all([
+      const [svc, dev, tokenState] = await Promise.all([
         api.listServices(),
         api.listDevices(),
         api.listApiTokens(),
-        api.listEvents(),
-        api.listLiveActivities(),
       ]);
       setServices(svc.services);
       setDevices(dev.devices);
       setApiTokens(tokenState.tokens);
-      setEvents(activity.events);
-      setLiveActivities(liveActivityState.activities);
     } catch {
       setError("Could not load your dashboard data. Please refresh and try again.");
     }
@@ -130,16 +132,16 @@ export function Dashboard() {
 
   const refreshActivity = useCallback(async () => {
     try {
-      const [activity, liveActivityState] = await Promise.all([
-        api.listEvents(),
+      const [feed, liveActivityState] = await Promise.all([
+        api.listActivityFeed(activityFilter, activityPage),
         api.listLiveActivities(),
       ]);
-      setEvents(activity.events);
+      setActivity(feed);
       setLiveActivities(liveActivityState.activities);
     } catch {
       // Keep the last successful activity snapshot visible.
     }
-  }, []);
+  }, [activityFilter, activityPage]);
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -151,6 +153,7 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!session) return;
+    void refreshActivity();
     const interval = window.setInterval(() => void refreshActivity(), 10_000);
     return () => window.clearInterval(interval);
   }, [session, refreshActivity]);
@@ -267,7 +270,16 @@ export function Dashboard() {
 
         <LiveActivities activities={liveActivities} />
 
-        <ActivityLog events={events} onRefresh={refreshActivity} />
+        <ActivityLog
+          activity={activity}
+          filter={activityFilter}
+          onFilterChange={(next) => {
+            setActivityFilter(next);
+            setActivityPage(0);
+          }}
+          onPageChange={setActivityPage}
+          onRefresh={refreshActivity}
+        />
 
         <AccountSettings />
       </main>
@@ -743,13 +755,27 @@ function LiveActivities({ activities }: { activities: LiveActivityDto[] | null }
   );
 }
 
+const ACTIVITY_FILTERS: Array<{ label: string; value: ActivityFilter }> = [
+  { label: "All", value: "all" },
+  { label: "Notifications", value: "notification" },
+  { label: "Live Activities", value: "live_activity" },
+  { label: "Responses", value: "response" },
+];
+
 function ActivityLog({
-  events,
+  activity,
+  filter,
+  onFilterChange,
+  onPageChange,
   onRefresh,
 }: {
-  events: EventDto[] | null;
+  activity: InboxActivityPageDto | null;
+  filter: ActivityFilter;
+  onFilterChange: (filter: ActivityFilter) => void;
+  onPageChange: (page: number) => void;
   onRefresh: () => Promise<void>;
 }) {
+  const pageCount = activity ? Math.ceil(activity.total / activity.pageSize) : 0;
   return (
     <section className="mt-16" aria-labelledby="activity-heading">
       <div className="mb-4 flex items-center justify-between">
@@ -757,7 +783,9 @@ function ActivityLog({
           <h2 id="activity-heading" className="text-lg font-semibold">
             Activity
           </h2>
-          <p className="mt-1 text-sm text-ink-subtle">Latest webhook delivery attempts.</p>
+          <p className="mt-1 text-sm text-ink-subtle">
+            Notifications, Live Activities, and responses.
+          </p>
         </div>
         <button
           type="button"
@@ -768,42 +796,81 @@ function ActivityLog({
         </button>
       </div>
 
-      {events === null ? <p className="py-6 text-sm text-ink-faint">Loading activity…</p> : null}
-      {events?.length === 0 ? (
-        <p className="border-t border-line py-8 text-sm text-ink-faint">No webhook activity yet.</p>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {ACTIVITY_FILTERS.map((option) => {
+          const selected = option.value === filter;
+          return (
+            <button
+              type="button"
+              key={option.value}
+              aria-pressed={selected}
+              onClick={() => onFilterChange(option.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-medium transition ${
+                selected
+                  ? "border-accent bg-accent-soft text-accent-text"
+                  : "border-line text-ink-subtle hover:bg-surface-hover hover:text-ink"
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {activity === null ? <p className="py-6 text-sm text-ink-faint">Loading activity…</p> : null}
+      {activity?.items.length === 0 ? (
+        <p className="border-t border-line py-8 text-sm text-ink-faint">No activity yet.</p>
       ) : null}
-      {events && events.length > 0 ? (
+      {activity && activity.items.length > 0 ? (
         <ol className="divide-y divide-line border-y border-line">
-          {events.map((activityEvent) => (
-            <li className="flex gap-2.5 py-3" key={activityEvent.id}>
-              <ActivityAvatar activityEvent={activityEvent} />
+          {activity.items.map((item) => (
+            <li className="flex gap-2.5 py-3" key={item.id}>
+              <ActivityAvatar item={item} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline justify-between gap-4">
                   <p className="truncate text-sm leading-5 font-medium">
-                    {activityEvent.serviceTitle} · {activityEvent.title}
+                    {item.sourceName} · {item.title}
                   </p>
                   <time
                     className="shrink-0 text-xs text-ink-faint"
-                    dateTime={activityEvent.createdAt}
-                    title={new Date(activityEvent.createdAt).toLocaleString()}
+                    dateTime={item.createdAt}
+                    title={new Date(item.createdAt).toLocaleString()}
                   >
-                    {new Date(activityEvent.createdAt).toLocaleTimeString([], {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
+                    {formatActivityTime(item.createdAt)}
                   </time>
                 </div>
-                <p className="mt-0.5 truncate text-xs leading-4 text-ink-subtle">
-                  {activityEvent.body}
-                </p>
-                <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">
-                  {activityLabel(activityEvent)}
-                  {activityEvent.error ? ` · ${activityEvent.error}` : ""}
-                </p>
+                {item.detail ? (
+                  <p className="mt-0.5 truncate text-xs leading-4 text-ink-subtle">{item.detail}</p>
+                ) : null}
+                <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">{activityMeta(item)}</p>
               </div>
             </li>
           ))}
         </ol>
+      ) : null}
+      {activity && pageCount > 1 ? (
+        <div className="mt-4 flex items-center justify-between text-xs text-ink-subtle">
+          <button
+            type="button"
+            disabled={activity.page === 0}
+            onClick={() => onPageChange(activity.page - 1)}
+            className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Newer
+          </button>
+          <span>
+            {activity.page * activity.pageSize + 1}–
+            {Math.min((activity.page + 1) * activity.pageSize, activity.total)} of {activity.total}
+          </span>
+          <button
+            type="button"
+            disabled={activity.page >= pageCount - 1}
+            onClick={() => onPageChange(activity.page + 1)}
+            className="rounded-lg border border-line px-3 py-1.5 font-medium transition hover:bg-surface-hover disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Older
+          </button>
+        </div>
       ) : null}
     </section>
   );
@@ -823,37 +890,60 @@ function StatusDot({ status }: { status: string }) {
   return <span className={`${color} size-2 rounded-full`} aria-hidden="true" />;
 }
 
-function ActivityAvatar({ activityEvent }: { activityEvent: EventDto }) {
+function ActivityAvatar({ item }: { item: InboxActivityDto }) {
   return (
     <span className="relative size-8 shrink-0">
-      {activityEvent.imageUrl ? (
+      {item.sourceImageUrl ? (
         <img
           alt=""
           className="border-media-line size-8 rounded-full border object-cover"
-          src={activityEvent.imageUrl}
+          src={item.sourceImageUrl}
         />
       ) : (
         <span className="bg-accent-soft text-accent-text grid size-8 place-items-center rounded-full text-xs font-medium">
-          {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
+          {item.sourceName.slice(0, 1).toUpperCase()}
         </span>
       )}
-      <span className="absolute -right-0.5 -bottom-0.5 grid size-3 place-items-center rounded-full bg-surface">
-        <StatusDot status={activityEvent.status} />
-      </span>
+      {item.status ? (
+        <span className="absolute -right-0.5 -bottom-0.5 grid size-3 place-items-center rounded-full bg-surface">
+          <StatusDot status={item.status} />
+        </span>
+      ) : null}
     </span>
   );
 }
 
-function activityLabel(activityEvent: EventDto): string {
-  if (activityEvent.status === "accepted" || activityEvent.status === "delivered") {
-    return `Accepted for ${activityEvent.deliveredCount} ${activityEvent.deliveredCount === 1 ? "device" : "devices"}`;
+function activityKindLabel(kind: InboxActivityKind): string {
+  if (kind === "live_activity") return "Live Activity";
+  if (kind === "response") return "Response";
+  return "Notification";
+}
+
+function formatActivityTime(value: string): string {
+  const date = new Date(value);
+  if (date.toDateString() === new Date().toDateString()) {
+    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
-  if (activityEvent.status === "partial") {
-    return `Partially accepted for ${activityEvent.deliveredCount} devices`;
+  return date.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function deliveryLabel(item: InboxActivityDto): string {
+  const count = item.deliveredCount ?? 0;
+  if (item.status === "accepted" || item.status === "delivered") {
+    return `Accepted for ${count} ${count === 1 ? "device" : "devices"}`;
   }
-  if (activityEvent.status === "no_devices") return "No active devices";
-  if (activityEvent.status === "processing") return "Processing";
+  if (item.status === "partial") return `Partially accepted for ${count} devices`;
+  if (item.status === "no_devices") return "No active devices";
+  if (item.status === "processing") return "Processing";
   return "Failed";
+}
+
+function activityMeta(item: InboxActivityDto): string {
+  const parts = [activityKindLabel(item.kind)];
+  if (item.status) parts.push(deliveryLabel(item));
+  else if (item.result) parts.push(item.result);
+  if (item.error) parts.push(item.error);
+  return parts.join(" · ");
 }
 
 function ServiceList({

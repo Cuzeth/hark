@@ -787,6 +787,12 @@ export interface InboxActivityDto {
   url: string | null;
   result: string | null;
   createdAt: string;
+  /** Push delivery status ("accepted", "failed", …); only set on notification rows. */
+  status?: string | null;
+  /** Devices APNs accepted the push for; only set on notification rows. */
+  deliveredCount?: number | null;
+  /** Delivery failure detail; only set on notification rows. */
+  error?: string | null;
 }
 
 export interface InboxActivityPageDto {

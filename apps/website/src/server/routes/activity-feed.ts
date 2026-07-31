@@ -18,6 +18,9 @@ interface ActivityFeedRow {
   detail: string | null;
   url: string | null;
   result: string | null;
+  status: string | null;
+  deliveredCount: number | null;
+  error: string | null;
   createdAt: number;
   total: number;
 }
@@ -32,9 +35,14 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
   if (!Number.isFinite(requestedPage) || requestedPage < 0 || requestedPage > MAX_PAGE) {
     return c.json({ error: "Invalid activity page" }, 400);
   }
+  const requestedPageSize = Number.parseInt(c.req.query("pageSize") ?? String(PAGE_SIZE), 10);
+  if (!Number.isFinite(requestedPageSize) || requestedPageSize < 1 || requestedPageSize > 100) {
+    return c.json({ error: "Invalid activity page size" }, 400);
+  }
+  const pageSize = requestedPageSize;
   const userId = c.get("user").id;
   const filterClause = filter === "all" ? sql`1 = 1` : sql`kind = ${filter}`;
-  const offset = requestedPage * PAGE_SIZE;
+  const offset = requestedPage * pageSize;
 
   const rows = db.all(sql`
     select
@@ -46,6 +54,9 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
       detail,
       url,
       result,
+      status,
+      delivered_count as deliveredCount,
+      error,
       created_at as createdAt,
       count(*) over () as total
     from (
@@ -58,6 +69,9 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         e.body as detail,
         e.url as url,
         null as result,
+        e.status as status,
+        e.delivered_count as delivered_count,
+        e.error as error,
         e.created_at as created_at
       from event e
       inner join service s on s.id = e.service_id
@@ -74,6 +88,9 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         n.body as detail,
         n.url as url,
         null as result,
+        case when n.accepted_count > 0 then 'accepted' else 'no_devices' end as status,
+        n.accepted_count as delivered_count,
+        null as error,
         n.created_at as created_at
       from agent_notification n
       inner join api_token t on t.id = n.requester_token_id
@@ -96,6 +113,9 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
           when 'no' then 'No'
           else 'Replied'
         end as result,
+        null as status,
+        null as delivered_count,
+        null as error,
         i.responded_at as created_at
       from interaction i
       left join api_token t on t.id = i.requester_token_id
@@ -126,6 +146,9 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
           when 'end' then 'Completed'
           else 'Updated'
         end as result,
+        null as status,
+        null as delivered_count,
+        null as error,
         o.created_at as created_at
       from live_activity_operation o
       inner join live_activity a on a.id = o.activity_id
@@ -136,7 +159,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
     ) feed
     where ${filterClause}
     order by created_at desc, id desc
-    limit ${PAGE_SIZE}
+    limit ${pageSize}
     offset ${offset}
   `) as ActivityFeedRow[];
 
@@ -149,13 +172,16 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
     detail: row.detail,
     url: row.url,
     result: row.result,
+    status: row.status,
+    deliveredCount: row.deliveredCount,
+    error: row.error,
     createdAt: new Date(row.createdAt).toISOString(),
   }));
 
   return c.json({
     items,
     page: requestedPage,
-    pageSize: PAGE_SIZE,
+    pageSize,
     total: rows[0]?.total ?? 0,
   });
 });

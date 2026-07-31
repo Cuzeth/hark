@@ -252,4 +252,34 @@ describe("mobile inbox", () => {
     expect(notificationBody.items.every((item) => item.kind === "notification")).toBe(true);
     expect((await app.request("/api/activity-feed?filter=unknown")).status).toBe(400);
   });
+
+  it("supports a custom page size and exposes delivery status on notification rows", async () => {
+    const response = await app.request("/api/activity-feed?pageSize=50");
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      items: Array<{
+        id: string;
+        result: string | null;
+        status: string | null;
+        deliveredCount: number | null;
+        error: string | null;
+      }>;
+      pageSize: number;
+      total: number;
+    };
+    expect(body.pageSize).toBe(50);
+    expect(body.items).toHaveLength(25);
+
+    const webhook = body.items.find((item) => item.id === "event:evt_0");
+    expect(webhook).toMatchObject({ status: "accepted", deliveredCount: 1, error: null });
+    const agent = body.items.find((item) => item.id === "notification:ntf_inbox");
+    expect(agent).toMatchObject({ status: "accepted", deliveredCount: 1 });
+    const live = body.items.find((item) => item.id === "live_activity:op_inbox");
+    expect(live).toMatchObject({ result: "Updated", status: null });
+    const answered = body.items.find((item) => item.id === "response:int_answered");
+    expect(answered).toMatchObject({ result: "Approved", status: null });
+
+    expect((await app.request("/api/activity-feed?pageSize=0")).status).toBe(400);
+    expect((await app.request("/api/activity-feed?pageSize=101")).status).toBe(400);
+  });
 });
