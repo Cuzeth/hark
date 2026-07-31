@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+  type InteractiveLiveActivityStyle,
   LIVE_ACTIVITY_DEFAULT_STALE_AFTER_SECONDS,
   LIVE_ACTIVITY_SCHEMA_VERSION,
   type LiveActivityDto,
@@ -404,6 +405,7 @@ type DeviceRow = typeof device.$inferSelect;
 export async function startInteractionLiveActivity(
   interactionRow: InteractionRow,
   targets: DeviceRow[],
+  style: InteractiveLiveActivityStyle = "approval",
 ): Promise<{ activityId: string | null; accepted: number; failed: number; errors: string[] }> {
   const capableTargets = targets.filter(
     (target) =>
@@ -432,7 +434,7 @@ export async function startInteractionLiveActivity(
     symbol: "warning",
     privacyMode: "standard",
     accentColor: "#5ED8B7",
-    style: "approval",
+    style,
     interaction: {
       id: interactionRow.id,
       kind: interactionKind,

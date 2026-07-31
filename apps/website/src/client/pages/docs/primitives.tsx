@@ -318,6 +318,53 @@ function LaPreviewCard({ name }: { name: string }) {
           </div>
         </LaCard>
       );
+    case "shell":
+      return (
+        <LaCard name={name}>
+          <div className="flex flex-col gap-2.5 px-4 py-3.5 font-mono">
+            <span className="text-xs leading-relaxed">
+              <span className="font-bold text-[#3fdd78]">$</span> Deploy build #184?
+            </span>
+            <span className="text-[10px] text-[#4e5c52]"># reply required to continue</span>
+            <span className="flex gap-2 text-center text-[10px] font-bold">
+              <span className="flex-1 rounded bg-[#173d26] py-2 text-[#3fdd78]">approve ↵</span>
+              <span className="flex-1 rounded bg-[#172019] py-2 text-[#8e9c92]">deny</span>
+            </span>
+          </div>
+        </LaCard>
+      );
+    case "verdict":
+      return (
+        <LaCard name={name}>
+          <div className="flex flex-col items-center gap-2.5 bg-[#1c1c1e] px-4 py-3.5">
+            <span className="text-xs font-semibold">“Hark” requests approval</span>
+            <span className="w-full border-b border-white/10 pb-2 text-center text-xs text-[#ebebf5]">
+              Deploy build #184?
+            </span>
+            <span className="flex w-full gap-2 text-center text-[11px] font-semibold">
+              <span className="flex-1 rounded-lg bg-[#0a84ff] py-2 text-white">Allow</span>
+              <span className="flex-1 rounded-lg bg-[#303033] py-2 text-[#ebebf0]">
+                Don’t Allow
+              </span>
+            </span>
+          </div>
+        </LaCard>
+      );
+    case "signal":
+      return (
+        <LaCard name={name}>
+          <div className="flex flex-col gap-2.5 bg-[#141518] px-4 py-3.5">
+            <span className="text-[10px] font-semibold tracking-wide text-[#7d8087]">
+              ◐ Guarded action
+            </span>
+            <span className="text-xs font-medium text-[#f2f3f5]">Deploy build #184?</span>
+            <span className="flex gap-2 text-center text-[11px] font-semibold">
+              <span className="flex-1 rounded-lg bg-[#248a3d] py-2 text-[#eafbef]">Approve</span>
+              <span className="flex-1 rounded-lg bg-[#5b211f] py-2 text-[#ff6961]">Deny</span>
+            </span>
+          </div>
+        </LaCard>
+      );
     default:
       return (
         <LaCard name={name}>

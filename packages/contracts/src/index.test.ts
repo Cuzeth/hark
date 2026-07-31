@@ -208,11 +208,13 @@ describe("interaction schemas", () => {
       prompt: "Send the prepared release email?",
       kind: "approval",
       presentation: "live_activity",
+      style: "signal",
       primaryLabel: "Send",
       secondaryLabel: "Deny",
       expiresInSeconds: 900,
     });
     expect(valid.success).toBe(true);
+    if (valid.success) expect(valid.data.style).toBe("signal");
     for (const invalid of [
       {
         title: "Reply",
@@ -225,6 +227,19 @@ describe("interaction schemas", () => {
         prompt: "Deploy?",
         kind: "approval",
         primaryLabel: "Deploy",
+      },
+      {
+        title: "Release",
+        prompt: "Deploy?",
+        kind: "approval",
+        style: "signal",
+      },
+      {
+        title: "Release",
+        prompt: "Deploy?",
+        kind: "approval",
+        presentation: "live_activity",
+        style: "neon",
       },
       {
         title: "Release",
@@ -328,6 +343,9 @@ describe("Live Activity schemas", () => {
     expect(liveActivityPropsSchema.safeParse({ ...props, style: "ring" }).success).toBe(true);
     expect(liveActivityPropsSchema.safeParse({ ...props, style: "neon" }).success).toBe(false);
     expect(liveActivityPropsSchema.safeParse({ ...props, style: "approval" }).success).toBe(false);
+    for (const style of ["shell", "verdict", "signal"] as const) {
+      expect(liveActivityPropsSchema.safeParse({ ...props, style }).success).toBe(false);
+    }
     expect(
       liveActivityPropsSchema.safeParse({
         ...props,
@@ -344,6 +362,24 @@ describe("Live Activity schemas", () => {
         },
       }).success,
     ).toBe(true);
+    for (const style of ["shell", "verdict", "signal"] as const) {
+      expect(
+        liveActivityPropsSchema.safeParse({
+          ...props,
+          style,
+          interaction: {
+            id: "int_1",
+            kind: "approval",
+            prompt: "Deploy?",
+            primaryLabel: "Deploy",
+            secondaryLabel: "Deny",
+            primaryAction: "approve",
+            secondaryAction: "deny",
+            state: "pending",
+          },
+        }).success,
+      ).toBe(true);
+    }
     expect(
       liveActivityPropsSchema.safeParse({
         ...props,
@@ -371,10 +407,15 @@ describe("Live Activity schemas", () => {
       liveActivityStartSchema.safeParse({ title: "Task", status: "Starting", style: "neon" })
         .success,
     ).toBe(false);
+    expect(
+      liveActivityStartSchema.safeParse({ title: "Task", status: "Starting", style: "signal" })
+        .success,
+    ).toBe(false);
 
     // Updates accept a style change and it counts as a meaningful field.
     expect(liveActivityUpdateSchema.safeParse({ style: "steps" }).success).toBe(true);
     expect(liveActivityUpdateSchema.safeParse({ style: "approval" }).success).toBe(false);
+    expect(liveActivityUpdateSchema.safeParse({ style: "signal" }).success).toBe(false);
     expect(liveActivityUpdateSchema.safeParse({ style: "neon" }).success).toBe(false);
     expect(liveActivityUpdateSchema.parse({ style: "terminal" }).style).toBe("terminal");
   });

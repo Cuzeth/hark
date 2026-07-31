@@ -485,8 +485,7 @@ describe("interactions", () => {
       prompt: "Send the prepared release email?",
       kind: "approval",
       presentation: "live_activity",
-      primaryLabel: "Send",
-      secondaryLabel: "Deny",
+      style: "verdict",
       expiresInSeconds: 900,
     });
     expect(response.status).toBe(201);
@@ -499,8 +498,8 @@ describe("interactions", () => {
       accepted: 2,
       interaction: {
         presentation: "live_activity",
-        primaryLabel: "Send",
-        secondaryLabel: "Deny",
+        primaryLabel: "Allow",
+        secondaryLabel: "Don’t Allow",
       },
     });
     expect(sent).toHaveLength(0);
@@ -512,6 +511,7 @@ describe("interactions", () => {
       .from(schema.liveActivity)
       .where(eq(schema.liveActivity.id, body.liveActivityId));
     expect(activity).toBeDefined();
+    expect(activity?.props).toMatchObject({ style: "verdict" });
     expect(JSON.stringify(activity?.props)).not.toContain("credential");
     const sessionActivities = (await (await app.request("/api/activities")).json()) as {
       activities: Array<{ id: string }>;

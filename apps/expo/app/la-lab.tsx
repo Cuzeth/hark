@@ -5,9 +5,9 @@
  * simulator can reach it without a Google sign-in:
  *   xcrun simctl openurl booted "hark://la-lab"
  *
- * Layout changes in src/widgets/HarkAgentActivity.tsx are picked up on a Metro
- * reload — the layout function is re-serialized into the App Group every time
- * createLiveActivity() runs — so styling iterates without a native rebuild.
+ * Layout changes in src/widgets/live-activities/ are picked up on a Metro
+ * reload — the style functions are re-serialized into the App Group every
+ * time createLiveActivity() runs — so styling iterates without a native rebuild.
  */
 import {
   LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR,
@@ -15,11 +15,12 @@ import {
   LIVE_ACTIVITY_SYMBOLS,
   type LiveActivityProps,
   type LiveActivitySymbol,
+  liveActivityStyleSchema,
 } from "@hark/contracts";
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import type { LiveActivity } from "expo-widgets";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import HarkAgentActivity from "../src/widgets/HarkAgentActivity";
@@ -64,6 +65,71 @@ function Lab() {
     }),
     [title, status, detail, progress, symbol, privacy, accentColor],
   );
+
+  // A unique ts value retriggers the effect when recapturing the same style.
+  const params = useLocalSearchParams<{ ts?: string; style?: string }>();
+  useEffect(() => {
+    const styleParam = liveActivityStyleSchema.safeParse(params.style);
+    if (!styleParam.success) return;
+    (async () => {
+      try {
+        const existing = HarkAgentActivity.getInstances();
+        const isInteractive =
+          styleParam.data === "approval" ||
+          styleParam.data === "shell" ||
+          styleParam.data === "verdict" ||
+          styleParam.data === "signal";
+        const nextProps: LiveActivityProps = {
+          schemaVersion: LIVE_ACTIVITY_SCHEMA_VERSION,
+          activityId: `lab-style-${styleParam.data}-${params.ts ?? "manual"}`,
+          title: "Deploy #184",
+          status: isInteractive ? "Approval needed" : "Building",
+          detail: isInteractive
+            ? "harkctl requests approval to deploy to production"
+            : "Compiling packages/website-runtime on raven-cobra",
+          ...(isInteractive ? {} : { progress: 0.25 }),
+          updatedAt: new Date().toISOString(),
+          symbol: isInteractive ? "terminal" : "build",
+          privacyMode: "standard",
+          accentColor: LIVE_ACTIVITY_DEFAULT_ACCENT_COLOR,
+          style: styleParam.data,
+          ...(isInteractive
+            ? {
+                interaction: {
+                  id: "lab-style-approval-interaction",
+                  kind: "approval" as const,
+                  prompt: "Deploy build #184 to production on raven-cobra?",
+                  primaryLabel: styleParam.data === "verdict" ? "Allow" : "Approve",
+                  secondaryLabel: styleParam.data === "verdict" ? "Don’t Allow" : "Deny",
+                  primaryAction: "approve",
+                  secondaryAction: "deny",
+                  state: "pending" as const,
+                },
+                labInteractionPreview: true,
+              }
+            : {}),
+        };
+        const active = existing[0];
+        if (active) {
+          await active.update(nextProps);
+          instance.current = active;
+          for (const extra of existing.slice(1)) {
+            try {
+              await extra.end("immediate");
+            } catch {
+              // already gone
+            }
+          }
+          note(`auto-updated style ${styleParam.data}`);
+        } else {
+          instance.current = await HarkAgentActivity.start(nextProps);
+          note(`auto-started style ${styleParam.data}`);
+        }
+      } catch (error) {
+        note(`auto-start failed: ${String(error)}`);
+      }
+    })();
+  }, [params.style, params.ts, note]);
 
   const start = async () => {
     try {
