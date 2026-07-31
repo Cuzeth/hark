@@ -23,6 +23,7 @@ vi.mock("@expo/ui/swift-ui", () => ({
   Button: component("Button"),
   Capsule: component("Capsule"),
   Circle: component("Circle"),
+  Divider: component("Divider"),
   Gauge: component("Gauge"),
   HStack: component("HStack"),
   Image: component("Image"),
@@ -45,6 +46,7 @@ vi.mock("@expo/ui/swift-ui/modifiers", () => ({
   gaugeStyle: modifier("gaugeStyle"),
   kerning: modifier("kerning"),
   lineLimit: modifier("lineLimit"),
+  minimumScaleFactor: modifier("minimumScaleFactor"),
   monospacedDigit: modifier("monospacedDigit"),
   padding: modifier("padding"),
   progressViewStyle: modifier("progressViewStyle"),
@@ -154,8 +156,35 @@ describe("HarkAgentActivity layout styles", () => {
   });
 
   it("defines every slot for every style", () => {
-    for (const style of ["standard", "ring", "hero", "terminal", "steps"] as const) {
-      const slots = render({ ...baseProps, style });
+    for (const style of [
+      "standard",
+      "ring",
+      "hero",
+      "terminal",
+      "steps",
+      "approval",
+      "shell",
+      "verdict",
+      "signal",
+    ] as const) {
+      const props: LiveActivityProps =
+        style === "approval" || style === "shell" || style === "verdict" || style === "signal"
+          ? {
+              ...baseProps,
+              style,
+              interaction: {
+                id: "int_slots",
+                kind: "approval",
+                prompt: "Deploy to production?",
+                primaryLabel: "Approve",
+                secondaryLabel: "Deny",
+                primaryAction: "approve",
+                secondaryAction: "deny",
+                state: "pending",
+              },
+            }
+          : { ...baseProps, style };
+      const slots = render(props);
       for (const slot of SLOTS) {
         expect(slots[slot], `${style}.${slot}`).toBeDefined();
       }
@@ -188,10 +217,9 @@ describe("HarkAgentActivity layout styles", () => {
     });
     const buttons = findAll(slots.banner, "Button");
     expect(buttons).toHaveLength(2);
-    expect(buttons.map((button) => [button.props.label, button.props.target])).toEqual([
-      ["Send", "approve"],
-      ["Deny", "deny"],
-    ]);
+    expect(buttons.map((button) => button.props.target)).toEqual(["approve", "deny"]);
+    expect(texts(buttons[0])).toContain("Send");
+    expect(texts(buttons[1])).toContain("Deny");
     expect(buttons[0]?.props).toMatchObject({
       harkInteractionId: "int_1",
       harkInteractionCredential: "c".repeat(43),
@@ -203,7 +231,7 @@ describe("HarkAgentActivity layout styles", () => {
         expect.arrayContaining([
           expect.objectContaining({
             $modifier: "buttonBorderShape",
-            args: ["roundedRectangle", 6],
+            args: ["roundedRectangle", 8],
           }),
           expect.objectContaining({
             $modifier: "controlSize",
@@ -211,12 +239,18 @@ describe("HarkAgentActivity layout styles", () => {
           }),
           expect.objectContaining({
             $modifier: "frame",
-            args: [{ height: 36, maxWidth: Infinity }],
+            args: [{ height: 46, maxWidth: Infinity }],
           }),
         ]),
       );
     }
     expect(findAll(slots.expandedBottom, "Button")).toHaveLength(2);
+
+    const previewProps = {
+      ...props,
+      labInteractionPreview: true,
+    } as LiveActivityProps;
+    expect(findAll(render(previewProps).banner, "Button")).toHaveLength(2);
 
     const resolved = render({
       ...props,
@@ -313,6 +347,43 @@ describe("HarkAgentActivity layout styles", () => {
       expect(bannerTexts).not.toContain("Deploy #184");
       expect(bannerTexts).not.toContain("apps/website · main @ 51ab6ab");
       expect(JSON.stringify(slots)).not.toContain("51ab6ab");
+    }
+  });
+
+  it("renders shipped interactive styles with functional banners and approval Island slots", () => {
+    const approvalProps = {
+      ...baseProps,
+      style: "approval",
+      status: "Approval needed",
+      progress: undefined,
+      interaction: {
+        id: "int_styles",
+        kind: "approval",
+        prompt: "Deploy build #184 to production?",
+        primaryLabel: "Send",
+        secondaryLabel: "Cancel",
+        primaryAction: "approve",
+        secondaryAction: "deny",
+        state: "pending",
+      },
+    } as LiveActivityProps;
+    const environment = {
+      harkInteractionId: "int_styles",
+      harkInteractionCredential: "c".repeat(43),
+      harkInteractionDeviceId: "dev_1",
+      harkInteractionDeliveryId: "lad_1",
+    };
+    const approval = render(approvalProps, environment);
+
+    for (const style of ["shell", "verdict", "signal"] as const) {
+      const slots = render({ ...approvalProps, style }, environment);
+      const buttons = findAll(slots.banner, "Button");
+      expect(buttons, `${style}.banner`).toHaveLength(2);
+      expect(buttons.map((button) => button.props.target)).toEqual(["approve", "deny"]);
+      expect(buttons[0]?.props).toMatchObject(environment);
+      for (const slot of SLOTS.filter((slot) => slot !== "banner")) {
+        expect(slots[slot], `${style}.${slot}`).toEqual(approval[slot]);
+      }
     }
   });
 });

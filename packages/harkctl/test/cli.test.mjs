@@ -527,6 +527,7 @@ test("notify ask sends an interactive Live Activity with cosmetic labels", async
       kind: "approval",
       expiresInSeconds: 900,
       presentation: "live_activity",
+      style: "signal",
       primaryLabel: "Send",
       secondaryLabel: "Deny",
     });
@@ -546,6 +547,8 @@ test("notify ask sends an interactive Live Activity with cosmetic labels", async
         "--title",
         "Release",
         "--live-activity",
+        "--style",
+        "signal",
         "--primary-label",
         "Send",
         "--secondary-label",
@@ -572,6 +575,18 @@ test("notify ask rejects unsupported Live Activity response shapes", async () =>
       HARK_TOKEN: "hark_test",
     }),
     /labels require --live-activity/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--style", "signal"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /style requires --live-activity/,
+  );
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--live-activity", "--style", "neon"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /approval, shell, verdict, signal/,
   );
   await assert.rejects(
     execute(["notify", "ask", "Deploy?", "--approval", "--live-activity", "--expires-in", "9h"], {

@@ -672,7 +672,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
-            text: "The five layouts, rendered with the same state:",
+            text: "The five progress layouts and three interactive approval layouts, rendered with the same state:",
           },
           {
             kind: "stylePreviews",
@@ -700,6 +700,21 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
               {
                 name: "steps",
                 description: "Progress quantized into five stage pips — phases, not percent.",
+              },
+              {
+                name: "shell",
+                description:
+                  "A terminal-native approval prompt with command-line copy and compact green actions.",
+              },
+              {
+                name: "verdict",
+                description:
+                  "A centered system-dialog treatment with a divider and high-contrast blue primary action.",
+              },
+              {
+                name: "signal",
+                description:
+                  "A guarded-action card with restrained security framing and green/red decisions.",
               },
             ],
           },
@@ -904,13 +919,13 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
-            text: "Add `--live-activity` to an approval or yes/no request to put its buttons on the Lock Screen and expanded Dynamic Island. `--primary-label` and `--secondary-label` customize visible verbs such as Send/Deny or Push/Cancel while the returned action remains canonical. Interactive Live Activities require iOS 17+, expire within eight hours, and don't support text replies, images, or URLs.",
+            text: "Add `--live-activity` to an approval or yes/no request to put its buttons on the Lock Screen and expanded Dynamic Island. `--style` selects `approval`, `shell`, `verdict`, or `signal`. `--primary-label` and `--secondary-label` customize visible verbs such as Send/Deny or Push/Cancel while the returned action remains canonical. Interactive Live Activities require iOS 17+, expire within eight hours, and don't support text replies, images, or URLs.",
           },
           {
             kind: "code",
             language: "bash",
             code: `harkctl notify ask "Send the prepared release email?" \
-  --approval --live-activity \
+  --approval --live-activity --style signal \
   --primary-label Send --secondary-label Deny \
   --wait --timeout 15m`,
           },

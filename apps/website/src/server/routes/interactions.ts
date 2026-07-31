@@ -598,10 +598,21 @@ export const agentRoute = new Hono<AgentEnv>()
         : parsed.data.kind === "yes_no"
           ? ["yes", "no"]
           : ["reply"];
+    const liveActivityStyle = parsed.data.style ?? "approval";
     const primaryLabel =
-      parsed.data.primaryLabel ?? (parsed.data.kind === "approval" ? "Approve" : "Yes");
+      parsed.data.primaryLabel ??
+      (parsed.data.kind === "approval"
+        ? liveActivityStyle === "verdict"
+          ? "Allow"
+          : "Approve"
+        : "Yes");
     const secondaryLabel =
-      parsed.data.secondaryLabel ?? (parsed.data.kind === "approval" ? "Deny" : "No");
+      parsed.data.secondaryLabel ??
+      (parsed.data.kind === "approval"
+        ? liveActivityStyle === "verdict"
+          ? "Don’t Allow"
+          : "Deny"
+        : "No");
     const actionDigest = digest({
       interactionId,
       title: parsed.data.title,
@@ -684,7 +695,11 @@ export const agentRoute = new Hono<AgentEnv>()
       );
     }
     if (presentation === "live_activity") {
-      const liveResult = await startInteractionLiveActivity(row, selectedDevices);
+      const liveResult = await startInteractionLiveActivity(
+        row,
+        selectedDevices,
+        liveActivityStyle,
+      );
       const [updated] = await db
         .update(interaction)
         .set({ acceptedCount: liveResult.accepted })
