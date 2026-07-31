@@ -165,12 +165,9 @@ and the Docker/compose deployment.
 
 ### Merge procedure
 
-```sh
-git fetch upstream
-git merge upstream/main   # or cherry-pick specific commits
-```
-
-Decision rules while resolving conflicts:
+The step-by-step procedure — sync branch, conflict-resolution playbook, audit and verification
+gates, and how to land the sync PR — is in [SYNCING.md](./SYNCING.md), written for an agent to
+execute. Decision rules while resolving conflicts:
 
 | Upstream change touches | Resolution |
 | --- | --- |
@@ -184,15 +181,8 @@ After any merge, grep for these strings: `autumn`, `pro_monthly`, `Hark Pro`, `G
 `twimg`. Outside this README and `pnpm-lock.yaml`, the only acceptable hits are negative test
 fixtures that assert the string is rejected or absent (currently in `devices.test.ts`,
 `docs.test.ts`, and the contracts tests) and the delete-only `LEGACY_EXPO_TOKEN_KEY` SecureStore
-cleanup constant in the app. Anything else is upstream leakage — remove it. Then verify:
-
-```sh
-corepack pnpm install && corepack pnpm -r typecheck && corepack pnpm -r test && corepack pnpm -r build
-```
-
-plus a fresh-database boot (`ADMIN_PASSWORD` set, run from `apps/website`) that logs
-`Created the admin account`, and `npx expo export --platform ios` in `apps/expo` to confirm the
-app still bundles.
+cleanup constant in the app. Anything else is upstream leakage — remove it. Then run the full
+verification gate in [SYNCING.md](./SYNCING.md) before landing anything.
 
 ## License
 
