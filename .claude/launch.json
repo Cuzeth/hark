@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "website-client",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd apps/website && exec ./node_modules/.bin/vite --port 5173"],
+      "port": 5173
+    }
+  ]
+}

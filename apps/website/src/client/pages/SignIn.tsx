@@ -14,7 +14,7 @@ export function SignIn() {
   return (
     <div className="flex min-h-dvh flex-col">
       <main className="mx-auto flex w-full max-w-sm flex-1 items-center px-5 pb-20 sm:px-6">
-        <section className="w-full rounded-2xl border border-line bg-surface p-5 shadow-xl shadow-ink/5 sm:p-8 dark:shadow-none dark:ring-1 dark:ring-white/10">
+        <section className="w-full rounded-2xl border border-line bg-surface p-5 sm:p-8">
           <div className="flex items-center gap-2.5">
             <img alt="" className="size-8 rounded-lg" src="/favicon.png" />
             <span className="text-lg font-semibold">Hark</span>
@@ -26,6 +26,13 @@ export function SignIn() {
           />
         </section>
       </main>
+      <footer className="pb-8 text-center">
+        {/* The Abdeen Labs wordmark: Geist Mono 500, 0.22em tracking, 11px
+            floor. The negative margin rebalances the trailing letter-space. */}
+        <span className="font-mono text-[11px] font-medium tracking-[0.22em] text-ink-faint mr-[-0.22em]">
+          ABDEEN LABS
+        </span>
+      </footer>
     </div>
   );
 }

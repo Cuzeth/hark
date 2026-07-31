@@ -184,7 +184,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={() => void signOut().then(() => navigate("/"))}
-              className="min-h-10 rounded-full border border-line bg-surface px-3.5 text-xs font-medium text-ink-muted shadow-xs transition-colors hover:bg-surface-hover"
+              className="min-h-10 rounded-lg border border-line bg-surface px-3.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover"
             >
               Sign out
             </button>
@@ -207,7 +207,7 @@ export function Dashboard() {
           <button
             type="button"
             onClick={() => setCreating(true)}
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition"
+            className="bg-accent hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium text-on-accent transition"
           >
             New service
           </button>
@@ -327,7 +327,7 @@ function WebhookReveal({
         <button
           type="button"
           onClick={copyAgentPrompt}
-          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-full px-4 py-2 text-sm font-medium text-on-accent transition sm:self-auto"
+          className="bg-accent hover:bg-accent-hover shrink-0 self-start rounded-lg px-4 py-2 text-sm font-medium text-on-accent transition sm:self-auto"
         >
           {agentPromptCopied ? "Agent prompt copied" : "Copy agent prompt"}
         </button>
@@ -402,7 +402,7 @@ function Devices({ devices, onRemoved }: { devices: DeviceDto[] | null; onRemove
                 <button
                   type="button"
                   onClick={() => void navigator.clipboard.writeText(device.id)}
-                  className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover"
+                  className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover"
                 >
                   Copy ID
                 </button>
@@ -410,7 +410,7 @@ function Devices({ devices, onRemoved }: { devices: DeviceDto[] | null; onRemove
                   type="button"
                   disabled={busyId === device.id}
                   onClick={() => void remove(device)}
-                  className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
+                  className="rounded-lg border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
                 >
                   Remove
                 </button>
@@ -516,7 +516,7 @@ function AccountSettings() {
         {saved ? <p className="text-accent-text mt-3 text-sm">Password updated.</p> : null}
         <div className="mt-5 flex justify-end">
           <button
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium text-on-accent transition disabled:opacity-50"
             disabled={
               busy ||
               currentPassword.length === 0 ||
@@ -696,14 +696,14 @@ function ServiceModal({
             type="button"
             disabled={busy}
             onClick={() => close()}
-            className="rounded-full px-4 py-2 text-sm font-medium text-ink-subtle transition hover:bg-surface-hover disabled:opacity-50"
+            className="rounded-lg px-4 py-2 text-sm font-medium text-ink-subtle transition hover:bg-surface-hover disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={busy || title.trim().length === 0}
-            className="bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium text-on-accent transition disabled:opacity-50"
           >
             {busy
               ? service
@@ -762,7 +762,7 @@ function ActivityLog({
         <button
           type="button"
           onClick={() => void onRefresh()}
-          className="rounded-full px-3 py-1.5 text-xs font-medium text-ink-subtle transition hover:bg-surface-hover hover:text-ink"
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-ink-subtle transition hover:bg-surface-hover hover:text-ink"
         >
           Refresh
         </button>
@@ -812,7 +812,7 @@ function ActivityLog({
 function StatusDot({ status }: { status: string }) {
   const color =
     status === "accepted" || status === "delivered"
-      ? "bg-accent"
+      ? "bg-ok"
       : status === "failed"
         ? "bg-danger-strong"
         : status === "partial"
@@ -991,7 +991,7 @@ function ServiceList({
                     : "Rotate this legacy token once to make its URL copyable"
                 }
                 onClick={() => void copy(svc)}
-                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-disabled"
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition-colors hover:bg-surface-hover disabled:cursor-not-allowed disabled:text-ink-disabled"
               >
                 {copiedId === svc.id ? "Copied" : "Copy webhook"}
               </button>
@@ -999,7 +999,7 @@ function ServiceList({
                 type="button"
                 disabled={busyId === svc.id}
                 onClick={() => onEdit(svc)}
-                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
               >
                 Edit
               </button>
@@ -1007,7 +1007,7 @@ function ServiceList({
                 type="button"
                 disabled={busyId === svc.id}
                 onClick={() => void rotate(svc)}
-                className="rounded-full border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
+                className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-ink-muted transition hover:bg-surface-hover disabled:opacity-50"
               >
                 Rotate token
               </button>
@@ -1015,7 +1015,7 @@ function ServiceList({
                 type="button"
                 disabled={busyId === svc.id}
                 onClick={() => void remove(svc)}
-                className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
+                className="rounded-lg border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
               >
                 Delete
               </button>
@@ -1030,7 +1030,7 @@ function ServiceList({
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 text-sm font-semibold">
                 <span className="truncate">{token.name}</span>
-                <span className="shrink-0 rounded-full border border-line bg-surface-muted px-2 py-0.5 text-[10px] font-medium leading-4 text-ink-muted">
+                <span className="shrink-0 rounded-lg border border-line bg-surface-muted px-2 py-0.5 text-[10px] font-medium leading-4 text-ink-muted">
                   Agent
                 </span>
               </p>
@@ -1048,7 +1048,7 @@ function ServiceList({
                 type="button"
                 disabled={busyId === token.id}
                 onClick={() => void revokeToken(token)}
-                className="rounded-full border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
+                className="rounded-lg border border-danger-line px-3 py-1.5 text-xs font-medium text-danger transition hover:bg-danger-soft disabled:opacity-50"
               >
                 Revoke
               </button>

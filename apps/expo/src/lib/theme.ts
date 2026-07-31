@@ -5,9 +5,9 @@ export const colors = {
   muted: "#6B6A63",
   soft: "#A3A199",
   line: "#E7E5E0",
-  accent: "#035B49",
-  accentPressed: "#02493B",
-  accentSoft: "#E7F0ED",
+  accent: "#CE2020",
+  accentPressed: "#A31818",
+  accentSoft: "#F6E7E5",
   danger: "#C93B2C",
 } as const;
 

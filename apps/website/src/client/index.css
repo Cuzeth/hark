@@ -1,65 +1,77 @@
+/* Geist and Geist Mono (the Axis text and chrome faces), from Google Fonts.
+   Weights stay at 400+ per the brand's floor. */
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400..900&family=Geist+Mono:wght@400..900&display=swap");
 @import "tailwindcss";
 
 /*
- * The theme mirrors the OS setting and is deliberately not configurable, so
- * there is no class on `<html>` and no stored preference. `dark:` therefore
- * uses Tailwind's default `prefers-color-scheme` variant.
+ * The site ships in one mode: Axis dark, the brand's canonical ground — pitch
+ * surfaces, chalk and graphite ink, lacquer red for identity and action.
+ * There is no light theme, no class on `<html>`, and no stored preference.
  *
- * Semantic tokens. Light values live here; the dark media query below remaps
- * the same custom properties, so utilities such as `bg-surface` or
- * `text-ink-subtle` need no `dark:` counterpart.
- *
- * Surfaces get *lighter* as they rise in dark mode and darker in light mode,
- * so elevation reads correctly in both directions. `field` is the exception:
- * inputs are recessed, so they sit below their panel in dark mode.
+ * Semantic tokens; components consume utilities such as `bg-surface` or
+ * `text-ink-subtle` and never a literal. The palette is the Abdeen Labs
+ * "Axis" system, applied loosely — Hark is an Abdeen Labs property, not a
+ * product. Surfaces get lighter as they rise; `field` is recessed.
  */
 @theme {
   --font-sans:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    sans-serif;
+  --font-mono:
+    "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
 
-  /* Surfaces */
-  --color-paper: oklch(0.985 0.002 100);
-  --color-surface: oklch(1 0 0);
-  --color-surface-muted: oklch(0.975 0.002 260);
-  --color-surface-hover: oklch(0.962 0.003 260);
-  --color-field: oklch(1 0 0);
+  /* Radius, on the Axis concentric scale: 14 (shell) · 10 (plate) · 6
+     (control). Controls and chips sit one step tighter than their plate. */
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
 
-  /* Text */
-  --color-ink: oklch(0.21 0.02 260);
-  --color-ink-muted: oklch(0.44 0.014 260);
-  --color-ink-subtle: oklch(0.505 0.012 260);
-  --color-ink-faint: oklch(0.54 0.011 260);
-  --color-ink-disabled: oklch(0.75 0.008 260);
+  /* Surfaces — pitch */
+  --color-paper: #06080d;
+  --color-surface: #131822;
+  --color-surface-muted: #1a212c;
+  --color-surface-hover: #212936;
+  --color-field: #0c1017;
+
+  /* Text — chalk and graphite */
+  --color-ink: #ffffff;
+  --color-ink-muted: #e0e5ee;
+  --color-ink-subtle: #a9b2c0;
+  --color-ink-faint: #8e97a8;
+  --color-ink-disabled: #576274;
 
   /* Hairlines. `media-line` is the neutral outline used on images and video:
-     pure black/white at 10% so it never tints the media underneath it. */
-  --color-line: oklch(0.922 0.003 260);
-  --color-line-strong: oklch(0.87 0.005 260);
-  --color-media-line: oklch(0 0 0 / 0.1);
+     pure white at 10% so it never tints the media underneath it. */
+  --color-line: #293344;
+  --color-line-strong: #323e50;
+  --color-media-line: oklch(1 0 0 / 0.1);
 
-  /* Accent. `accent` is a fill, `accent-text` is the same brand green tuned for
-     use as text/iconography, and `on-accent` is the label colour on a fill. */
-  --color-accent: oklch(0.421 0.08 173);
-  --color-accent-hover: oklch(0.362 0.068 174);
-  --color-accent-text: oklch(0.421 0.08 173);
-  --color-on-accent: oklch(1 0 0);
-  --color-accent-soft: oklch(0.948 0.01 174);
-  --color-accent-wash: oklch(0.421 0.08 173 / 0.03);
+  /* Accent — lacquer, the identity/action red. `accent` is a fill,
+     `accent-text` is the lighter link tint for dark surfaces, and `on-accent`
+     is the chalk label on a lacquer fill. */
+  --color-accent: #ce2020;
+  --color-accent-hover: #a31818;
+  --color-accent-text: #e13b3b;
+  --color-on-accent: #ffffff;
+  --color-accent-soft: color-mix(in srgb, #ce2020 22%, #0c1017);
+  --color-accent-wash: color-mix(in srgb, #e13b3b 7%, transparent);
 
-  /* Status */
-  --color-danger: oklch(0.505 0.19 27.5);
-  --color-danger-strong: oklch(0.577 0.215 27);
-  --color-danger-soft: oklch(0.971 0.013 17);
-  --color-danger-line: oklch(0.885 0.059 18);
-  --color-warn: oklch(0.769 0.165 70);
-  --color-info: oklch(0.623 0.188 260);
-  --color-idle: oklch(0.87 0.005 260);
+  /* Status. `ok` is jade (verified/success — red is never success here),
+     `danger` reuses lacquer, `warn` is amber, `info`/`idle` stay neutral. */
+  --color-ok: #16b37d;
+  --color-danger: #e13b3b;
+  --color-danger-strong: #ce2020;
+  --color-danger-soft: color-mix(in srgb, #ce2020 16%, #0c1017);
+  --color-danger-line: color-mix(in srgb, #ce2020 45%, #131822);
+  --color-warn: #e2a81e;
+  --color-info: #8e97a8;
+  --color-idle: #3e4756;
 
-  /* Code blocks. The surface stays dark in both themes, so the syntax colours
-     below are tuned once against a dark background and need no dark variant.
-     Hues are kept far apart so tokens are distinguishable at 12px. */
-  --color-code: oklch(0.205 0.012 260);
-  --color-code-ink: oklch(0.97 0.002 260);
+  /* Code blocks — an Axis sunken console field (pitch). Hues are kept far
+     apart so tokens are distinguishable at 12px. */
+  --color-code: #0c1017;
+  --color-code-ink: #eff2f7;
   --color-code-key: oklch(0.81 0.098 220);
   --color-code-string: oklch(0.83 0.115 150);
   --color-code-number: oklch(0.85 0.11 75);
@@ -71,71 +83,20 @@
   --color-code-url: oklch(0.78 0.098 240);
 
   /* App Store blue, kept recognisable but lifted for dark surfaces */
-  --color-brand-blue: oklch(0.632 0.183 253);
+  --color-brand-blue: oklch(0.75 0.13 253);
 }
 
-/* Non-utility theme values used by the hand-written rules below. */
+/* Non-utility theme values used by the hand-written rules below. Surfaces
+   stay flat (Axis): a panel gets a hairline border and the single top-edge
+   light line, never a drop shadow. The grain uses `screen` at low opacity so
+   it stays a texture rather than a haze on the pitch page. */
 :root {
-  color-scheme: light;
-  --hark-edge-tint: oklch(0.421 0.08 173 / 0.14);
-  --hark-noise-opacity: 0.1;
-  --hark-noise-blend: multiply;
-  --hark-backdrop: oklch(0.21 0.02 260 / 0.2);
+  color-scheme: dark;
+  --hark-noise-opacity: 0.05;
+  --hark-noise-blend: screen;
+  --hark-backdrop: color-mix(in srgb, #000000 60%, transparent);
   --hark-panel-border: var(--color-line);
-  --hark-panel-shadow: 0 24px 70px oklch(0.21 0.02 260 / 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-
-    --color-paper: oklch(0.178 0.008 260);
-    --color-surface: oklch(0.228 0.009 260);
-    --color-surface-muted: oklch(0.262 0.01 260);
-    --color-surface-hover: oklch(0.3 0.011 260);
-    --color-field: oklch(0.2 0.009 260);
-
-    --color-ink: oklch(0.958 0.003 260);
-    --color-ink-muted: oklch(0.82 0.008 260);
-    --color-ink-subtle: oklch(0.755 0.009 260);
-    --color-ink-faint: oklch(0.7 0.01 260);
-    --color-ink-disabled: oklch(0.46 0.012 260);
-
-    --color-line: oklch(0.31 0.011 260);
-    --color-line-strong: oklch(0.53 0.013 260);
-    --color-media-line: oklch(1 0 0 / 0.1);
-
-    --color-accent: oklch(0.735 0.12 170);
-    --color-accent-hover: oklch(0.8 0.115 170);
-    --color-accent-text: oklch(0.8 0.11 170);
-    --color-on-accent: oklch(0.19 0.032 173);
-    --color-accent-soft: oklch(0.3 0.038 172);
-    --color-accent-wash: oklch(0.735 0.12 170 / 0.07);
-
-    --color-danger: oklch(0.76 0.13 25);
-    --color-danger-strong: oklch(0.7 0.17 25);
-    --color-danger-soft: oklch(0.29 0.06 25);
-    --color-danger-line: oklch(0.42 0.09 25);
-    --color-warn: oklch(0.8 0.15 75);
-    --color-info: oklch(0.7 0.16 259);
-    --color-idle: oklch(0.45 0.012 260);
-
-    --color-code: oklch(0.145 0.008 260);
-    --color-code-ink: oklch(0.9 0.004 260);
-
-    --color-brand-blue: oklch(0.75 0.13 253);
-
-    --hark-edge-tint: oklch(0.735 0.12 170 / 0.1);
-    /* `multiply` has nothing to darken on a dark page, so the grain flips to
-     `screen` and drops in opacity to stay a texture rather than a haze. */
-    --hark-noise-opacity: 0.055;
-    --hark-noise-blend: screen;
-    --hark-backdrop: oklch(0.12 0.006 260 / 0.6);
-    /* Large soft shadows read as smudges on dark surfaces, so elevation comes
-     from a light hairline ring plus a tight, deep shadow. */
-    --hark-panel-border: oklch(1 0 0 / 0.1);
-    --hark-panel-shadow: inset 0 1px 0 oklch(1 0 0 / 0.04), 0 16px 50px oklch(0 0 0 / 0.55);
-  }
+  --hark-panel-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 7%, transparent);
 }
 
 /* Anchor navigation on the docs page relies on native smooth scrolling rather
@@ -165,25 +126,28 @@ body {
   position: relative;
   @apply bg-paper text-ink font-sans;
   font-style: normal;
-  letter-spacing: -0.02em;
 }
 
-body::before,
+/* Selection inverts to chalk on lacquer, in both modes. */
+::selection {
+  background: #ce2020;
+  color: #ffffff;
+}
+
+/* The square lacquer focus ring. Components that draw their own focus
+   treatment opt out with `focus:outline-none`. */
+:focus-visible {
+  outline: 2px solid #ce2020;
+  outline-offset: 2px;
+}
+
+/* Mechanical grain on the page edges — the one sanctioned texture. */
 body::after {
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   content: "";
-}
-
-body::before {
-  background:
-    linear-gradient(90deg, var(--hark-edge-tint), transparent) left / 10vw 100% no-repeat,
-    linear-gradient(270deg, var(--hark-edge-tint), transparent) right / 10vw 100% no-repeat;
-}
-
-body::after {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.72' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='.9'/%3E%3C/svg%3E");
   background-size: 180px 180px;
   opacity: var(--hark-noise-opacity);
@@ -243,10 +207,10 @@ address {
   width: min(100%, 30rem);
   padding: 1.5rem;
   border: 1px solid var(--hark-panel-border);
-  border-radius: 1rem;
+  border-radius: 14px;
   background: var(--color-surface);
   box-shadow: var(--hark-panel-shadow);
-  animation: hark-panel-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: hark-panel-in 170ms cubic-bezier(0.3, 0, 0.2, 1) both;
 }
 
 .hark-modal-dismiss {

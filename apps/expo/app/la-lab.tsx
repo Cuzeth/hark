@@ -26,7 +26,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import HarkAgentActivity from "../src/widgets/HarkAgentActivity";
 
 const PROGRESS_STEPS = [0, 0.25, 0.5, 0.75, 1] as const;
-const ACCENTS = ["#5ED8B7", "#FF9F0A", "#64D2FF", "#FF6B8A"] as const;
+const ACCENTS = ["#E13B3B", "#FF9F0A", "#64D2FF", "#FF6B8A"] as const;
 
 export default function LiveActivityLab() {
   if (!__DEV__) return <Redirect href="/" />;
@@ -324,25 +324,25 @@ function Btn({
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#0B1512" },
+  screen: { flex: 1, backgroundColor: "#0C1017" },
   content: { padding: 16, gap: 14 },
-  heading: { color: "#F2FBF8", fontSize: 22, fontWeight: "700" },
-  caption: { color: "#8FA8A1", fontSize: 13, lineHeight: 18 },
+  heading: { color: "#EFF2F7", fontSize: 22, fontWeight: "700" },
+  caption: { color: "#8E97A8", fontSize: 13, lineHeight: 18 },
   section: { gap: 8 },
-  sectionLabel: { color: "#5ED8B7", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  sectionLabel: { color: "#E13B3B", fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   btn: {
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderRadius: 10,
-    backgroundColor: "#16302A",
+    backgroundColor: "#1A212C",
     borderWidth: 1,
-    borderColor: "#22453D",
+    borderColor: "#293344",
   },
-  btnSelected: { backgroundColor: "#1E5145", borderColor: "#5ED8B7" },
-  btnPrimary: { backgroundColor: "#08715D", borderColor: "#5ED8B7" },
+  btnSelected: { backgroundColor: "#3A1414", borderColor: "#E13B3B" },
+  btnPrimary: { backgroundColor: "#A31818", borderColor: "#E13B3B" },
   btnDanger: { backgroundColor: "#5A1F1F", borderColor: "#B4514F" },
   btnPressed: { opacity: 0.7 },
-  btnText: { color: "#F2FBF8", fontSize: 13, fontWeight: "600" },
-  logLine: { color: "#8FA8A1", fontSize: 12, fontFamily: "Menlo" },
+  btnText: { color: "#EFF2F7", fontSize: 13, fontWeight: "600" },
+  logLine: { color: "#8E97A8", fontSize: 12, fontFamily: "Menlo" },
 });

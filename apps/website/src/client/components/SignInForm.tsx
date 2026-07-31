@@ -61,7 +61,7 @@ export function SignInForm({
         />
       </label>
       <button
-        className="bg-accent hover:bg-accent-hover min-h-11 w-full rounded-full px-5 text-sm font-semibold text-on-accent transition disabled:opacity-50"
+        className="bg-accent hover:bg-accent-hover min-h-11 w-full rounded-lg px-5 text-sm font-semibold text-on-accent transition disabled:opacity-50"
         disabled={busy || disabled || username.trim().length === 0 || password.length === 0}
         type="submit"
       >

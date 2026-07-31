@@ -113,7 +113,7 @@ function ConfirmDialog({
             ref={cancelRef}
             type="button"
             onClick={() => close(false)}
-            className="rounded-full border border-line px-4 py-2 text-sm font-medium text-ink-muted transition hover:bg-surface-hover"
+            className="rounded-lg border border-line px-4 py-2 text-sm font-medium text-ink-muted transition hover:bg-surface-hover"
           >
             Cancel
           </button>
@@ -122,8 +122,8 @@ function ConfirmDialog({
             onClick={() => close(true)}
             className={
               options.destructive
-                ? "rounded-full bg-danger px-4 py-2 text-sm font-medium text-white transition hover:bg-danger-strong"
-                : "bg-accent hover:bg-accent-hover rounded-full px-4 py-2 text-sm font-medium text-on-accent transition"
+                ? "rounded-lg border border-danger-line px-4 py-2 text-sm font-medium text-danger transition hover:bg-danger-soft"
+                : "bg-accent hover:bg-accent-hover rounded-lg px-4 py-2 text-sm font-medium text-on-accent transition"
             }
           >
             {options.confirmLabel ?? "Confirm"}

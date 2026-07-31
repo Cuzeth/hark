@@ -153,10 +153,10 @@ export function RouteTable({ caption, rows }: { caption: string; rows: DocRouteR
 
 /** Palette and sample state mirror the shipping widget; illustration only. */
 const LA = {
-  base: "#0B1512",
-  primary: "#F4FBF9",
-  secondary: "#B8C9C4",
-  accent: "#5ED8B7",
+  base: "#150C0C",
+  primary: "#FBF5F4",
+  secondary: "#C9BAB8",
+  accent: "#E13B3B",
   track: "rgba(255,255,255,0.16)",
   progress: 0.65,
 } as const;

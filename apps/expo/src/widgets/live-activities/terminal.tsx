@@ -22,7 +22,7 @@ export function TerminalLiveActivityStyle(
   standard: LiveActivityLayout,
 ): LiveActivityLayout {
   "widget";
-  const accent = props.accentColor ?? "#5ED8B7";
+  const accent = props.accentColor ?? "#E13B3B";
   const primary = "#F4FBF9";
   const secondary = "#B8C9C4";
   const title = props.privacyMode === "private" ? "Agent task" : props.title;

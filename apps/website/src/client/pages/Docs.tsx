@@ -20,6 +20,20 @@ export function Docs() {
         </div>
       </header>
 
+      <div className="border-b border-line bg-accent-wash">
+        <p className="mx-auto w-full max-w-6xl px-6 py-2 text-xs text-ink-subtle">
+          This instance is a private fork —{" "}
+          <a
+            className="text-accent-text underline underline-offset-2"
+            href="https://github.com/R44VC0RP/hark"
+            rel="noreferrer"
+          >
+            R44VC0RP/hark
+          </a>{" "}
+          is the original project.
+        </p>
+      </div>
+
       <div className="mx-auto flex w-full max-w-6xl flex-col px-6 lg:flex-row lg:gap-14">
         <DocsSidebar />
 

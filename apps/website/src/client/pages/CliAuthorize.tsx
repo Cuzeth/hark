@@ -75,7 +75,7 @@ export function CliAuthorize() {
       </header>
 
       <main className="mx-auto flex w-full max-w-lg flex-1 items-center px-5 pb-20 sm:px-6">
-        <section className="w-full rounded-2xl border border-line bg-surface p-5 shadow-xl shadow-ink/5 sm:p-8 dark:shadow-none dark:ring-1 dark:ring-white/10">
+        <section className="w-full rounded-2xl border border-line bg-surface p-5 sm:p-8">
           <p className="text-accent-text text-xs font-semibold uppercase tracking-wide">
             CLI access
           </p>
@@ -99,7 +99,7 @@ export function CliAuthorize() {
                 value={code}
               />
               <button
-                className="bg-accent hover:bg-accent-hover mt-4 min-h-11 w-full rounded-full px-5 text-sm font-semibold text-on-accent"
+                className="bg-accent hover:bg-accent-hover mt-4 min-h-11 w-full rounded-lg px-5 text-sm font-semibold text-on-accent"
                 type="submit"
               >
                 Continue
@@ -182,7 +182,7 @@ function AuthorizationDetails({
       {pending ? (
         <div className="mt-6 grid grid-cols-2 gap-3">
           <button
-            className="min-h-11 rounded-full border border-line-strong px-4 text-sm font-semibold text-ink-muted hover:bg-surface-hover disabled:opacity-50"
+            className="min-h-11 rounded-lg border border-line-strong px-4 text-sm font-semibold text-ink-muted hover:bg-surface-hover disabled:opacity-50"
             disabled={busy}
             onClick={() => void onResolve("deny")}
             type="button"
@@ -190,7 +190,7 @@ function AuthorizationDetails({
             Deny
           </button>
           <button
-            className="bg-accent hover:bg-accent-hover min-h-11 rounded-full px-4 text-sm font-semibold text-on-accent disabled:opacity-50"
+            className="bg-accent hover:bg-accent-hover min-h-11 rounded-lg px-4 text-sm font-semibold text-on-accent disabled:opacity-50"
             disabled={busy}
             onClick={() => void onResolve("approve")}
             type="button"

@@ -428,7 +428,7 @@ describe("Live Activity schemas", () => {
     });
     expect(start.deviceIds).toEqual(["dev_a", "dev_b"]);
     expect(start).toMatchObject({
-      accentColor: "#5ED8B7",
+      accentColor: "#E13B3B",
       expiresInSeconds: 28_800,
       staleAfterSeconds: 14_400,
       replace: false,
