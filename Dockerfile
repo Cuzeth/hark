@@ -27,7 +27,8 @@ RUN pnpm --filter @hark/website-runtime deploy --prod --legacy /out
 
 # ---------------------------------------------------------------------------
 # Runtime: single process serving the API and the static SPA.
-# SQLite persists under /data (mount a volume there).
+# SQLite persists under /data — attach a volume there (e.g. a Railway Volume).
+# No VOLUME instruction: Railway rejects it; volumes are attached in service config.
 # ---------------------------------------------------------------------------
 FROM node:22-trixie-slim AS runtime
 ENV NODE_ENV=production
@@ -42,7 +43,6 @@ COPY --from=build --chown=node:node /repo/apps/website/scripts ./scripts
 COPY --from=build --chown=node:node /out/package.json ./package.json
 RUN mkdir -p /data && chown node:node /data
 USER node
-VOLUME /data
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||8787)+'/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
