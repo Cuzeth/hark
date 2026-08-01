@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { LIVE_ACTIVITY_STYLES } from "@hark/contracts";
 import { describe, expect, it } from "vitest";
 import { DOC_CONTENT } from "./content";
 import { parseInline } from "./inline";
@@ -74,6 +77,28 @@ describe("docs content", () => {
       );
     }
   });
+
+  it("has a native screenshot for every Live Activity preview", () => {
+    const styles = DOC_CONTENT.flatMap((section) =>
+      section.subsections.flatMap((subsection) =>
+        subsection.blocks.flatMap((block) =>
+          block.kind === "stylePreviews" ? block.styles.map((style) => style.name) : [],
+        ),
+      ),
+    );
+    expect(styles).toEqual([...LIVE_ACTIVITY_STYLES]);
+    for (const style of DOC_CONTENT.flatMap((section) =>
+      section.subsections.flatMap((subsection) =>
+        subsection.blocks.flatMap((block) => (block.kind === "stylePreviews" ? block.styles : [])),
+      ),
+    )) {
+      if (style.nativeScreenshot === false) continue;
+      expect(
+        existsSync(join(process.cwd(), "public", "live-activities", `${style.name}.webp`)),
+        style.name,
+      ).toBe(true);
+    }
+  });
 });
 
 describe("parseInline", () => {
@@ -122,6 +147,13 @@ describe("docsMarkdown", () => {
     }
   });
 
+  it("preserves multiline shell examples", () => {
+    expect(markdown).toContain(`harkctl notify ask "Send the prepared release email?" \\
+  --approval --live-activity --style signal \\
+  --primary-label Send --secondary-label Deny \\
+  --wait --timeout 15m`);
+  });
+
   it("keeps every capability ungated", () => {
     expect(markdown).not.toContain("Hark Pro");
   });
@@ -133,6 +165,8 @@ describe("llmsTxt", () => {
     expect(text.startsWith("# Hark")).toBe(true);
     expect(text).toContain("https://hark.abdeen.dev/docs");
     expect(text).toContain("https://hark.abdeen.dev/docs.md");
+    expect(text).toContain("https://hark.abdeen.dev/agents.md");
+    expect(text).toContain("https://hark.abdeen.dev/docs#cli-permissions");
     expect(text).toContain("https://github.com/Cuzeth/hark");
   });
 });

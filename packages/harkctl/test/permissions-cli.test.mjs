@@ -27,6 +27,7 @@ test("setup all installs every adapter in one command", async () => {
   });
   assert.deepEqual(doctor, {
     authenticated: true,
+    missingScopes: [],
     installed: { claude: true, codex: true, opencode: { v1: true, v2: true } },
   });
 });
@@ -56,4 +57,20 @@ test("setup all on Linux installs supported hooks and reports the OpenCode skip"
     ["claude", "codex"],
   );
   assert.match(result.warnings[0], /Skipped OpenCode/);
+});
+
+test("setup rejects authenticated credentials missing bridge scopes", async () => {
+  const home = await mkdtemp(join(tmpdir(), "hark-permissions-cli-"));
+  await assert.rejects(
+    main(["setup", "claude"], {
+      home,
+      entrypoint: "/opt/hark/harkctl",
+      authenticationStatus: async () => ({
+        authenticated: true,
+        scopes: ["notifications:send"],
+        missingScopes: ["interactions:create", "interactions:read"],
+      }),
+    }),
+    /interactions:create, interactions:read/,
+  );
 });

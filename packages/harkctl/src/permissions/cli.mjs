@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { checkHarkAuthentication } from "./hark.mjs";
+import { checkHarkAuthentication, harkAuthenticationStatus } from "./hark.mjs";
 import { readHookInput, runPermissionHook } from "./hook.mjs";
 import {
   installationStatus,
@@ -31,6 +31,15 @@ function help() {
 export async function main(argv = process.argv.slice(2), options = {}) {
   const [command, target] = argv;
   const checkAuthentication = options.checkAuthentication ?? checkHarkAuthentication;
+  const authenticationStatus =
+    options.authenticationStatus ??
+    (options.checkAuthentication
+      ? async () => ({
+          authenticated: await checkAuthentication(),
+          scopes: [],
+          missingScopes: [],
+        })
+      : harkAuthenticationStatus);
   const entrypoint = options.entrypoint ?? resolve(process.argv[1]);
   const home = options.home;
   if (!command || command === "help" || command === "--help") {
@@ -51,8 +60,14 @@ export async function main(argv = process.argv.slice(2), options = {}) {
     return { ok: true };
   }
   if (command === "doctor") {
+    const auth = await authenticationStatus().catch(() => ({
+      authenticated: false,
+      scopes: [],
+      missingScopes: [],
+    }));
     return {
-      authenticated: await checkAuthentication().catch(() => false),
+      authenticated: auth.authenticated,
+      missingScopes: auth.missingScopes,
       installed: await installationStatus({ ...(home ? { home } : {}) }),
     };
   }
@@ -60,8 +75,15 @@ export async function main(argv = process.argv.slice(2), options = {}) {
     if ((options.install?.platform ?? process.platform) === "win32") {
       throw new Error("Permission bridge setup currently supports macOS and Linux hooks.");
     }
-    if (!(await checkAuthentication().catch(() => false))) {
+    const auth = await authenticationStatus().catch(() => ({
+      authenticated: false,
+      missingScopes: [],
+    }));
+    if (!auth.authenticated) {
       throw new Error("Hark is not authenticated. Run harkctl auth login first.");
+    }
+    if (auth.missingScopes.length > 0) {
+      throw new Error(`Hark login is missing required scopes: ${auth.missingScopes.join(", ")}`);
     }
     const agents = selected(target);
     const platform = options.install?.platform ?? process.platform;

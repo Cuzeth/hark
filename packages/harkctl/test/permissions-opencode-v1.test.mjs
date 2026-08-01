@@ -44,6 +44,7 @@ test("OpenCode V1 permission events approve once through the granular API", asyn
     );
     assert.deepEqual(reply, { reply: "once" });
     assert.match(sent.body, /bash permission in hark/);
+    assert.equal(sent.imageUrl, "https://hark.abdeen.dev/agents/opencode.png");
     assert.doesNotMatch(JSON.stringify(sent), /private command|private\/project/);
   } finally {
     server.close();

@@ -1,7 +1,67 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
-import { createOpenCodeClient } from "../src/permissions/opencode-v2.mjs";
+import {
+  coalescedPermissionDecision,
+  createOpenCodeClient,
+} from "../src/permissions/opencode-v2.mjs";
+
+test("OpenCode adapter coalesces concurrent requests for the same permission", async () => {
+  let resolveDecision;
+  let asks = 0;
+  const ask = () => {
+    asks += 1;
+    return new Promise((resolve) => {
+      resolveDecision = resolve;
+    });
+  };
+  const location = { directory: "/tmp/hark" };
+  const first = {
+    id: "per_1",
+    sessionID: "ses_1",
+    action: "external_directory",
+    resources: ["/private/shared"],
+  };
+  const second = { ...first, id: "per_2" };
+
+  const firstDecision = coalescedPermissionDecision(first, location, ask);
+  const secondDecision = coalescedPermissionDecision(second, location, ask);
+  assert.equal(asks, 1);
+  assert.equal(firstDecision, secondDecision);
+
+  resolveDecision("approved");
+  assert.deepEqual(await Promise.all([firstDecision, secondDecision]), ["approved", "approved"]);
+
+  const later = await coalescedPermissionDecision(first, location, async () => {
+    asks += 1;
+    return "denied";
+  });
+  assert.equal(later, "denied");
+  assert.equal(asks, 2);
+});
+
+test("OpenCode adapter keeps different resources as separate decisions", async () => {
+  let asks = 0;
+  const ask = async () => {
+    asks += 1;
+    return "approved";
+  };
+  const request = {
+    id: "per_distinct_1",
+    sessionID: "ses_distinct",
+    action: "external_directory",
+    resources: ["/private/first"],
+  };
+  await Promise.all([
+    coalescedPermissionDecision(request, { directory: "/tmp/hark" }, ask),
+    coalescedPermissionDecision(
+      { ...request, id: "per_distinct_2", resources: ["/private/second"] },
+      { directory: "/tmp/hark" },
+      ask,
+    ),
+  ]);
+  assert.equal(asks, 2);
+});
 
 test("OpenCode adapter lists, validates, replies, and consumes permission events", async () => {
   const permission = {
