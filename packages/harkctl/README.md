@@ -61,7 +61,9 @@ explicit flags. The command exits `7` when no push was accepted.
 
 - `normal` — a regular notification, held by Focus modes and the Lock Screen's usual grouping.
 - `time-sensitive` — breaks through Focus modes and stays on the Lock Screen longer.
-- `critical` — plays sound at full volume even when the iPhone is muted or in Do Not Disturb. It
+- `critical` — plays sound at full volume even when the iPhone is muted or in Do Not Disturb.
+  Reserve it for genuine emergencies where someone's health or safety needs immediate attention,
+  never for routine alerts, and never as a substitute for contacting local emergency services. It
   needs an app build carrying Apple's critical-alerts entitlement and the on-device permission
   grant; without both, the notification still arrives but loses the critical treatment.
 

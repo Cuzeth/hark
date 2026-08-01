@@ -21,7 +21,9 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
       "aps-environment": "development",
       "com.apple.developer.usernotifications.communication": true,
       "com.apple.developer.usernotifications.time-sensitive": true,
-      "com.apple.developer.usernotifications.critical-alerts": true,
+      // Restore once Apple approves the critical-alerts request for dev.abdeen.hark —
+      // until then the profile can't carry it and signing fails.
+      // "com.apple.developer.usernotifications.critical-alerts": true,
       "com.apple.developer.siri": true,
     },
     infoPlist: {

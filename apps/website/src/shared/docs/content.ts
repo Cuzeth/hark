@@ -258,11 +258,11 @@ export const DOC_CONTENT: DocSection[] = [
           },
           {
             kind: "p",
-            text: "`normal` is a regular notification. `time-sensitive` breaks through Focus modes and stays on the Lock Screen longer. `critical` plays its sound at full volume even when the iPhone is muted or in Do Not Disturb.",
+            text: "`normal` is a regular notification. `time-sensitive` breaks through Focus modes and stays on the Lock Screen longer. `critical` plays its sound at full volume even when the iPhone is muted or in Do Not Disturb — reserve it for genuine emergencies where someone's health or safety needs the recipient's immediate attention, never for routine alerts like outages, failed backups, or automation events. A critical page is not a substitute for contacting local emergency services.",
           },
           {
             kind: "note",
-            text: "Both levels above `normal` depend on the receiving app build. `time-sensitive` needs an updated Hark build; `critical` additionally needs a build carrying Apple's critical-alerts entitlement — which Apple grants per app — and the separate on-device permission the app asks for. Where either is missing the notification still arrives, as a normal one.",
+            text: "Both levels above `normal` depend on the receiving app build. `time-sensitive` needs an updated Hark build; `critical` additionally needs a build carrying Apple's critical-alerts entitlement — Apple grants it per app, and approval for Hark is still pending — and the separate on-device permission the app asks for. Where either is missing the notification still arrives, as a normal one.",
           },
         ],
       },

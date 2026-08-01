@@ -108,6 +108,10 @@ export default function SettingsScreen() {
           }
           onPress={criticalAlertsAllowed === false ? () => void Linking.openSettings() : undefined}
         />
+        <Text style={styles.footnote}>
+          Critical alerts sound even when this iPhone is muted or in a Focus. They are meant for
+          genuine emergencies only and are not a substitute for contacting local emergency services.
+        </Text>
         <SettingsRow
           icon="iphone"
           label="This iPhone"
@@ -228,6 +232,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: "right",
     letterSpacing: tightTracking(13),
+  },
+  footnote: {
+    paddingVertical: 8,
+    color: colors.muted,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    letterSpacing: tightTracking(12),
   },
   accountAction: {
     minHeight: 52,

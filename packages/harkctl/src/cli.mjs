@@ -448,7 +448,9 @@ harkctl interaction wait <id> resumes waiting at any time.
 
 --priority defaults to normal. time-sensitive breaks through Focus modes; critical
 also sounds at full volume when the phone is muted, and needs an app build with
-Apple's critical-alerts entitlement plus on-device permission.
+Apple's critical-alerts entitlement plus on-device permission. Reserve critical for
+genuine emergencies where someone's health or safety needs immediate attention —
+never routine alerts — and never as a substitute for local emergency services.
 
 Authentication: run harkctl auth login, or set HARK_TOKEN for an advanced manual setup.
 Tokens are never accepted as command arguments.`;

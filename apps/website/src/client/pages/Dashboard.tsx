@@ -70,7 +70,7 @@ function agentPrompt(webhookUrl: string, devices: DeviceDto[]): string {
         type: "string",
         enum: [...NOTIFICATION_PRIORITIES],
         description:
-          "Optional delivery priority. Overrides the service default. time-sensitive breaks through Focus modes; critical also sounds at full volume when the phone is muted.",
+          "Optional delivery priority. Overrides the service default. time-sensitive breaks through Focus modes; critical also sounds at full volume when the phone is muted. Critical is for genuine emergencies involving someone's health or safety only — never routine failures.",
       },
       deviceIds: {
         type: "array",
@@ -100,7 +100,7 @@ function agentPrompt(webhookUrl: string, devices: DeviceDto[]): string {
     curlExample(webhookUrl),
     "",
     "Use body for the notification message. title, imageUrl, and url are optional per-request overrides of the service defaults.",
-    "Omit priority to inherit the service default. Reserve time-sensitive and critical for notifications that must interrupt Focus or silent mode.",
+    "Omit priority to inherit the service default. Use time-sensitive for notifications that must interrupt Focus; use critical only for a genuine emergency where someone's health or safety needs the recipient's immediate attention.",
     "Omit deviceIds to deliver to all devices. Include one or more IDs to route only to those devices.",
     ...(devices.length > 0
       ? [
