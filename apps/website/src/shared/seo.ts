@@ -9,6 +9,7 @@ export type SeoPage =
   | "home"
   | "docs"
   | "pricing"
+  | "launched"
   | "privacy"
   | "terms"
   | "dashboard"
@@ -20,6 +21,9 @@ export interface PageSeo {
   description: string;
   index: boolean;
   markdownAlternate?: string;
+  type?: "website" | "article";
+  publishedTime?: string;
+  modifiedTime?: string;
 }
 
 export const PAGE_SEO: Record<SeoPage, PageSeo> = {
@@ -44,6 +48,16 @@ export const PAGE_SEO: Record<SeoPage, PageSeo> = {
     description:
       "Compare Hark Free and Pro plans for webhook notifications, multiple iPhones, device routing, interactive responses, and Live Activities.",
     index: true,
+  },
+  launched: {
+    path: "/a/launched",
+    title: "Hark Is Live on the App Store",
+    description:
+      "Install or update Hark for iPhone from the App Store, with direct support if anything goes wrong.",
+    index: true,
+    type: "article",
+    publishedTime: "2026-08-01T12:00:00-04:00",
+    modifiedTime: "2026-08-01T12:00:00-04:00",
   },
   privacy: {
     path: "/privacy",
@@ -73,7 +87,14 @@ export const PAGE_SEO: Record<SeoPage, PageSeo> = {
   },
 };
 
-export const PUBLIC_SEO_PAGES = ["home", "docs", "pricing", "privacy", "terms"] as const;
+export const PUBLIC_SEO_PAGES = [
+  "home",
+  "docs",
+  "pricing",
+  "launched",
+  "privacy",
+  "terms",
+] as const;
 export const PRIVATE_SEO_PAGES = ["dashboard", "cliAuthorize"] as const;
 
 export function absoluteUrl(path: string): string {
@@ -179,37 +200,58 @@ export function structuredDataForPage(page: SeoPage): Record<string, unknown> | 
   const seo = PAGE_SEO[page];
   if (!seo.index) return null;
   const url = absoluteUrl(seo.path);
+  const article = seo.type === "article";
+  const graph: Record<string, unknown>[] = [];
+  if (article) graph.push(provider);
+  graph.push(
+    {
+      "@type": "WebPage",
+      "@id": `${url}#webpage`,
+      url,
+      name: seo.title,
+      description: seo.description,
+      isPartOf: { "@id": `${SITE_URL}/#website` },
+      breadcrumb: { "@id": `${url}#breadcrumb` },
+      ...(article ? { mainEntity: { "@id": `${url}#article` } } : {}),
+      inLanguage: "en-US",
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": `${url}#breadcrumb`,
+      itemListElement: [
+        {
+          "@type": "ListItem",
+          position: 1,
+          name: "Hark",
+          item: `${SITE_URL}/`,
+        },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: seo.title.replace(/\s+[—-]\s+Hark$/, ""),
+          item: url,
+        },
+      ],
+    },
+  );
+  if (article) {
+    graph.push({
+      "@type": "Article",
+      "@id": `${url}#article`,
+      headline: seo.title,
+      description: seo.description,
+      url,
+      mainEntityOfPage: { "@id": `${url}#webpage` },
+      image: SOCIAL_IMAGE_URL,
+      author: { "@id": `${SITE_URL}/#provider` },
+      publisher: { "@id": `${SITE_URL}/#provider` },
+      datePublished: seo.publishedTime,
+      dateModified: seo.modifiedTime ?? seo.publishedTime,
+      inLanguage: "en-US",
+    });
+  }
   return {
     "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebPage",
-        "@id": `${url}#webpage`,
-        url,
-        name: seo.title,
-        description: seo.description,
-        isPartOf: { "@id": `${SITE_URL}/#website` },
-        breadcrumb: { "@id": `${url}#breadcrumb` },
-        inLanguage: "en-US",
-      },
-      {
-        "@type": "BreadcrumbList",
-        "@id": `${url}#breadcrumb`,
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Hark",
-            item: `${SITE_URL}/`,
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: seo.title.replace(/\s+[—-]\s+Hark$/, ""),
-            item: url,
-          },
-        ],
-      },
-    ],
+    "@graph": graph,
   };
 }

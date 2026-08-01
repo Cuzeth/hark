@@ -20,7 +20,15 @@ startInteractionCallbackWorker();
 // instead of becoming indexable soft-404 copies of the home page.
 const clientDir = resolve(process.cwd(), "dist/client");
 if (existsSync(clientDir)) {
-  const documentRoutes = ["/", "/docs", "/pricing", "/privacy", "/terms", "/dashboard"];
+  const documentRoutes = [
+    "/",
+    "/docs",
+    "/pricing",
+    "/a/launched",
+    "/privacy",
+    "/terms",
+    "/dashboard",
+  ];
   for (const path of documentRoutes) {
     const file = path === "/" ? "index.html" : `${path.slice(1)}/index.html`;
     if (existsSync(resolve(clientDir, file))) {

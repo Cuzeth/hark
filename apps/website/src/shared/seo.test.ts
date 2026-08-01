@@ -30,6 +30,7 @@ describe("SEO metadata", () => {
   it("resolves direct and trailing-slash routes without treating unknown paths as pages", () => {
     expect(seoPageForPath("/")).toBe("home");
     expect(seoPageForPath("/docs/")).toBe("docs");
+    expect(seoPageForPath("/a/launched/")).toBe("launched");
     expect(seoPageForPath("/dashboard")).toBe("dashboard");
     expect(seoPageForPath("/missing")).toBeNull();
   });
@@ -47,6 +48,15 @@ describe("SEO metadata", () => {
   it("adds breadcrumbs to indexable child pages without marking private pages up", () => {
     expect(JSON.stringify(structuredDataForPage("docs"))).toContain('"BreadcrumbList"');
     expect(structuredDataForPage("dashboard")).toBeNull();
+  });
+
+  it("publishes the launch announcement as a dated article", () => {
+    const data = structuredDataForPage("launched");
+    const json = JSON.stringify(data);
+    expect(json).toContain('"@type":"Article"');
+    expect(json).toContain('"datePublished":"2026-08-01T12:00:00-04:00"');
+    expect(json).toContain('"mainEntityOfPage"');
+    expect(json).toContain('"author":{"@id":"https://hark.ryan.ceo/#provider"}');
   });
 
   it("uses the same public pricing facts in the fallback catalog", () => {

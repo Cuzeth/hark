@@ -50,7 +50,7 @@ function seoHead(page: SeoPage): string {
     `    <meta data-seo="true" name="robots" content="${robots}" />`,
     '    <meta data-seo="true" name="application-name" content="Hark" />',
     `    <link data-seo="true" rel="canonical" href="${canonical}" />`,
-    '    <meta data-seo="true" property="og:type" content="website" />',
+    `    <meta data-seo="true" property="og:type" content="${seo.type ?? "website"}" />`,
     '    <meta data-seo="true" property="og:site_name" content="Hark" />',
     '    <meta data-seo="true" property="og:locale" content="en_US" />',
     `    <meta data-seo="true" property="og:title" content="${title}" />`,
@@ -67,6 +67,13 @@ function seoHead(page: SeoPage): string {
     `    <meta data-seo="true" name="twitter:image" content="${SOCIAL_IMAGE_URL}" />`,
     '    <meta data-seo="true" name="twitter:image:alt" content="Hark iOS alerts, notifications, and Live Activities" />',
   ];
+
+  if (seo.type === "article" && seo.publishedTime) {
+    lines.push(
+      `    <meta data-seo="true" property="article:published_time" content="${seo.publishedTime}" />`,
+      `    <meta data-seo="true" property="article:modified_time" content="${seo.modifiedTime ?? seo.publishedTime}" />`,
+    );
+  }
 
   if (page === "home") {
     lines.push(

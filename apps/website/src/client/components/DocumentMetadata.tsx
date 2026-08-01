@@ -49,7 +49,7 @@ export function DocumentMetadata() {
       meta("description", seo.description),
       meta("robots", robots),
       meta("application-name", "Hark"),
-      meta("og:type", "website", true),
+      meta("og:type", seo.type ?? "website", true),
       meta("og:site_name", "Hark", true),
       meta("og:locale", "en_US", true),
       meta("og:title", seo.title, true),
@@ -66,6 +66,13 @@ export function DocumentMetadata() {
       meta("twitter:image", SOCIAL_IMAGE_URL),
       meta("twitter:image:alt", "Hark iOS alerts, notifications, and Live Activities"),
     );
+
+    if (seo.type === "article" && seo.publishedTime) {
+      document.head.append(
+        meta("article:published_time", seo.publishedTime, true),
+        meta("article:modified_time", seo.modifiedTime ?? seo.publishedTime, true),
+      );
+    }
 
     if (page === "home") {
       document.head.append(
