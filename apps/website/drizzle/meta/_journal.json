@@ -141,6 +141,13 @@
       "when": 1785349992949,
       "tag": "0019_apns_device_token",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1785627157823,
+      "tag": "0020_notification_priority",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,15 @@ function parseInteractiveStyle(value) {
   return String(value);
 }
 
+const NOTIFICATION_PRIORITIES = ["normal", "time-sensitive", "critical"];
+
+function parsePriority(value) {
+  if (!NOTIFICATION_PRIORITIES.includes(String(value))) {
+    throw new UsageError(`--priority must be one of: ${NOTIFICATION_PRIORITIES.join(", ")}`);
+  }
+  return String(value);
+}
+
 function parseActionLabel(value, flag) {
   const label = String(value).trim();
   if (
@@ -98,6 +107,7 @@ export function parseArgs(argv) {
     "progress",
     "symbol",
     "privacy",
+    "priority",
     "accent-color",
     "style",
     "stale-after",
@@ -395,9 +405,11 @@ function help() {
   harkctl auth logout
   harkctl auth status
   harkctl notify <body> [--title <name>] [--image <url>] [--url <url>] [--device <id>]
+                 [--priority <normal|time-sensitive|critical>]
                  [--idempotency-key <key>] [--stdin]
   harkctl notify ask <prompt> (--approval|--yes-no|--text) [--title <name>] [--image <url>]
                   [--url <url>] [--device <id>] [--expires-in <duration>]
+                  [--priority <normal|time-sensitive|critical>]
                   [--live-activity [--style <approval|shell|verdict|signal>]
                                    [--primary-label <label>] [--secondary-label <label>]]
                   [--idempotency-key <key>] [--stdin] [--wait [--timeout <duration>] | --poll]
@@ -433,6 +445,10 @@ literal body "ask". --wait blocks until the answer or timeout; --poll waits at m
 ${POLL_TIMEOUT_SECONDS} seconds to catch an instant answer. A timed-out poll or wait does
 not end the prompt: it stays answerable on the phone until it expires, and
 harkctl interaction wait <id> resumes waiting at any time.
+
+--priority defaults to normal. time-sensitive breaks through Focus modes; critical
+also sounds at full volume when the phone is muted, and needs an app build with
+Apple's critical-alerts entitlement plus on-device permission.
 
 Authentication: run harkctl auth login, or set HARK_TOKEN for an advanced manual setup.
 Tokens are never accepted as command arguments.`;
@@ -716,6 +732,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
           : {}),
         ...(options.image ? { imageUrl: options.image } : {}),
         ...(options.url ? { url: options.url } : {}),
+        ...(options.priority ? { priority: parsePriority(options.priority) } : {}),
         ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
       };
       const body = await request(config, "/api/agent/interactions", {
@@ -745,6 +762,7 @@ export async function execute(argv, env = process.env, overrides = {}) {
       ...(options.title ? { title: options.title } : {}),
       ...(options.image ? { imageUrl: options.image } : {}),
       ...(options.url ? { url: options.url } : {}),
+      ...(options.priority ? { priority: parsePriority(options.priority) } : {}),
       ...(options.device.length > 0 ? { deviceIds: options.device } : {}),
     };
     const body = await request(config, "/api/agent/notifications", {

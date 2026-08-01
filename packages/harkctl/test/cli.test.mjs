@@ -435,6 +435,68 @@ test("notify sends the normalized notification request body", async () => {
   }
 });
 
+test("notify sends the requested priority", async () => {
+  const originalFetch = globalThis.fetch;
+  let sent;
+  globalThis.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return Response.json({ accepted: 1, notification: { id: "anot_priority" } }, { status: 201 });
+  };
+  try {
+    const result = await execute(["notify", "Disk is full", "--priority", "time-sensitive"], {
+      HARK_TOKEN: "hark_test",
+    });
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(sent, { body: "Disk is full", priority: "time-sensitive" });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("an explicit --priority wins over a priority read from --stdin", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalStdin = Object.getOwnPropertyDescriptor(process, "stdin");
+  let sent;
+  globalThis.fetch = async (_url, init) => {
+    sent = JSON.parse(init.body);
+    return Response.json({ accepted: 1, notification: { id: "anot_stdin" } }, { status: 201 });
+  };
+  Object.defineProperty(process, "stdin", {
+    configurable: true,
+    value: (async function* () {
+      yield JSON.stringify({ body: "Disk is full", priority: "normal" });
+    })(),
+  });
+  try {
+    const result = await execute(["notify", "--stdin", "--priority", "critical"], {
+      HARK_TOKEN: "hark_test",
+    });
+    assert.equal(result.exitCode, 0);
+    assert.deepEqual(sent, { body: "Disk is full", priority: "critical" });
+  } finally {
+    globalThis.fetch = originalFetch;
+    Object.defineProperty(process, "stdin", originalStdin);
+  }
+});
+
+test("notify rejects an unknown --priority before sending", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return Response.json({ accepted: 1, notification: { id: "anot_never" } }, { status: 201 });
+  };
+  try {
+    await assert.rejects(
+      execute(["notify", "Disk is full", "--priority", "urgent"], { HARK_TOKEN: "hark_test" }),
+      /--priority must be one of: normal, time-sensitive, critical/,
+    );
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("notify merges --stdin JSON under explicit flags and exits 7 when nothing is accepted", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) => {
@@ -523,6 +585,38 @@ test("notify ask sends the normalized approval request body with an image", asyn
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("notify ask carries the priority into the interaction payload", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    assert.deepEqual(JSON.parse(init.body), {
+      title: "Hark",
+      prompt: "Roll back production?",
+      kind: "approval",
+      expiresInSeconds: 900,
+      priority: "critical",
+    });
+    return Response.json({ accepted: 1, interaction: { id: "int_priority", status: "pending" } });
+  };
+  try {
+    const result = await execute(
+      ["notify", "ask", "Roll back production?", "--approval", "--priority", "critical"],
+      { HARK_TOKEN: "hark_test" },
+    );
+    assert.equal(result.exitCode, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("notify ask rejects an unknown --priority", async () => {
+  await assert.rejects(
+    execute(["notify", "ask", "Deploy?", "--approval", "--priority", "urgent"], {
+      HARK_TOKEN: "hark_test",
+    }),
+    /--priority must be one of: normal, time-sensitive, critical/,
+  );
 });
 
 test("notify ask sends an interactive Live Activity with cosmetic labels", async () => {

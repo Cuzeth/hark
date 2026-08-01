@@ -57,9 +57,17 @@ when the notification is tapped, and repeatable `--device` routes to specific de
 Use `--idempotency-key` for safe retries and `--stdin` to merge a JSON payload from stdin under any
 explicit flags. The command exits `7` when no push was accepted.
 
+`--priority` picks how insistently the push arrives and defaults to `normal`:
+
+- `normal` — a regular notification, held by Focus modes and the Lock Screen's usual grouping.
+- `time-sensitive` — breaks through Focus modes and stays on the Lock Screen longer.
+- `critical` — plays sound at full volume even when the iPhone is muted or in Do Not Disturb. It
+  needs an app build carrying Apple's critical-alerts entitlement and the on-device permission
+  grant; without both, the notification still arrives but loses the critical treatment.
+
 `harkctl notify ask <prompt>` sends a push that elicits an answer. Pass exactly one of `--approval`
 (Approve/Deny buttons), `--yes-no` (Yes/No buttons), or `--text` (a short free-form reply). It
-shares the appearance flags above
+shares the appearance and `--priority` flags above
 plus `--expires-in` (default `15m`). Without a waiting flag it returns the pending interaction
 immediately; read the answer later with `interaction get` or `interaction wait`. With `--wait
 [--timeout <duration>]` it blocks until the answer arrives or the timeout passes. With `--poll` it

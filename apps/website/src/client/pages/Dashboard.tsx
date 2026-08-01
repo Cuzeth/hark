@@ -5,9 +5,11 @@ import type {
   InboxActivityKind,
   InboxActivityPageDto,
   LiveActivityDto,
+  NotificationPriority,
   ServiceCreatedResponse,
   ServiceDto,
 } from "@hark/contracts";
+import { NOTIFICATION_PRIORITIES } from "@hark/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { useConfirm } from "../components/ConfirmDialog";
@@ -16,6 +18,12 @@ import { api } from "../lib/api";
 import { changePassword, signOut, useSession } from "../lib/auth";
 
 type ActivityFilter = "all" | InboxActivityKind;
+
+const PRIORITY_LABELS: Record<NotificationPriority, string> = {
+  normal: "Normal",
+  "time-sensitive": "Time sensitive",
+  critical: "Critical",
+};
 
 function curlExample(webhookUrl: string): string {
   return [
@@ -58,6 +66,12 @@ function agentPrompt(webhookUrl: string, devices: DeviceDto[]): string {
         maxLength: 2048,
         description: "Optional destination opened when the notification is tapped.",
       },
+      priority: {
+        type: "string",
+        enum: [...NOTIFICATION_PRIORITIES],
+        description:
+          "Optional delivery priority. Overrides the service default. time-sensitive breaks through Focus modes; critical also sounds at full volume when the phone is muted.",
+      },
       deviceIds: {
         type: "array",
         minItems: 1,
@@ -86,6 +100,7 @@ function agentPrompt(webhookUrl: string, devices: DeviceDto[]): string {
     curlExample(webhookUrl),
     "",
     "Use body for the notification message. title, imageUrl, and url are optional per-request overrides of the service defaults.",
+    "Omit priority to inherit the service default. Reserve time-sensitive and critical for notifications that must interrupt Focus or silent mode.",
     "Omit deviceIds to deliver to all devices. Include one or more IDs to route only to those devices.",
     ...(devices.length > 0
       ? [
@@ -569,6 +584,7 @@ function ServiceModal({
   const [title, setTitle] = useState(service?.title ?? "");
   const [imageUrl, setImageUrl] = useState(service?.imageUrl ?? "");
   const [url, setUrl] = useState(service?.url ?? "");
+  const [priority, setPriority] = useState<NotificationPriority>(service?.priority ?? "normal");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [closing, setClosing] = useState(false);
@@ -607,6 +623,7 @@ function ServiceModal({
         title: title.trim(),
         imageUrl: imageUrl.trim() || null,
         url: url.trim() || null,
+        priority,
       };
       if (service) {
         const response = await api.updateService(service.id, input);
@@ -700,6 +717,22 @@ function ServiceModal({
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/dashboard"
             />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-ink-subtle">
+              Default priority <span className="font-normal">(a request can override it)</span>
+            </span>
+            <select
+              className={inputClass}
+              value={priority}
+              onChange={(e) => setPriority(e.target.value as NotificationPriority)}
+            >
+              {NOTIFICATION_PRIORITIES.map((value) => (
+                <option key={value} value={value}>
+                  {PRIORITY_LABELS[value]}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
         {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
@@ -958,7 +991,12 @@ function ActivityRow({
               {item.detail}
             </p>
           ) : null}
-          <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">{activityMeta(item)}</p>
+          <p className="mt-0.5 flex items-center gap-1.5 text-[11px] leading-4 text-ink-faint">
+            {item.priority && item.priority !== "normal" ? (
+              <PriorityBadge priority={item.priority} />
+            ) : null}
+            {activityMeta(item)}
+          </p>
         </div>
         {expandable ? (
           <svg
@@ -988,6 +1026,20 @@ function ActivityRow({
         ×
       </button>
     </li>
+  );
+}
+
+function PriorityBadge({ priority }: { priority: NotificationPriority }) {
+  return (
+    <span
+      className={`shrink-0 rounded-lg border px-2 py-0.5 text-[10px] font-medium leading-4 ${
+        priority === "critical"
+          ? "border-accent bg-accent-soft text-accent-text"
+          : "border-line bg-surface-muted text-ink-muted"
+      }`}
+    >
+      {PRIORITY_LABELS[priority]}
+    </span>
   );
 }
 

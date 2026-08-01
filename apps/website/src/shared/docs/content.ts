@@ -238,6 +238,12 @@ export const DOC_CONTENT: DocSection[] = [
                   "Destination opened when the notification is tapped. http and https only, so custom app schemes and javascript: or data: URLs never reach a device.",
               },
               {
+                name: "priority",
+                type: "enum",
+                detail:
+                  "`normal`, `time-sensitive`, or `critical`. Defaults to the service's default priority, itself `normal` until you change it in the dashboard.",
+              },
+              {
                 name: "deviceIds",
                 type: "string[]",
                 detail:
@@ -249,6 +255,14 @@ export const DOC_CONTENT: DocSection[] = [
                 detail: "Turns the notification into an approval, yes/no, or text prompt.",
               },
             ],
+          },
+          {
+            kind: "p",
+            text: "`normal` is a regular notification. `time-sensitive` breaks through Focus modes and stays on the Lock Screen longer. `critical` plays its sound at full volume even when the iPhone is muted or in Do Not Disturb.",
+          },
+          {
+            kind: "note",
+            text: "Both levels above `normal` depend on the receiving app build. `time-sensitive` needs an updated Hark build; `critical` additionally needs a build carrying Apple's critical-alerts entitlement — which Apple grants per app — and the separate on-device permission the app asks for. Where either is missing the notification still arrives, as a normal one.",
           },
         ],
       },
@@ -916,6 +930,12 @@ harkctl permissions doctor`,
               },
               { name: "--url", type: "url", detail: "Opened when the notification is tapped." },
               {
+                name: "--priority",
+                type: "enum",
+                detail:
+                  "`normal` (default), `time-sensitive`, or `critical`, with the same app-build requirements as the webhook `priority` field.",
+              },
+              {
                 name: "--device",
                 type: "id, repeatable",
                 detail: "Target specific iPhones.",
@@ -943,7 +963,7 @@ harkctl permissions doctor`,
         blocks: [
           {
             kind: "p",
-            text: "`harkctl notify ask <prompt>` sends a push that elicits an answer. Pass exactly one response type: `--approval` (Approve/Deny), `--yes-no` (Yes/No), or `--text` (a short typed reply). The appearance flags from `notify` all apply.",
+            text: "`harkctl notify ask <prompt>` sends a push that elicits an answer. Pass exactly one response type: `--approval` (Approve/Deny), `--yes-no` (Yes/No), or `--text` (a short typed reply). The appearance and `--priority` flags from `notify` all apply.",
           },
           {
             kind: "code",

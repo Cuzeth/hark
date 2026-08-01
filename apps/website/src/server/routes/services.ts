@@ -1,4 +1,5 @@
 import {
+  type NotificationPriority,
   type ServiceCreatedResponse,
   type ServiceCreateInput,
   type ServiceDto,
@@ -33,6 +34,7 @@ export function serviceToDto(row: typeof service.$inferSelect): ServiceDto {
     title: row.title,
     imageUrl: row.imageUrl,
     url: row.url,
+    priority: row.priority as NotificationPriority,
     webhookUrl,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -53,6 +55,7 @@ export async function createServiceForUser(
       title: input.title,
       imageUrl: input.imageUrl ?? null,
       url: input.url ?? null,
+      priority: input.priority ?? "normal",
       tokenHash: hashWebhookToken(token),
       tokenCiphertext: encryptWebhookToken(token),
       createdAt: now,

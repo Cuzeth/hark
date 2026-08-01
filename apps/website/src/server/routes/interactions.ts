@@ -10,6 +10,7 @@ import {
   interactionCredentialResponseSchema,
   interactionResponseSchema,
   liveActivityInteractionResponseSchema,
+  type NotificationPriority,
   serviceCreateSchema,
 } from "@hark/contracts";
 import { and, count, desc, eq, gt, gte, inArray, isNull, lte } from "drizzle-orm";
@@ -132,6 +133,7 @@ function toNotificationDto(row: NotificationRow): AgentNotificationDto {
     body: row.body,
     imageUrl: row.imageUrl,
     url: row.url,
+    priority: row.priority as NotificationPriority,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -235,6 +237,7 @@ export const agentRoute = new Hono<AgentEnv>()
         title: service.title,
         imageUrl: service.imageUrl,
         url: service.url,
+        priority: service.priority,
         createdAt: service.createdAt,
         updatedAt: service.updatedAt,
       })
@@ -269,6 +272,7 @@ export const agentRoute = new Hono<AgentEnv>()
         body: event.body,
         imageUrl: event.imageUrl,
         url: event.url,
+        priority: event.priority,
         status: event.status,
         deliveredCount: event.deliveredCount,
         error: event.error,
@@ -362,6 +366,7 @@ export const agentRoute = new Hono<AgentEnv>()
       body: parsed.data.body,
       imageUrl: parsed.data.imageUrl ?? null,
       url: parsed.data.url ?? null,
+      priority: parsed.data.priority,
       acceptedCount: 0,
       idempotencyKey: idempotencyKey ?? null,
       requestHash: idempotencyKey ? requestHash : null,
@@ -414,6 +419,7 @@ export const agentRoute = new Hono<AgentEnv>()
         body: parsed.data.body,
         imageUrl: parsed.data.imageUrl,
         url: parsed.data.url,
+        priority: parsed.data.priority,
       },
     });
     const result = await sendPushMessages(messages);
@@ -742,6 +748,7 @@ export const agentRoute = new Hono<AgentEnv>()
       actionDigest,
       imageUrl: parsed.data.imageUrl,
       url: parsed.data.url,
+      priority: parsed.data.priority,
     });
     const result = await sendPushMessages(messages);
     if (result.staleTokens.length > 0) {

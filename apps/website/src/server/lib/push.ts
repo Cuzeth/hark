@@ -4,6 +4,7 @@ import {
   HARK_YES_NO_CATEGORY_ID,
   type InteractionKind,
   type InteractionPushData,
+  type NotificationPriority,
   PUSH_SCHEMA_VERSION,
   type PushData,
   type WebhookRequest,
@@ -18,6 +19,7 @@ export interface ApnsAlertMessage {
   body: string;
   categoryId?: string;
   conversationId?: string;
+  priority?: NotificationPriority;
   data: PushData | InteractionPushData;
 }
 
@@ -25,6 +27,7 @@ export interface ServiceDefaults {
   title: string;
   imageUrl: string | null;
   url: string | null;
+  priority: string;
 }
 
 export interface ResolvedNotification {
@@ -32,6 +35,7 @@ export interface ResolvedNotification {
   body: string;
   imageUrl?: string;
   url?: string;
+  priority: NotificationPriority;
 }
 
 /** Webhook overrides win; otherwise fall back to the service defaults. */
@@ -44,6 +48,8 @@ export function resolveNotification(
     body: request.body,
     imageUrl: request.imageUrl ?? service.imageUrl ?? undefined,
     url: request.url ?? service.url ?? undefined,
+    // The column is constrained to the enum by the API surface that writes it.
+    priority: request.priority ?? (service.priority as NotificationPriority),
   };
 }
 
@@ -108,6 +114,7 @@ export function buildPushMessages(input: BuildPushInput): ApnsAlertMessage[] {
     title: resolved.title,
     body: resolved.body,
     conversationId: data.conversationId,
+    priority: resolved.priority,
     data,
   }));
 }
@@ -123,6 +130,7 @@ export interface BuildInteractionPushInput {
   eventId?: string;
   imageUrl?: string;
   url?: string;
+  priority?: NotificationPriority;
 }
 
 export function buildInteractionPushMessages(input: BuildInteractionPushInput): ApnsAlertMessage[] {
@@ -151,6 +159,7 @@ export function buildInteractionPushMessages(input: BuildInteractionPushInput): 
     body: input.prompt,
     categoryId,
     conversationId: data.conversationId,
+    ...(input.priority ? { priority: input.priority } : {}),
     data,
   }));
 }
@@ -161,11 +170,15 @@ export function buildInteractionPushMessages(input: BuildInteractionPushInput): 
  * on-device `content.data`. Both slots carry the same object.
  */
 export function buildAlertPayload(message: ApnsAlertMessage): Record<string, unknown> {
+  const priority = message.priority ?? "normal";
   return {
     aps: {
       alert: { title: message.title, body: message.body },
-      sound: "default",
+      // A critical alert only sounds if the app ships the critical alert
+      // entitlement and the user has granted it; otherwise iOS drops the level.
+      sound: priority === "critical" ? { critical: 1, name: "default", volume: 1.0 } : "default",
       "mutable-content": 1,
+      ...(priority === "normal" ? {} : { "interruption-level": priority }),
       ...(message.categoryId ? { category: message.categoryId } : {}),
       ...(message.conversationId ? { "thread-id": message.conversationId } : {}),
     },

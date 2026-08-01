@@ -1,4 +1,8 @@
-import { INBOX_ACTIVITY_KINDS, type InboxActivityDto } from "@hark/contracts";
+import {
+  INBOX_ACTIVITY_KINDS,
+  type InboxActivityDto,
+  type NotificationPriority,
+} from "@hark/contracts";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
@@ -29,6 +33,7 @@ interface ActivityFeedRow {
   status: string | null;
   deliveredCount: number | null;
   error: string | null;
+  priority: string | null;
   createdAt: number;
   total: number;
 }
@@ -133,6 +138,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
       status,
       delivered_count as deliveredCount,
       error,
+      priority,
       created_at as createdAt,
       count(*) over () as total
     from (
@@ -148,6 +154,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         e.status as status,
         e.delivered_count as delivered_count,
         e.error as error,
+        e.priority as priority,
         e.created_at as created_at
       from event e
       inner join service s on s.id = e.service_id
@@ -167,6 +174,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         case when n.accepted_count > 0 then 'accepted' else 'no_devices' end as status,
         n.accepted_count as delivered_count,
         null as error,
+        n.priority as priority,
         n.created_at as created_at
       from agent_notification n
       inner join api_token t on t.id = n.requester_token_id
@@ -192,6 +200,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         null as status,
         null as delivered_count,
         null as error,
+        null as priority,
         i.responded_at as created_at
       from interaction i
       left join api_token t on t.id = i.requester_token_id
@@ -225,6 +234,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
         null as status,
         null as delivered_count,
         null as error,
+        null as priority,
         o.created_at as created_at
       from live_activity_operation o
       inner join live_activity a on a.id = o.activity_id
@@ -251,6 +261,7 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
     status: row.status,
     deliveredCount: row.deliveredCount,
     error: row.error,
+    priority: row.priority as NotificationPriority | null,
     createdAt: new Date(row.createdAt).toISOString(),
   }));
 

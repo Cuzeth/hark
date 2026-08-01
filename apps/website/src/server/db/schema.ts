@@ -74,6 +74,7 @@ export const service = sqliteTable(
     title: text("title").notNull(),
     imageUrl: text("image_url"),
     url: text("url"),
+    priority: text("priority").notNull().default("normal"),
     /** SHA-256 hex digest of the webhook token. The plaintext token is never stored. */
     tokenHash: text("token_hash").notNull().unique(),
     /** AES-GCM encrypted token, used to let the owner copy the URL again. */
@@ -116,6 +117,7 @@ export const event = sqliteTable(
     body: text("body").notNull(),
     imageUrl: text("image_url"),
     url: text("url"),
+    priority: text("priority").notNull().default("normal"),
     status: text("status").notNull(),
     deliveredCount: integer("delivered_count").notNull().default(0),
     error: text("error"),
@@ -167,6 +169,7 @@ export const agentNotification = sqliteTable(
     body: text("body").notNull(),
     imageUrl: text("image_url"),
     url: text("url"),
+    priority: text("priority").notNull().default("normal"),
     acceptedCount: integer("accepted_count").notNull().default(0),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),

@@ -1,4 +1,4 @@
-import type { EventDto } from "@hark/contracts";
+import type { EventDto, NotificationPriority } from "@hark/contracts";
 import { desc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
@@ -19,6 +19,7 @@ export const eventsRoute = new Hono<AuthedEnv>().use("*", requireAuth).get("/", 
       body: event.body,
       imageUrl: event.imageUrl,
       url: event.url,
+      priority: event.priority,
       status: event.status,
       deliveredCount: event.deliveredCount,
       error: event.error,
@@ -32,6 +33,7 @@ export const eventsRoute = new Hono<AuthedEnv>().use("*", requireAuth).get("/", 
 
   const events: EventDto[] = rows.map((row) => ({
     ...row,
+    priority: row.priority as NotificationPriority,
     createdAt: row.createdAt.toISOString(),
   }));
 

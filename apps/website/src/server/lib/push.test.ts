@@ -29,6 +29,7 @@ const service = {
   title: "Acme CRM",
   imageUrl: "https://example.com/default.png",
   url: "https://example.com/app",
+  priority: "normal",
 };
 
 const TOKEN_A = "a".repeat(64);
@@ -67,6 +68,7 @@ describe("resolveNotification", () => {
       body: "New sign-up",
       imageUrl: "https://example.com/default.png",
       url: "https://example.com/app",
+      priority: "normal",
     });
   });
 
@@ -76,18 +78,32 @@ describe("resolveNotification", () => {
       title: "CI",
       imageUrl: "https://example.com/ci.png",
       url: "https://example.com/build/1",
+      priority: "critical",
     });
     expect(resolved).toEqual({
       title: "CI",
       body: "Build failed",
       imageUrl: "https://example.com/ci.png",
       url: "https://example.com/build/1",
+      priority: "critical",
     });
+  });
+
+  it("falls back to the service priority when the request omits one", () => {
+    expect(
+      resolveNotification({ ...service, priority: "time-sensitive" }, { body: "Paged" }).priority,
+    ).toBe("time-sensitive");
+    expect(
+      resolveNotification(
+        { ...service, priority: "time-sensitive" },
+        { body: "Paged", priority: "normal" },
+      ).priority,
+    ).toBe("normal");
   });
 
   it("omits image and url when neither side provides them", () => {
     const resolved = resolveNotification(
-      { title: "Bare", imageUrl: null, url: null },
+      { title: "Bare", imageUrl: null, url: null, priority: "normal" },
       { body: "hello" },
     );
     expect(resolved.imageUrl).toBeUndefined();
@@ -136,7 +152,8 @@ describe("buildPushMessages", () => {
     body: "New sign-up",
     imageUrl: "https://example.com/a.png",
     url: "https://example.com/app",
-  };
+    priority: "normal",
+  } as const;
 
   it("builds one message per device with communication-notification fields", () => {
     const messages = buildPushMessages({
@@ -183,10 +200,23 @@ describe("buildPushMessages", () => {
       to: [TOKEN_A],
       eventId: "evt_1",
       serviceId: "svc_1",
-      resolved: { title: "T", body: "B" },
+      resolved: { title: "T", body: "B", priority: "normal" },
     });
     const data = (message?.data ?? {}) as Record<string, unknown>;
     expect(data.avatarUrl).toBeUndefined();
+  });
+
+  it("carries the resolved priority onto every message", () => {
+    const messages = buildPushMessages({
+      to: [TOKEN_A, TOKEN_B],
+      eventId: "evt_1",
+      serviceId: "svc_1",
+      resolved: { ...resolved, priority: "time-sensitive" },
+    });
+    expect(messages.map((message) => message.priority)).toEqual([
+      "time-sensitive",
+      "time-sensitive",
+    ]);
   });
 });
 
@@ -201,6 +231,7 @@ describe("buildAlertPayload", () => {
         body: "New sign-up",
         imageUrl: "https://example.com/a.png",
         url: "https://example.com/app",
+        priority: "normal",
       },
     });
     if (!message) throw new Error("expected a message");
@@ -252,6 +283,69 @@ describe("buildAlertPayload", () => {
     expect(payload.interactionId).toBe("int_1");
   });
 
+  it("maps priority onto the APNs interruption level and critical sound", () => {
+    const [normal] = buildPushMessages({
+      to: [TOKEN_A],
+      eventId: "evt_1",
+      serviceId: "svc_1",
+      resolved: { title: "T", body: "B", priority: "normal" },
+    });
+    if (!normal) throw new Error("expected a message");
+    expect(buildAlertPayload(normal).aps).toEqual({
+      alert: { title: "T", body: "B" },
+      sound: "default",
+      "mutable-content": 1,
+      "thread-id": "hark-svc_1",
+    });
+
+    const [timeSensitive] = buildPushMessages({
+      to: [TOKEN_A],
+      eventId: "evt_1",
+      serviceId: "svc_1",
+      resolved: { title: "T", body: "B", priority: "time-sensitive" },
+    });
+    if (!timeSensitive) throw new Error("expected a message");
+    expect(buildAlertPayload(timeSensitive).aps).toEqual({
+      alert: { title: "T", body: "B" },
+      sound: "default",
+      "mutable-content": 1,
+      "interruption-level": "time-sensitive",
+      "thread-id": "hark-svc_1",
+    });
+
+    const [critical] = buildPushMessages({
+      to: [TOKEN_A],
+      eventId: "evt_1",
+      serviceId: "svc_1",
+      resolved: { title: "T", body: "B", priority: "critical" },
+    });
+    if (!critical) throw new Error("expected a message");
+    expect(buildAlertPayload(critical).aps).toEqual({
+      alert: { title: "T", body: "B" },
+      sound: { critical: 1, name: "default", volume: 1.0 },
+      "mutable-content": 1,
+      "interruption-level": "critical",
+      "thread-id": "hark-svc_1",
+    });
+  });
+
+  it("raises the interruption level on interaction alerts too", () => {
+    const [message] = buildInteractionPushMessages({
+      to: [TOKEN_A],
+      interactionId: "int_1",
+      kind: "approval",
+      title: "Release",
+      prompt: "Deploy production?",
+      actionDigest: "a".repeat(64),
+      priority: "time-sensitive",
+    });
+    if (!message) throw new Error("expected a message");
+    expect(buildAlertPayload(message).aps).toMatchObject({
+      "interruption-level": "time-sensitive",
+      sound: "default",
+    });
+  });
+
   it("omits category and thread-id when the message carries neither", () => {
     expect(
       buildAlertPayload({
@@ -293,7 +387,7 @@ describe("sendPushMessages", () => {
         to: [TOKEN_A, TOKEN_B, gone, throttled],
         eventId: "evt_1",
         serviceId: "svc_1",
-        resolved: { title: "T", body: "B" },
+        resolved: { title: "T", body: "B", priority: "normal" },
       }),
     );
 

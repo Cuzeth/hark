@@ -51,6 +51,8 @@ vi.mock("../lib/apns", () => ({
       alert: { title: string; body: string };
       category?: string;
       "thread-id"?: string;
+      "interruption-level"?: string;
+      sound: unknown;
     };
     sent.push({
       to: token,
@@ -58,6 +60,8 @@ vi.mock("../lib/apns", () => ({
       body: aps.alert.body,
       categoryId: aps.category,
       conversationId: aps["thread-id"],
+      interruptionLevel: aps["interruption-level"],
+      sound: aps.sound,
       data: payload.body,
     });
     return pushState.acceptPush
@@ -412,6 +416,31 @@ describe("agent services", () => {
       body: "Release shipped",
       data: { avatarUrl: "https://example.com/bot.png" },
     });
+  });
+
+  it("stores a service priority and applies it to webhooks that omit one", async () => {
+    const created = await agent("/services", SECRET, {
+      method: "POST",
+      body: JSON.stringify({ title: "Pager bot", priority: "time-sensitive" }),
+    });
+    expect(created.status).toBe(201);
+    const body = (await created.json()) as { service: { priority: string }; webhookUrl: string };
+    expect(body.service.priority).toBe("time-sensitive");
+
+    sent.length = 0;
+    const webhook = await app.request(new URL(body.webhookUrl).pathname, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ body: "Paged" }),
+    });
+    expect(webhook.status).toBe(200);
+    expect(sent[0]).toMatchObject({ interruptionLevel: "time-sensitive", sound: "default" });
+
+    const defaulted = await agent("/services", SECRET, {
+      method: "POST",
+      body: JSON.stringify({ title: "Quiet bot" }),
+    });
+    expect(await defaulted.json()).toMatchObject({ service: { priority: "normal" } });
   });
 });
 
@@ -907,6 +936,18 @@ describe("interactions", () => {
     });
     expect(response.status).toBe(400);
   });
+
+  it("raises the interruption level of an interaction push", async () => {
+    sent.length = 0;
+    const response = await createInteraction({
+      title: "Release",
+      prompt: "Ship now?",
+      kind: "approval",
+      priority: "time-sensitive",
+    });
+    expect(response.status).toBe(201);
+    expect(sent[0]).toMatchObject({ interruptionLevel: "time-sensitive", sound: "default" });
+  });
 });
 
 describe("agent notifications", () => {
@@ -1048,6 +1089,28 @@ describe("agent notifications", () => {
     expect(await conflict.json()).toMatchObject({
       error: "Idempotency-Key was already used with a different payload",
     });
+  });
+
+  it("persists the notification priority and raises the alert", async () => {
+    sent.length = 0;
+    const response = await createNotification({ body: "Pager", priority: "critical" });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { notification: { id: string; priority: string } };
+    expect(body.notification.priority).toBe("critical");
+
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db
+      .select({ priority: schema.agentNotification.priority })
+      .from(schema.agentNotification)
+      .where(eq(schema.agentNotification.id, body.notification.id));
+    expect(row?.priority).toBe("critical");
+    expect(sent[0]).toMatchObject({
+      interruptionLevel: "critical",
+      sound: { critical: 1, name: "default", volume: 1 },
+    });
+
+    const defaulted = await createNotification({ body: "Quiet" });
+    expect(await defaulted.json()).toMatchObject({ notification: { priority: "normal" } });
   });
 
   it("reports accepted 0 with a message when APNs rejects", async () => {

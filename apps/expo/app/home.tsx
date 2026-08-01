@@ -71,7 +71,12 @@ export default function HomeScreen() {
 
   const requestPermission = async () => {
     const result = await Notifications.requestPermissionsAsync({
-      ios: { allowAlert: true, allowBadge: true, allowSound: true },
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+        allowCriticalAlerts: true,
+      },
     });
     setPermission(result.granted ? "granted" : result.canAskAgain ? "undetermined" : "denied");
   };

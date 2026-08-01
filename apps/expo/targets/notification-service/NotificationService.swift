@@ -157,6 +157,9 @@ final class NotificationService: UNNotificationServiceExtension {
           (updated.mutableCopy() as? UNMutableNotificationContent)
           ?? content
         actionable.categoryIdentifier = content.categoryIdentifier
+        // Likewise for priority: the fresh content loses the interruption level and sound.
+        actionable.interruptionLevel = content.interruptionLevel
+        actionable.sound = content.sound
         self.completeOnce(with: actionable)
       } catch {
         self.completeOnce(with: content)

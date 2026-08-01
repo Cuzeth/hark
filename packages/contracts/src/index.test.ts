@@ -12,6 +12,7 @@ import {
   liveActivityPropsSchema,
   liveActivityStartSchema,
   liveActivityUpdateSchema,
+  NOTIFICATION_PRIORITIES,
   pushDataSchema,
   serviceCreateSchema,
   webhookRequestSchema,
@@ -122,6 +123,18 @@ describe("webhookRequestSchema", () => {
     expect(webhookRequestSchema.safeParse({ body: "Targeted", deviceIds: [] }).success).toBe(false);
   });
 
+  it("leaves priority unset so the service default can apply", () => {
+    const result = webhookRequestSchema.safeParse({ body: "Deploy finished" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.priority).toBeUndefined();
+    for (const priority of NOTIFICATION_PRIORITIES) {
+      expect(webhookRequestSchema.safeParse({ body: "x", priority }).success).toBe(true);
+    }
+    for (const priority of ["urgent", "TIME-SENSITIVE", "", null]) {
+      expect(webhookRequestSchema.safeParse({ body: "x", priority }).success).toBe(false);
+    }
+  });
+
   it("accepts fixed interactive response types and validates callbacks", () => {
     expect(
       webhookRequestSchema.parse({
@@ -160,7 +173,17 @@ describe("agentNotificationCreateSchema", () => {
     if (result.success) {
       expect(result.data.title).toBe("Hark");
       expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
+      expect(result.data.priority).toBe("normal");
     }
+  });
+
+  it("accepts every priority tier and rejects anything else", () => {
+    for (const priority of NOTIFICATION_PRIORITIES) {
+      expect(agentNotificationCreateSchema.parse({ body: "x", priority }).priority).toBe(priority);
+    }
+    expect(agentNotificationCreateSchema.safeParse({ body: "x", priority: "urgent" }).success).toBe(
+      false,
+    );
   });
 
   it("only accepts public HTTPS image URLs and web tap URLs", () => {
@@ -199,7 +222,27 @@ describe("interaction schemas", () => {
       expect(result.data.deviceIds).toEqual(["dev_a", "dev_b"]);
       expect(result.data.expiresInSeconds).toBe(900);
       expect(result.data.presentation).toBeUndefined();
+      expect(result.data.priority).toBe("normal");
     }
+  });
+
+  it("carries an explicit priority and rejects unknown tiers", () => {
+    const raised = interactionCreateSchema.safeParse({
+      title: "Release",
+      prompt: "Deploy?",
+      kind: "approval",
+      priority: "critical",
+    });
+    expect(raised.success).toBe(true);
+    if (raised.success) expect(raised.data.priority).toBe("critical");
+    expect(
+      interactionCreateSchema.safeParse({
+        title: "Release",
+        prompt: "Deploy?",
+        kind: "approval",
+        priority: "urgent",
+      }).success,
+    ).toBe(false);
   });
 
   it("validates interactive Live Activity requests and cosmetic labels", () => {
@@ -476,6 +519,14 @@ describe("serviceCreateSchema", () => {
   it("allows nullable optional fields", () => {
     const result = serviceCreateSchema.safeParse({ title: "CI", imageUrl: null, url: null });
     expect(result.success).toBe(true);
+  });
+
+  it("keeps the default priority out of the parsed payload", () => {
+    const result = serviceCreateSchema.safeParse({ title: "CI" });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.priority).toBeUndefined();
+    expect(serviceCreateSchema.safeParse({ title: "CI", priority: "critical" }).success).toBe(true);
+    expect(serviceCreateSchema.safeParse({ title: "CI", priority: "urgent" }).success).toBe(false);
   });
 });
 

@@ -19,6 +19,7 @@ export default function SettingsScreen() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const [notificationsAllowed, setNotificationsAllowed] = useState<boolean | null>(null);
+  const [criticalAlertsAllowed, setCriticalAlertsAllowed] = useState<boolean | null>(null);
   const [registered, setRegistered] = useState<boolean | null>(null);
   const [liveActivitiesCapable, setLiveActivitiesCapable] = useState<boolean | null>(null);
 
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
       api.listDevices().catch(() => ({ devices: [] })),
     ]).then(([permission, deviceId, result]) => {
       setNotificationsAllowed(permission.granted);
+      setCriticalAlertsAllowed(permission.ios?.allowsCriticalAlerts ?? false);
       setRegistered(Boolean(deviceId));
       setLiveActivitiesCapable(
         result.devices.find((registeredDevice) => registeredDevice.id === deviceId)
@@ -97,6 +99,14 @@ export default function SettingsScreen() {
             notificationsAllowed === null ? "Checking…" : notificationsAllowed ? "Allowed" : "Off"
           }
           onPress={notificationsAllowed === false ? () => void Linking.openSettings() : undefined}
+        />
+        <SettingsRow
+          icon="bell.badge.fill"
+          label="Critical alerts"
+          value={
+            criticalAlertsAllowed === null ? "Checking…" : criticalAlertsAllowed ? "Allowed" : "Off"
+          }
+          onPress={criticalAlertsAllowed === false ? () => void Linking.openSettings() : undefined}
         />
         <SettingsRow
           icon="iphone"

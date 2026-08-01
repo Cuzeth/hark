@@ -210,6 +210,7 @@ export const hooksRoute = new Hono()
       body: resolved.body,
       imageUrl: resolved.imageUrl ?? null,
       url: resolved.url ?? null,
+      priority: resolved.priority,
       status: "processing",
       deliveredCount: 0,
       error: null,
@@ -333,6 +334,7 @@ export const hooksRoute = new Hono()
           responseToken,
           imageUrl: resolved.imageUrl,
           url: resolved.url,
+          priority: resolved.priority,
         })
       : buildPushMessages({
           to: devices.map((registeredDevice) => registeredDevice.token),

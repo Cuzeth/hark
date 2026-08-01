@@ -81,6 +81,15 @@ const webUrlSchema = z
   }, "Must be an http or https URL");
 
 // ---------------------------------------------------------------------------
+// Notification priority
+// ---------------------------------------------------------------------------
+
+/** Delivery urgency, mapped to APNs interruption levels when the alert is built. */
+export const NOTIFICATION_PRIORITIES = ["normal", "time-sensitive", "critical"] as const;
+export const notificationPrioritySchema = z.enum(NOTIFICATION_PRIORITIES);
+export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
+
+// ---------------------------------------------------------------------------
 // Services
 // ---------------------------------------------------------------------------
 
@@ -88,6 +97,7 @@ export const serviceCreateSchema = z.object({
   title: z.string().trim().min(1, "Title is required").max(80),
   imageUrl: publicHttpsUrlSchema.nullish(),
   url: webUrlSchema.nullish(),
+  priority: notificationPrioritySchema.optional(),
 });
 export type ServiceCreateInput = z.infer<typeof serviceCreateSchema>;
 
@@ -101,6 +111,7 @@ export interface ServiceDto {
   title: string;
   imageUrl: string | null;
   url: string | null;
+  priority: NotificationPriority;
   /** Available for tokens generated after encrypted token storage was enabled. */
   webhookUrl: string | null;
   createdAt: string;
@@ -149,6 +160,7 @@ export const webhookRequestSchema = z.object({
   title: z.string().trim().min(1).max(80).optional(),
   imageUrl: publicHttpsUrlSchema.optional(),
   url: webUrlSchema.optional(),
+  priority: notificationPrioritySchema.optional(),
   deviceIds: z
     .array(z.string().trim().min(1).max(100))
     .min(1)
@@ -178,6 +190,7 @@ export interface EventDto {
   body: string;
   imageUrl: string | null;
   url: string | null;
+  priority: NotificationPriority;
   status: string;
   deliveredCount: number;
   error: string | null;
@@ -635,6 +648,7 @@ export const interactionCreateSchema = z
     kind: interactionKindSchema,
     imageUrl: publicHttpsUrlSchema.optional(),
     url: webUrlSchema.optional(),
+    priority: notificationPrioritySchema.default("normal"),
     deviceIds: z
       .array(z.string().trim().min(1).max(100))
       .min(1)
@@ -793,6 +807,8 @@ export interface InboxActivityDto {
   deliveredCount?: number | null;
   /** Delivery failure detail; only set on notification rows. */
   error?: string | null;
+  /** Requested urgency; only set on notification rows. */
+  priority?: NotificationPriority | null;
 }
 
 export interface InboxActivityPageDto {
@@ -820,6 +836,7 @@ export const agentNotificationCreateSchema = z.object({
   title: z.string().trim().min(1).max(80).default("Hark"),
   imageUrl: publicHttpsUrlSchema.optional(),
   url: webUrlSchema.optional(),
+  priority: notificationPrioritySchema.default("normal"),
   deviceIds: z
     .array(z.string().trim().min(1).max(100))
     .min(1)
@@ -835,6 +852,7 @@ export interface AgentNotificationDto {
   body: string;
   imageUrl: string | null;
   url: string | null;
+  priority: NotificationPriority;
   createdAt: string;
 }
 

@@ -15,9 +15,13 @@ export default ({ config: _config }: ConfigContext): ExpoConfig => ({
     supportsTablet: false,
     // Communication Notifications + SiriKit. `aps-environment` is declared here
     // so a local `expo prebuild` emits the push entitlement without Xcode edits.
+    // `critical-alerts` is Apple-granted: signing fails until the request form at
+    // developer.apple.com is approved for this bundle identifier.
     entitlements: {
       "aps-environment": "development",
       "com.apple.developer.usernotifications.communication": true,
+      "com.apple.developer.usernotifications.time-sensitive": true,
+      "com.apple.developer.usernotifications.critical-alerts": true,
       "com.apple.developer.siri": true,
     },
     infoPlist: {

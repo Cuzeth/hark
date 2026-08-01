@@ -18,6 +18,8 @@ vi.mock("../lib/apns", () => ({
       alert: { title: string; body: string };
       category?: string;
       "thread-id"?: string;
+      "interruption-level"?: string;
+      sound: unknown;
     };
     sent.push({
       to: token,
@@ -25,6 +27,8 @@ vi.mock("../lib/apns", () => ({
       body: aps.alert.body,
       categoryId: aps.category,
       conversationId: aps["thread-id"],
+      interruptionLevel: aps["interruption-level"],
+      sound: aps.sound,
       data: payload.body,
     });
     return token === TOKEN_STALE
@@ -169,6 +173,56 @@ describe("POST /hooks/:token", () => {
     expect(await res.json()).toMatchObject({ ok: true, delivered: 1 });
     expect(sent).toHaveLength(1);
     expect(sent[0]?.to).toBe(TOKEN_A);
+  });
+
+  it("stores the request priority on the event and raises the alert", async () => {
+    sent.length = 0;
+    const res = await post(TOKEN, {
+      body: "Pager",
+      priority: "critical",
+      deviceIds: ["dev_1"],
+    });
+    expect(res.status).toBe(200);
+    const { eventId } = (await res.json()) as { eventId: string };
+
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db.select().from(schema.event).where(eq(schema.event.id, eventId));
+    expect(row?.priority).toBe("critical");
+    expect(sent[0]).toMatchObject({
+      interruptionLevel: "critical",
+      sound: { critical: 1, name: "default", volume: 1 },
+    });
+  });
+
+  it("falls back to the service priority when the request omits one", async () => {
+    const now = new Date();
+    const priorityToken = "whk_priority-test-abcdefghijklmnopq";
+    await db.insert(schema.service).values({
+      id: "svc_priority",
+      userId: "user_1",
+      title: "Pager duty",
+      priority: "time-sensitive",
+      tokenHash: hashWebhookToken(priorityToken),
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    sent.length = 0;
+    const res = await post(priorityToken, { body: "Inherited", deviceIds: ["dev_1"] });
+    expect(res.status).toBe(200);
+    const { eventId } = (await res.json()) as { eventId: string };
+
+    const { eq } = await import("drizzle-orm");
+    const [row] = await db.select().from(schema.event).where(eq(schema.event.id, eventId));
+    expect(row?.priority).toBe("time-sensitive");
+    expect(sent[0]).toMatchObject({ interruptionLevel: "time-sensitive", sound: "default" });
+  });
+
+  it("leaves the alert untouched for the default priority", async () => {
+    sent.length = 0;
+    const res = await post(TOKEN, { body: "Quiet", deviceIds: ["dev_1"] });
+    expect(res.status).toBe(200);
+    expect(sent[0]).toMatchObject({ interruptionLevel: undefined, sound: "default" });
   });
 
   it("creates and resolves an approval through the webhook event", async () => {
