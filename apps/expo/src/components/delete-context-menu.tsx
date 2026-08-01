@@ -1,18 +1,23 @@
-import { ContextMenu, Host, Button as MenuButton } from "@expo/ui/swift-ui";
-import type { ReactNode } from "react";
+import { ContextMenu, Host, Button as MenuButton, RNHostView } from "@expo/ui/swift-ui";
+import type { ReactElement } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 
 /**
  * Wraps a row in the native iOS context menu: touch-and-hold lifts the row
  * out with the system pop-out animation and shows a destructive Delete item.
  * The menu itself is the confirmation step, so `onDelete` runs immediately.
+ *
+ * The row is a React Native view inside SwiftUI content, so it must go
+ * through `RNHostView matchContents` — that feeds the Yoga-computed row size
+ * into SwiftUI (otherwise the trigger measures zero-height and rows stack)
+ * and attaches the touch handler that keeps the row's Pressable tappable.
  */
 export function DeleteContextMenu({
   children,
   onDelete,
   style,
 }: {
-  children: ReactNode;
+  children: ReactElement;
   onDelete: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -28,7 +33,9 @@ export function DeleteContextMenu({
             systemImage="trash"
           />
         </ContextMenu.Items>
-        <ContextMenu.Trigger>{children}</ContextMenu.Trigger>
+        <ContextMenu.Trigger>
+          <RNHostView matchContents>{children}</RNHostView>
+        </ContextMenu.Trigger>
       </ContextMenu>
     </Host>
   );
