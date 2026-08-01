@@ -2,7 +2,11 @@
 
 This guide is written so it can be handed directly to a coding agent. A template contribution adds
 a genuinely new Hark Live Activity layout that users select through the public `style` field. It is
-not a color preset or an alias for one of the existing layouts.
+not a color preset or an alias for one of the existing layouts. Classify it before editing:
+
+- A **task-progress style** is used by `harkctl activity start/update` and inherits from `standard`.
+- An **interactive approval style** is used by `harkctl notify ask --live-activity` and inherits its
+  non-banner surfaces and interaction routing from `approval`.
 
 You can implement and semantically test a template without Xcode, an Apple account, an iOS
 simulator, or a physical device. Browser and unit tests cannot reproduce SwiftUI pixel layout, so a
@@ -23,7 +27,8 @@ Read these files:
 - `apps/expo/app/la-lab.tsx` — optional simulator/device test screen.
 
 Choose a short, permanent, lower-case style ID such as `orbit` or `scoreboard`. A merged ID becomes
-part of Hark's public API and must not be renamed later.
+part of Hark's public API and must not be renamed later. State whether it is task-progress or
+interactive approval in the PR description.
 
 ## Critical widget constraint
 
@@ -63,6 +68,10 @@ export const LIVE_ACTIVITY_STYLES = [
 ] as const;
 ```
 
+For an interactive approval style, also add the ID to `INTERACTIVE_LIVE_ACTIVITY_STYLES`. The
+contracts deliberately reject interactive styles from the standalone Activity API and require an
+interaction payload. Task-progress styles must not be added to that second list.
+
 Do not bump `LIVE_ACTIVITY_SCHEMA_VERSION` when the payload fields are unchanged. Old app builds
 will receive the new ID but render `standard`, while updated builds render the new template.
 
@@ -72,9 +81,11 @@ branch.
 ## 2. Build the native layout
 
 Create `apps/expo/src/widgets/live-activities/<style>.tsx` by following an existing style file. The
-file must return the complete `LiveActivityLayout`; explicitly select inherited `standard` slots so
-all presentation decisions remain visible in one place. Then import the function and add its branch
-to both registry paths in `apps/expo/src/widgets/HarkAgentActivity.tsx`.
+file must return the complete `LiveActivityLayout`; explicitly select inherited slots so all
+presentation decisions remain visible in one place. Task-progress styles receive `standard` as
+their base. Interactive styles receive `approval`, must preserve device-bound action credentials,
+and must never hardcode approval targets without those credentials. Then import the function and add
+its branch to both registry paths in `apps/expo/src/widgets/HarkAgentActivity.tsx`.
 
 Use the existing privacy-safe derived values rather than raw payload fields:
 
@@ -140,8 +151,9 @@ Design requirements:
 
 ## 3. Update `harkctl`
 
-Add the new ID to `ACTIVITY_STYLES` in `packages/harkctl/src/cli.mjs`. Update both `activity start`
-and `activity update` help strings in the same file.
+For a task-progress style, add the ID to `ACTIVITY_STYLES` in `packages/harkctl/src/cli.mjs` and
+update both `activity start` and `activity update` help. For an interactive style, add it to
+`INTERACTIVE_ACTIVITY_STYLES` and update `notify ask --live-activity` help instead.
 
 Add or update a CLI test so `--style orbit` is accepted and an unknown value remains a usage error.
 Do not publish a new npm version from a contributor PR; maintainers release `harkctl` after merge.
@@ -155,8 +167,10 @@ At minimum:
 - Add the ID to the test that verifies all eight slots for every style.
 - Assert the structural feature that makes the layout unique, such as a `Gauge`, `ZStack`, font
   treatment, progress placement, or ordering.
-- Test the no-progress fallback.
-- Test `progress: 0` and `progress: 1` if the layout visualizes progress.
+- For task-progress styles, test the no-progress fallback plus `progress: 0` and `progress: 1` when
+  progress is visualized.
+- For interactive styles, test pending and resolved states, custom labels, canonical action targets,
+  all routing credential props, and inherited approval Island slots.
 - Include the style in privacy-mode assertions.
 - Assert user strings have appropriate `lineLimit` modifiers.
 - Keep the missing-style test proving that no style still equals `standard`.
@@ -177,9 +191,10 @@ Update `apps/website/src/shared/docs/content.ts` in both places:
 - Add the ID to the `style` field's enum description.
 - Add its name and one-sentence visual description to the style gallery.
 
-Add a matching miniature preview branch in
-`apps/website/src/client/pages/docs/primitives.tsx`. The docs preview is an explanatory thumbnail,
-not a second authoritative implementation; keep it small and representative.
+Add a matching miniature preview branch in `apps/website/src/client/pages/docs/primitives.tsx`. The
+docs preview is an explanatory fallback, not a second authoritative implementation. If no native
+capture is available yet, set `nativeScreenshot: false` on the style metadata. Before release, a
+maintainer adds `apps/website/public/live-activities/<style>.webp` and removes that fallback flag.
 
 Run the docs parity tests:
 
@@ -189,13 +204,17 @@ pnpm --filter @hark/website exec vitest run src/shared/docs/docs.test.ts
 
 ## 6. Optional native verification
 
-Contributors do not need this step. Maintainers use it before release.
+Contributors do not need this step. Maintainers must complete it before release and before removing
+the docs `nativeScreenshot: false` fallback.
 
 Start the style directly through the reusable lab deep link, then run:
 
 ```sh
 xcrun simctl openurl booted "hark://la-lab?style=orbit&ts=$(date +%s)"
 /Users/vogel/dev/experiments/2026-07-30-la-captures/capture-la.sh orbit
+cwebp -quiet -q 82 -resize 900 0 \
+  /Users/vogel/dev/experiments/2026-07-30-la-captures/orbit.png \
+  apps/website/public/live-activities/orbit.webp
 ```
 
 Start the activity and inspect the Lock Screen plus compact, minimal, and expanded Dynamic Island

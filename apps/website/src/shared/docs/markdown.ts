@@ -107,8 +107,10 @@ export function llmsTxt(): string {
 
 ## Docs
 
-- [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API.
+- [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API, CLI, and coding-agent permissions.
 - [Documentation as markdown](${DOCS_MARKDOWN_URL}): the same content as plain markdown.
+- [Agent documentation](https://hark.abdeen.dev/agents.md): agent-oriented alias of the complete Markdown docs.
+- [Coding-agent permission setup](${DOCS_URL}#cli-permissions): Claude Code, Codex, OpenCode V1, and OpenCode V2.
 
 ## Source
 
@@ -116,7 +118,7 @@ export function llmsTxt(): string {
 
 ## Notes
 
-- Every request is authenticated by the webhook token in the URL; treat it as a credential.
+- Webhook API requests are authenticated by the token in the URL; harkctl uses a scoped agent token. Treat both as credentials.
 - This is a private single-user instance: every capability is available to the account.
 `;
 }

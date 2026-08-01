@@ -4,6 +4,16 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WAIT_DURATION = "5m";
+const PERMISSION_IMAGE_URLS = {
+  "Claude Code": "https://hark.abdeen.dev/agents/claude.png",
+  Codex: "https://hark.abdeen.dev/agents/codex.png",
+  OpenCode: "https://hark.abdeen.dev/agents/opencode.png",
+};
+export const REQUIRED_PERMISSION_SCOPES = [
+  "notifications:send",
+  "interactions:create",
+  "interactions:read",
+];
 const harkctlPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", "harkctl.mjs");
 
 function safeText(value, fallback, maxLength = 48) {
@@ -23,6 +33,7 @@ export function permissionSummary({ agent, cwd, toolName, resourceCount }) {
   return {
     title: `${agentName} permission`,
     body: `${agentName} requests ${tool} permission in ${project} for ${count} resource${count === 1 ? "" : "s"}. Allow once?`,
+    ...(PERMISSION_IMAGE_URLS[agentName] ? { imageUrl: PERMISSION_IMAGE_URLS[agentName] } : {}),
   };
 }
 
@@ -71,13 +82,26 @@ function runHarkctl(args, input, captureOutput = false) {
   });
 }
 
-export async function checkHarkAuthentication() {
+export async function harkAuthenticationStatus() {
   const result = await runHarkctl(["auth", "status"], undefined, true);
-  if (result.code !== 0) return false;
-  return JSON.parse(result.output)?.authenticated === true;
+  if (result.code !== 0) {
+    return { authenticated: false, scopes: [], missingScopes: [...REQUIRED_PERMISSION_SCOPES] };
+  }
+  const body = JSON.parse(result.output);
+  const scopes = Array.isArray(body?.token?.scopes) ? body.token.scopes : [];
+  return {
+    authenticated: body?.authenticated === true,
+    scopes,
+    missingScopes: REQUIRED_PERMISSION_SCOPES.filter((scope) => !scopes.includes(scope)),
+  };
 }
 
-export async function askHarkPermission({ title, body, idempotencyKey }) {
+export async function checkHarkAuthentication() {
+  const status = await harkAuthenticationStatus();
+  return status.authenticated && status.missingScopes.length === 0;
+}
+
+export async function askHarkPermission({ title, body, imageUrl, idempotencyKey }) {
   try {
     const result = await runHarkctl(
       [
@@ -93,7 +117,7 @@ export async function askHarkPermission({ title, body, idempotencyKey }) {
         "--idempotency-key",
         idempotencyKey,
       ],
-      JSON.stringify({ prompt: body, title }),
+      JSON.stringify({ prompt: body, title, ...(imageUrl ? { imageUrl } : {}) }),
     );
     return result.code === 0 ? "approved" : "denied";
   } catch {

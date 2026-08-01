@@ -3,6 +3,7 @@ import { Service } from "@opencode-ai/client/service";
 import { askHarkPermission, permissionSummary, stableIdempotencyKey } from "./hark.mjs";
 
 const jobs = new Map();
+const decisions = new Map();
 const shutdown = new AbortController();
 const MAX_SSE_BUFFER_BYTES = 16 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -104,6 +105,41 @@ function key(request) {
   return `${request.sessionID}:${request.id}`;
 }
 
+function decisionKey(request, location) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        request.sessionID,
+        location?.directory ?? null,
+        request.action,
+        [...(request.resources ?? [])].sort(),
+      ]),
+    )
+    .digest("hex");
+}
+
+export function coalescedPermissionDecision(request, location, ask = askHarkPermission) {
+  const id = decisionKey(request, location);
+  const existing = decisions.get(id);
+  if (existing) return existing;
+  const summary = permissionSummary({
+    agent: "OpenCode",
+    cwd: location?.directory,
+    toolName: request.action,
+    resourceCount: request.resources.length,
+  });
+  const decision = ask({
+    ...summary,
+    idempotencyKey: stableIdempotencyKey("opencode-permission", [request.sessionID, request.id]),
+  });
+  decisions.set(id, decision);
+  const cleanup = () => {
+    if (decisions.get(id) === decision) decisions.delete(id);
+  };
+  void decision.then(cleanup, cleanup);
+  return decision;
+}
+
 function fingerprint(request) {
   return createHash("sha256")
     .update(
@@ -149,19 +185,7 @@ function startRequest(client, request, location) {
   jobs.set(id, job);
   void (async () => {
     try {
-      const summary = permissionSummary({
-        agent: "OpenCode",
-        cwd: location?.directory,
-        toolName: request.action,
-        resourceCount: request.resources.length,
-      });
-      const decision = await askHarkPermission({
-        ...summary,
-        idempotencyKey: stableIdempotencyKey("opencode-permission", [
-          request.sessionID,
-          request.id,
-        ]),
-      });
+      const decision = await coalescedPermissionDecision(request, location);
       if (!job.settled) {
         await replyIfCurrent(client, request, decision === "approved" ? "once" : "reject");
       }

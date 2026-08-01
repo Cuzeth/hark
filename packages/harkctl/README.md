@@ -79,9 +79,10 @@ harkctl notify ask "Send the prepared release email?" \
   --wait --timeout 15m
 ```
 
-Interactive Live Activity prompts require iOS 17 or later, expire within eight hours, and don't
-support `--text`, `--image`, or `--url`. If no capable device accepts the activity, the command exits
-`7` just like an undeliverable notification.
+Interactive Live Activity prompts require iOS 17 or later, are limited to 240 characters, expire
+within eight hours, and don't support `--text`, `--image`, or `--url`. Custom action labels are 1 to
+24 characters. If no capable device accepts the activity, the command exits `7` just like an
+undeliverable notification.
 
 Inside `notify`, a first positional of exactly `ask` selects the subcommand. Everything after a bare
 `--` separator is treated as positional, so `harkctl notify -- ask` sends the literal body “ask”.
@@ -114,6 +115,16 @@ and take the slot (the response reports the count as `replaced`). Interactive ap
 may coexist with that task. A `--key` becomes reusable once its activity ends, so
 `activity start --key deploy --replace` works as a fixed-key restart.
 
+Activity flag inventory:
+
+- Start: `--title`, `--status`, `--key`, `--detail`, `--progress`, `--symbol`, `--privacy`,
+  `--style`, `--accent-color`, repeatable `--device`, `--expires-in`, `--stale-after`, `--replace`,
+  `--idempotency-key`, and `--stdin`.
+- Update: `--title`, `--status`, `--detail`, `--progress`, `--symbol`, `--privacy`, `--style`,
+  `--accent-color`, `--stale-after`, `--if-sequence`, `--idempotency-key`, and `--stdin`.
+- End: `--status`, `--detail`, `--progress`, `--symbol`, `--accent-color`, `--dismiss-after`,
+  `--if-sequence`, `--idempotency-key`, and `--stdin`.
+
 ## permissions
 
 Route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to Hark:
@@ -131,6 +142,11 @@ harkctl permissions setup opencode
 harkctl permissions doctor
 harkctl permissions uninstall all
 ```
+
+The default login includes the required `notifications:send`, `interactions:create`, and
+`interactions:read` scopes. A narrowed login must retain all three; setup and `doctor` identify any
+missing scopes. See the [agent permission setup guide](https://hark.abdeen.dev/docs#cli-permissions)
+for privacy, trust, and platform details.
 
 Claude Code and Codex use synchronous `PermissionRequest` hooks. After Codex setup, open `/hooks`
 and trust the Hark hook. OpenCode setup installs both connectors: a V1 plugin shim for current V1
