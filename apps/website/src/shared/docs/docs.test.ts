@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { DOC_CONTENT } from "./content";
 import { parseInline } from "./inline";
@@ -72,6 +74,23 @@ describe("docs content", () => {
           .replace(/\[([^\]]+)\]\([^)\s]+\)/g, "$1")
           .replace(/\s+/g, " "),
       );
+    }
+  });
+
+  it("has a native screenshot for every Live Activity preview", () => {
+    const styles = DOC_CONTENT.flatMap((section) =>
+      section.subsections.flatMap((subsection) =>
+        subsection.blocks.flatMap((block) =>
+          block.kind === "stylePreviews" ? block.styles.map((style) => style.name) : [],
+        ),
+      ),
+    );
+    expect(styles).toHaveLength(9);
+    for (const style of styles) {
+      expect(
+        existsSync(join(process.cwd(), "public", "live-activities", `${style}.webp`)),
+        style,
+      ).toBe(true);
     }
   });
 });

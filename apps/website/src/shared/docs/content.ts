@@ -685,7 +685,7 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
           },
           {
             kind: "p",
-            text: "The five progress layouts and three interactive approval layouts, rendered with the same state:",
+            text: "The five progress layouts and four interactive approval layouts, captured from the iOS simulator with the same state:",
           },
           {
             kind: "stylePreviews",
@@ -713,6 +713,11 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
               {
                 name: "steps",
                 description: "Progress quantized into five stage pips — phases, not percent.",
+              },
+              {
+                name: "approval",
+                description:
+                  "The default interactive layout with a clear prompt and balanced approve/deny actions.",
               },
               {
                 name: "shell",
