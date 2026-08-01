@@ -191,8 +191,10 @@ After any merge, grep for these strings: `autumn`, `pro_monthly`, `Hark Pro`, `G
 `EAS_PROJECT_ID`, `deleteUser`, `ceo.ryan.hark`, `hark.ryan.ceo`, `R44VC0RP`, `9G68SMNHEU`,
 `twimg`. Outside this README and `pnpm-lock.yaml`, the only acceptable hits are negative test
 fixtures that assert the string is rejected or absent (currently in `devices.test.ts`,
-`docs.test.ts`, and the contracts tests) and the delete-only `LEGACY_EXPO_TOKEN_KEY` SecureStore
-cleanup constant in the app. Anything else is upstream leakage — remove it. Then run the full
+`docs.test.ts`, and the contracts tests), the delete-only `LEGACY_EXPO_TOKEN_KEY` SecureStore
+cleanup constant in the app, and the deliberate "this instance is a private fork" attribution
+banner in `Docs.tsx` that links to the original `R44VC0RP/hark` project. Anything else is
+upstream leakage — remove it. Then run the full
 verification gate in [SYNCING.md](./SYNCING.md) before landing anything.
 
 ## License
