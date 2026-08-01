@@ -852,37 +852,12 @@ function ActivityLog({
       {activity && activity.items.length > 0 ? (
         <ol className="divide-y divide-line border-y border-line">
           {activity.items.map((item) => (
-            <li className="flex gap-2.5 py-3" key={item.id}>
-              <ActivityAvatar item={item} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-4">
-                  <p className="truncate text-sm leading-5 font-medium">
-                    {item.sourceName} · {item.title}
-                  </p>
-                  <time
-                    className="shrink-0 text-xs text-ink-faint"
-                    dateTime={item.createdAt}
-                    title={new Date(item.createdAt).toLocaleString()}
-                  >
-                    {formatActivityTime(item.createdAt)}
-                  </time>
-                </div>
-                {item.detail ? (
-                  <p className="mt-0.5 truncate text-xs leading-4 text-ink-subtle">{item.detail}</p>
-                ) : null}
-                <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">{activityMeta(item)}</p>
-              </div>
-              <button
-                type="button"
-                aria-label={`Delete “${item.title}” from history`}
-                title="Delete from history"
-                disabled={busyId === item.id}
-                onClick={() => void remove(item)}
-                className="grid size-8 shrink-0 place-items-center self-center rounded-full text-lg leading-none text-ink-faint transition hover:bg-danger-soft hover:text-danger disabled:opacity-50"
-              >
-                ×
-              </button>
-            </li>
+            <ActivityRow
+              key={item.id}
+              item={item}
+              busy={busyId === item.id}
+              onDelete={() => void remove(item)}
+            />
           ))}
         </ol>
       ) : null}
@@ -913,6 +888,106 @@ function ActivityLog({
       ) : null}
       {dialog}
     </section>
+  );
+}
+
+function ActivityRow({
+  item,
+  busy,
+  onDelete,
+}: {
+  item: InboxActivityDto;
+  busy: boolean;
+  onDelete: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [truncated, setTruncated] = useState(false);
+  const titleRef = useRef<HTMLParagraphElement>(null);
+  const detailRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    // While expanded nothing is clamped, so keep the last collapsed measurement.
+    if (expanded) return;
+    const measure = () => {
+      const overflowing = (el: HTMLElement | null) =>
+        el !== null && el.scrollWidth > el.clientWidth + 1;
+      setTruncated(overflowing(titleRef.current) || overflowing(detailRef.current));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (titleRef.current) observer.observe(titleRef.current);
+    if (detailRef.current) observer.observe(detailRef.current);
+    return () => observer.disconnect();
+  }, [expanded]);
+
+  const expandable = truncated || expanded;
+
+  return (
+    <li className="group flex gap-2.5 py-3">
+      <ActivityAvatar item={item} />
+      <button
+        type="button"
+        disabled={!expandable}
+        aria-expanded={expandable ? expanded : undefined}
+        onClick={() => setExpanded((current) => !current)}
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left disabled:cursor-default"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-4">
+            <p
+              ref={titleRef}
+              className={`text-sm leading-5 font-medium ${expanded ? "break-words" : "truncate"}`}
+            >
+              {item.sourceName} · {item.title}
+            </p>
+            <time
+              className="shrink-0 text-xs text-ink-faint"
+              dateTime={item.createdAt}
+              title={new Date(item.createdAt).toLocaleString()}
+            >
+              {formatActivityTime(item.createdAt)}
+            </time>
+          </div>
+          {item.detail ? (
+            <p
+              ref={detailRef}
+              className={`mt-0.5 text-xs leading-4 text-ink-subtle ${
+                expanded ? "break-words whitespace-pre-wrap" : "truncate"
+              }`}
+            >
+              {item.detail}
+            </p>
+          ) : null}
+          <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">{activityMeta(item)}</p>
+        </div>
+        {expandable ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 12 12"
+            fill="none"
+            className={`size-3 shrink-0 text-ink-faint transition-transform ${expanded ? "rotate-180" : ""}`}
+          >
+            <path
+              d="M2.5 4.5 6 8l3.5-3.5"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        aria-label={`Delete “${item.title}” from history`}
+        title="Delete from history"
+        disabled={busy}
+        onClick={onDelete}
+        className="grid size-7 shrink-0 place-items-center self-center rounded-full text-base leading-none text-ink-faint transition hover:bg-danger-soft hover:text-danger focus-visible:opacity-100 disabled:opacity-50 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
+      >
+        ×
+      </button>
+    </li>
   );
 }
 
