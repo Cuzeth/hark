@@ -176,6 +176,22 @@ END UNTRUSTED CONTEXT
 Branch on exit status instead of parsing prose: `0` means approved, yes, replied, or success; `4`
 means timeout, canceled, or expired; `5` means denied or no; `7` means no device accepted the push.
 
+## Route Coding-Agent Permissions Through Hark
+
+Use the built-in permission bridge for Claude Code, Codex, OpenCode V1, and OpenCode V2:
+
+```bash
+harkctl permissions setup all
+harkctl permissions doctor
+```
+
+After Codex setup, tell the user to review and trust the hook through `/hooks`. Install one adapter
+with `permissions setup claude`, `codex`, or `opencode`. Remove only bridge-owned configuration with
+`permissions uninstall <agent|all>`. The OpenCode connector currently requires macOS. Only explicit
+phone approval allows once; denial, timeout, malformed input, authentication failure, network
+failure, and no-device delivery deny. Raw commands, patches, prompts, file contents, URLs,
+environment variables, transcripts, and absolute paths are not sent to Hark.
+
 ## Run a Live Activity
 
 Use one activity for changing task state instead of sending many notifications:

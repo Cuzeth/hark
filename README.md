@@ -107,6 +107,17 @@ The [`hark` agent skill](./skills/hark/SKILL.md) follows the open Agent Skills f
 symlink `skills/hark` into your agent's skills directory to teach Claude Code, OpenCode, Codex,
 Cursor, or another compatible agent how to drive the CLI.
 
+`harkctl` can also route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2
+to Hark with one setup command:
+
+```sh
+harkctl auth login --client-name "Coding agent permissions"
+harkctl permissions setup all
+```
+
+Only an explicit phone approval allows a request. Other outcomes deny it, and raw commands, patches,
+prompts, file contents, and absolute paths are not sent to Hark.
+
 ## iOS app
 
 The app in [`apps/expo`](./apps/expo) is not on the App Store — build and install it yourself under
