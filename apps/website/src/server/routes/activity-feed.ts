@@ -1,7 +1,15 @@
 import { INBOX_ACTIVITY_KINDS, type InboxActivityDto } from "@hark/contracts";
-import { sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { db } from "../db";
+import {
+  agentNotification,
+  event,
+  interaction,
+  liveActivity,
+  liveActivityOperation,
+  service,
+} from "../db/schema";
 import { type AuthedEnv, requireAuth } from "../middleware";
 
 const PAGE_SIZE = 20;
@@ -23,6 +31,74 @@ interface ActivityFeedRow {
   error: string | null;
   createdAt: number;
   total: number;
+}
+
+/** Statuses that surface an interaction in the feed's `response` rows. */
+const RESPONDED_STATUSES = ["approved", "denied", "yes", "no", "replied"];
+
+/**
+ * Deletes the row backing one feed item. The feed id is `<kind>:<rowId>`,
+ * matching what GET / returns. Deleting a webhook event also removes anything
+ * cascaded from it (for example the interaction it spawned).
+ */
+async function deleteFeedItem(userId: string, feedId: string): Promise<boolean> {
+  const separator = feedId.indexOf(":");
+  if (separator <= 0) return false;
+  const kind = feedId.slice(0, separator);
+  const rowId = feedId.slice(separator + 1);
+  if (rowId.length === 0) return false;
+
+  const ownedServices = db
+    .select({ id: service.id })
+    .from(service)
+    .where(eq(service.userId, userId));
+
+  if (kind === "event") {
+    const deleted = await db
+      .delete(event)
+      .where(and(eq(event.id, rowId), inArray(event.serviceId, ownedServices)))
+      .returning({ id: event.id });
+    return deleted.length > 0;
+  }
+  if (kind === "notification") {
+    const deleted = await db
+      .delete(agentNotification)
+      .where(and(eq(agentNotification.id, rowId), eq(agentNotification.userId, userId)))
+      .returning({ id: agentNotification.id });
+    return deleted.length > 0;
+  }
+  if (kind === "response") {
+    // Only responded interactions appear in the feed; pending ones must be
+    // answered or expire, not silently vanish.
+    const deleted = await db
+      .delete(interaction)
+      .where(
+        and(
+          eq(interaction.id, rowId),
+          eq(interaction.userId, userId),
+          inArray(interaction.status, RESPONDED_STATUSES),
+        ),
+      )
+      .returning({ id: interaction.id });
+    return deleted.length > 0;
+  }
+  if (kind === "live_activity") {
+    const ownedActivities = db
+      .select({ id: liveActivity.id })
+      .from(liveActivity)
+      .where(eq(liveActivity.userId, userId));
+    const deleted = await db
+      .delete(liveActivityOperation)
+      .where(
+        and(
+          eq(liveActivityOperation.id, rowId),
+          inArray(liveActivityOperation.activityId, ownedActivities),
+        ),
+      )
+      .returning({ id: liveActivityOperation.id });
+    return deleted.length > 0;
+  }
+  return false;
 }
 
 export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get("/", async (c) => {
@@ -184,4 +260,12 @@ export const activityFeedRoute = new Hono<AuthedEnv>().use("*", requireAuth).get
     pageSize,
     total: rows[0]?.total ?? 0,
   });
+});
+
+activityFeedRoute.delete("/:id", async (c) => {
+  const deleted = await deleteFeedItem(c.get("user").id, c.req.param("id"));
+  if (!deleted) {
+    return c.json({ error: "Activity item not found" }, 404);
+  }
+  return c.json({ ok: true });
 });

@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 process.env.NODE_ENV = "test";
@@ -281,5 +282,63 @@ describe("mobile inbox", () => {
 
     expect((await app.request("/api/activity-feed?pageSize=0")).status).toBe(400);
     expect((await app.request("/api/activity-feed?pageSize=101")).status).toBe(400);
+  });
+});
+
+describe("activity feed deletion", () => {
+  const remove = (id: string) =>
+    app.request(`/api/activity-feed/${encodeURIComponent(id)}`, { method: "DELETE" });
+
+  it("requires a signed-in session", async () => {
+    authState.userId = null;
+    try {
+      expect((await remove("event:evt_0")).status).toBe(401);
+    } finally {
+      authState.userId = "user_inbox";
+    }
+  });
+
+  it("rejects foreign, pending, and malformed feed ids", async () => {
+    expect((await remove("event:evt_foreign")).status).toBe(404);
+    expect((await remove("response:int_pending")).status).toBe(404);
+    expect((await remove("unknown:evt_0")).status).toBe(404);
+    expect((await remove("event:")).status).toBe(404);
+    expect((await remove("evt_0")).status).toBe(404);
+
+    const foreign = await db
+      .select({ id: schema.event.id })
+      .from(schema.event)
+      .where(eq(schema.event.id, "evt_foreign"));
+    expect(foreign).toHaveLength(1);
+    const pending = await db
+      .select({ status: schema.interaction.status })
+      .from(schema.interaction)
+      .where(eq(schema.interaction.id, "int_pending"));
+    expect(pending).toEqual([{ status: "pending" }]);
+  });
+
+  it("deletes each feed item kind for its owner", async () => {
+    const before = (await (await app.request("/api/activity-feed?pageSize=50")).json()) as {
+      total: number;
+    };
+
+    for (const id of [
+      "event:evt_21",
+      "notification:ntf_inbox",
+      "response:int_answered",
+      "live_activity:op_inbox",
+    ]) {
+      const response = await remove(id);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ ok: true });
+      expect((await remove(id)).status).toBe(404);
+    }
+
+    const after = (await (await app.request("/api/activity-feed?pageSize=50")).json()) as {
+      items: Array<{ id: string }>;
+      total: number;
+    };
+    expect(after.total).toBe(before.total - 4);
+    expect(after.items.map((item) => item.id)).not.toContain("event:evt_21");
   });
 });

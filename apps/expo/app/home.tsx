@@ -27,6 +27,7 @@ import {
 } from "../src/lib/interactions";
 import { refreshLiveActivityTokenSync } from "../src/lib/live-activities";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
+import { useTextOverflow } from "../src/lib/use-text-overflow";
 
 type PermissionState = "unknown" | "undetermined" | "granted" | "denied";
 type RegistrationState = "idle" | "working" | "registered" | "error";
@@ -323,6 +324,39 @@ function ActivityLog({
   events: EventDto[] | null;
   onRefresh: () => Promise<void>;
 }) {
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const removeEvent = (activityEvent: EventDto) => {
+    if (deletingId) return;
+    Alert.alert(
+      "Delete from history",
+      `Delete “${activityEvent.title}” from your activity history? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              setDeletingId(activityEvent.id);
+              try {
+                await api.deleteActivity(`event:${activityEvent.id}`);
+                await onRefresh();
+              } catch (error) {
+                Alert.alert(
+                  "Could not delete",
+                  error instanceof Error ? error.message : "Please try again.",
+                );
+              } finally {
+                setDeletingId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={styles.activitySection}>
       <View style={styles.activityHeader}>
@@ -336,21 +370,43 @@ function ActivityLog({
         <Text style={styles.emptyActivity}>No webhook activity yet.</Text>
       ) : null}
       {events?.map((activityEvent) => (
-        <ActivityLogRow activityEvent={activityEvent} key={activityEvent.id} />
+        <ActivityLogRow
+          activityEvent={activityEvent}
+          key={activityEvent.id}
+          deleting={deletingId === activityEvent.id}
+          onDelete={() => removeEvent(activityEvent)}
+        />
       ))}
     </View>
   );
 }
 
-function ActivityLogRow({ activityEvent }: { activityEvent: EventDto }) {
+function ActivityLogRow({
+  activityEvent,
+  deleting,
+  onDelete,
+}: {
+  activityEvent: EventDto;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const expandable = activityEvent.body.length > 0;
+  const nameOverflow = useTextOverflow();
+  const bodyOverflow = useTextOverflow();
+  const name = `${activityEvent.serviceTitle} · ${activityEvent.title}`;
+  // Only truncated rows get the expand affordance; short rows have nothing to show.
+  const expandable = nameOverflow.overflowing || bodyOverflow.overflowing;
   return (
     <Pressable
-      accessibilityRole={expandable ? "button" : undefined}
-      disabled={!expandable}
-      onPress={() => setExpanded((current) => !current)}
-      style={styles.activityRow}
+      accessibilityRole="button"
+      accessibilityHint={
+        expandable
+          ? "Expands the full message. Long press to delete from history."
+          : "Long press to delete from history."
+      }
+      onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+      onLongPress={onDelete}
+      style={[styles.activityRow, deleting && styles.activityRowDeleting]}
     >
       <View style={styles.activityAvatarWrap}>
         {activityEvent.imageUrl ? (
@@ -368,9 +424,18 @@ function ActivityLogRow({ activityEvent }: { activityEvent: EventDto }) {
       </View>
       <View style={styles.activityCopy}>
         <View style={styles.activityTopLine}>
-          <Text style={styles.activityName} numberOfLines={expanded ? undefined : 1}>
-            {activityEvent.serviceTitle} · {activityEvent.title}
-          </Text>
+          <View style={styles.activityNameWrap}>
+            {/* Invisible unclamped copy that reports whether the clamped name
+                below is actually truncated. */}
+            <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+              <Text style={styles.activityName} onTextLayout={nameOverflow.onTextLayout}>
+                {name}
+              </Text>
+            </View>
+            <Text style={styles.activityName} numberOfLines={expanded ? undefined : 1}>
+              {name}
+            </Text>
+          </View>
           <Text style={styles.activityTime}>
             {new Date(activityEvent.createdAt).toLocaleTimeString([], {
               hour: "numeric",
@@ -378,10 +443,29 @@ function ActivityLogRow({ activityEvent }: { activityEvent: EventDto }) {
             })}
           </Text>
         </View>
+        <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+          <Text style={styles.activityBody} onTextLayout={bodyOverflow.onTextLayout}>
+            {activityEvent.body}
+          </Text>
+        </View>
         <Text style={styles.activityBody} numberOfLines={expanded ? undefined : 1}>
           {activityEvent.body}
         </Text>
         <Text style={styles.activityStatus}>{activityStatus(activityEvent)}</Text>
+        {expanded ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={deleting}
+            hitSlop={8}
+            onPress={onDelete}
+            style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
+          >
+            <SymbolView name="trash" size={12} tintColor={colors.danger} />
+            <Text style={styles.deleteActionText}>
+              {deleting ? "Deleting…" : "Delete from history"}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {expandable ? (
         <SymbolView
@@ -637,9 +721,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 10,
   },
-  activityName: {
+  activityNameWrap: {
     minWidth: 0,
     flex: 1,
+  },
+  activityName: {
     color: colors.ink,
     fontFamily: fonts.medium,
     fontSize: 13,
@@ -662,6 +748,32 @@ const styles = StyleSheet.create({
   },
   activityChevron: {
     marginTop: 4,
+  },
+  activityRowDeleting: {
+    opacity: 0.4,
+  },
+  measureLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
+  },
+  deleteAction: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 4,
+  },
+  deleteActionPressed: {
+    opacity: 0.6,
+  },
+  deleteActionText: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    letterSpacing: tightTracking(12),
   },
   activityStatus: {
     marginTop: 1,

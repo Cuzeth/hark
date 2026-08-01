@@ -80,5 +80,7 @@ export const api = {
     request<InboxActivityPageDto>(
       `/api/activity-feed?filter=${filter}&page=${page}&pageSize=${pageSize}`,
     ),
+  deleteActivity: (id: string) =>
+    request<{ ok: true }>(`/api/activity-feed/${encodeURIComponent(id)}`, { method: "DELETE" }),
   listLiveActivities: () => request<{ activities: LiveActivityDto[] }>("/api/activities"),
 };

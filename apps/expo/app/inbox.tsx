@@ -32,6 +32,7 @@ import { API_URL, useSession } from "../src/lib/auth";
 import { previewActive, previewActivity, previewPending } from "../src/lib/inbox-preview";
 import { DEVICE_ID_KEY, submitInteractionResponse } from "../src/lib/interactions";
 import { colors, fonts, tightTracking } from "../src/lib/theme";
+import { useTextOverflow } from "../src/lib/use-text-overflow";
 
 type ActivityFilter = "all" | InboxActivityKind;
 
@@ -55,6 +56,7 @@ export default function InboxScreen() {
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [reply, setReply] = useState("");
   const [respondingTo, setRespondingTo] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -183,6 +185,42 @@ export default function InboxScreen() {
     }
   };
 
+  const removeActivity = (item: InboxActivityDto) => {
+    if (deletingId) return;
+    Alert.alert(
+      "Delete from history",
+      `Delete “${item.title}” from your activity history? This cannot be undone.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void (async () => {
+              if (simulatorPreview) {
+                setActivity((items) => items.filter((candidate) => candidate.id !== item.id));
+                setActivityTotal((total) => Math.max(0, total - 1));
+                return;
+              }
+              setDeletingId(item.id);
+              try {
+                await api.deleteActivity(item.id);
+                await refreshActivity();
+              } catch (error) {
+                Alert.alert(
+                  "Could not delete",
+                  error instanceof Error ? error.message : "Please try again.",
+                );
+              } finally {
+                setDeletingId(null);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
   const activityPageCount = Math.max(1, Math.ceil(activityTotal / ACTIVITY_PAGE_SIZE));
 
   if (!sessionPending && !session) return <Redirect href="/" />;
@@ -276,7 +314,13 @@ export default function InboxScreen() {
               </Text>
             ) : null}
             {activity.map((item, index) => (
-              <ActivityRow item={item} key={`${item.kind}-${item.id}`} first={index === 0} />
+              <ActivityRow
+                item={item}
+                key={`${item.kind}-${item.id}`}
+                first={index === 0}
+                deleting={deletingId === item.id}
+                onDelete={() => removeActivity(item)}
+              />
             ))}
             {activityPageCount > 1 ? (
               <Pagination
@@ -546,22 +590,58 @@ function ActiveRow({ item, first }: { item: InboxLiveActivityDto; first: boolean
   );
 }
 
-function ActivityRow({ item, first }: { item: InboxActivityDto; first: boolean }) {
+function ActivityRow({
+  item,
+  first,
+  deleting,
+  onDelete,
+}: {
+  item: InboxActivityDto;
+  first: boolean;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const expandable = item.detail !== null && item.detail.length > 0;
+  const titleOverflow = useTextOverflow();
+  const detailOverflow = useTextOverflow();
+  const hasDetail = item.detail !== null && item.detail.length > 0;
+  // Only truncated rows get the expand affordance; short rows have nothing to show.
+  const expandable = titleOverflow.overflowing || detailOverflow.overflowing;
   return (
     <Pressable
-      accessibilityRole={expandable ? "button" : undefined}
-      disabled={!expandable}
-      onPress={() => setExpanded((current) => !current)}
-      style={[styles.recentRow, first && styles.firstRow, expanded && styles.recentRowExpanded]}
+      accessibilityRole="button"
+      accessibilityHint={
+        expandable
+          ? "Expands the full message. Long press to delete from history."
+          : "Long press to delete from history."
+      }
+      onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+      onLongPress={onDelete}
+      style={[
+        styles.recentRow,
+        first && styles.firstRow,
+        expanded && styles.recentRowExpanded,
+        deleting && styles.recentRowDeleting,
+      ]}
     >
       <SourceAvatar size={30} url={item.sourceImageUrl} />
       <View style={styles.recentCopy}>
+        {/* Invisible unclamped copies, laid out at the same width, that report
+            whether the clamped text below is actually truncated. */}
+        <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+          <Text style={styles.recentTitle} onTextLayout={titleOverflow.onTextLayout}>
+            {item.title}
+          </Text>
+          {hasDetail ? (
+            <Text style={styles.recentDetail} onTextLayout={detailOverflow.onTextLayout}>
+              {item.detail}
+            </Text>
+          ) : null}
+        </View>
         <Text style={styles.recentTitle} numberOfLines={expanded ? undefined : 1}>
           {item.title}
         </Text>
-        {expandable ? (
+        {hasDetail ? (
           <Text style={styles.recentDetail} numberOfLines={expanded ? undefined : 1}>
             {item.detail}
           </Text>
@@ -569,6 +649,20 @@ function ActivityRow({ item, first }: { item: InboxActivityDto; first: boolean }
         <Text style={styles.recentMeta} numberOfLines={1}>
           {item.sourceName} · {activityKindLabel(item.kind)} · {formatActivityTime(item.createdAt)}
         </Text>
+        {expanded ? (
+          <Pressable
+            accessibilityRole="button"
+            disabled={deleting}
+            hitSlop={8}
+            onPress={onDelete}
+            style={({ pressed }) => [styles.deleteAction, pressed && styles.textButtonPressed]}
+          >
+            <SymbolView name="trash" size={12} tintColor={colors.danger} />
+            <Text style={styles.deleteActionText}>
+              {deleting ? "Deleting…" : "Delete from history"}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {item.result ? (
         <View style={styles.resultGroup}>
@@ -982,6 +1076,29 @@ const styles = StyleSheet.create({
   },
   recentRowExpanded: {
     paddingVertical: 12,
+  },
+  recentRowDeleting: {
+    opacity: 0.4,
+  },
+  measureLayer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    opacity: 0,
+  },
+  deleteAction: {
+    minHeight: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 6,
+  },
+  deleteActionText: {
+    color: colors.danger,
+    fontFamily: fonts.medium,
+    fontSize: 12,
+    letterSpacing: tightTracking(12),
   },
   recentDetail: {
     marginTop: 2,

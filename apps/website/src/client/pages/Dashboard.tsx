@@ -775,7 +775,35 @@ function ActivityLog({
   onPageChange: (page: number) => void;
   onRefresh: () => Promise<void>;
 }) {
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const { confirm, dialog } = useConfirm();
   const pageCount = activity ? Math.ceil(activity.total / activity.pageSize) : 0;
+
+  const remove = async (item: InboxActivityDto) => {
+    const confirmed = await confirm({
+      title: "Delete from history",
+      message: `Delete “${item.title}” from your activity history? This cannot be undone.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    setBusyId(item.id);
+    setDeleteError(null);
+    try {
+      await api.deleteActivity(item.id);
+      // Step back rather than refreshing into a page that just became empty.
+      if (activity && activity.items.length === 1 && activity.page > 0) {
+        onPageChange(activity.page - 1);
+      } else {
+        await onRefresh();
+      }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete this activity");
+    } finally {
+      setBusyId(null);
+    }
+  };
   return (
     <section className="mt-16" aria-labelledby="activity-heading">
       <div className="mb-4 flex items-center justify-between">
@@ -844,10 +872,21 @@ function ActivityLog({
                 ) : null}
                 <p className="mt-0.5 text-[11px] leading-4 text-ink-faint">{activityMeta(item)}</p>
               </div>
+              <button
+                type="button"
+                aria-label={`Delete “${item.title}” from history`}
+                title="Delete from history"
+                disabled={busyId === item.id}
+                onClick={() => void remove(item)}
+                className="grid size-8 shrink-0 place-items-center self-center rounded-full text-lg leading-none text-ink-faint transition hover:bg-danger-soft hover:text-danger disabled:opacity-50"
+              >
+                ×
+              </button>
             </li>
           ))}
         </ol>
       ) : null}
+      {deleteError ? <p className="mt-3 text-xs text-danger">{deleteError}</p> : null}
       {activity && pageCount > 1 ? (
         <div className="mt-4 flex items-center justify-between text-xs text-ink-subtle">
           <button
@@ -872,6 +911,7 @@ function ActivityLog({
           </button>
         </div>
       ) : null}
+      {dialog}
     </section>
   );
 }
