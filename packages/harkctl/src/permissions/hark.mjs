@@ -4,6 +4,11 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WAIT_DURATION = "5m";
+const PERMISSION_IMAGE_URLS = {
+  "Claude Code": "https://hark.ryan.ceo/agents/claude.png",
+  Codex: "https://hark.ryan.ceo/agents/codex.png",
+  OpenCode: "https://hark.ryan.ceo/agents/opencode.png",
+};
 export const REQUIRED_PERMISSION_SCOPES = [
   "notifications:send",
   "interactions:create",
@@ -28,6 +33,7 @@ export function permissionSummary({ agent, cwd, toolName, resourceCount }) {
   return {
     title: `${agentName} permission`,
     body: `${agentName} requests ${tool} permission in ${project} for ${count} resource${count === 1 ? "" : "s"}. Allow once?`,
+    ...(PERMISSION_IMAGE_URLS[agentName] ? { imageUrl: PERMISSION_IMAGE_URLS[agentName] } : {}),
   };
 }
 
@@ -95,7 +101,7 @@ export async function checkHarkAuthentication() {
   return status.authenticated && status.missingScopes.length === 0;
 }
 
-export async function askHarkPermission({ title, body, idempotencyKey }) {
+export async function askHarkPermission({ title, body, imageUrl, idempotencyKey }) {
   try {
     const result = await runHarkctl(
       [
@@ -111,7 +117,7 @@ export async function askHarkPermission({ title, body, idempotencyKey }) {
         "--idempotency-key",
         idempotencyKey,
       ],
-      JSON.stringify({ prompt: body, title }),
+      JSON.stringify({ prompt: body, title, ...(imageUrl ? { imageUrl } : {}) }),
     );
     return result.code === 0 ? "approved" : "denied";
   } catch {

@@ -5,7 +5,7 @@ license: PolyForm Noncommercial 1.0.0 (https://polyformproject.org/licenses/nonc
 compatibility: Requires Node.js 22+ and internet access. Workflow examples may also use jq, curl, or gh.
 metadata:
   author: R44VC0RP
-  version: "1.2.0"
+  version: "1.2.1"
 ---
 
 # Hark
@@ -18,7 +18,7 @@ needs a stable URL it can call later.
 
 - Use Node.js 22 or newer.
 - Use only a project-installed or user-installed `harkctl` that the user already trusts. Version
-  `0.4.1` is reviewed for this skill. Never download packages, run `npx`/`pnpm dlx`, install or
+  `0.4.2` is reviewed for this skill. Never download packages, run `npx`/`pnpm dlx`, install or
   upgrade the CLI, or execute a newly installed binary as part of this skill. If `harkctl` is not
   available, stop and ask the user to install and review an exact version separately.
 - Treat Hark tokens and webhook URLs as secrets. Never commit, print, summarize, or paste them into
