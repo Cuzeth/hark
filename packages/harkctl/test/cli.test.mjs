@@ -62,6 +62,13 @@ test("parses duration suffixes", () => {
   assert.throws(() => parseDuration("tomorrow"), /Invalid duration/);
 });
 
+test("exposes permission bridge setup through harkctl", async () => {
+  const result = await execute(["permissions", "help"], {});
+  assert.equal(result.exitCode, 0);
+  assert.equal(result.text, true);
+  assert.match(result.body.help, /harkctl permissions setup/);
+});
+
 test("creates a webhook service with default appearance", async () => {
   const originalFetch = globalThis.fetch;
   let request;

@@ -10,6 +10,7 @@ harkctl
 │  └─ ask       <prompt> (--approval | --yes-no | --text)  push that elicits an answer
 ├─ interaction  get <id> · wait <id>
 ├─ activity     start · update · end · get · list
+├─ permissions  setup · doctor · uninstall
 ├─ devices      list
 └─ services     create · list
 ```
@@ -112,6 +113,39 @@ per device; pass `--replace` on `activity start` to silently end whatever task o
 and take the slot (the response reports the count as `replaced`). Interactive approval activities
 may coexist with that task. A `--key` becomes reusable once its activity ends, so
 `activity start --key deploy --replace` works as a fixed-key restart.
+
+## permissions
+
+Route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to Hark:
+
+```sh
+harkctl permissions setup all
+```
+
+Install or remove one integration at a time:
+
+```sh
+harkctl permissions setup claude
+harkctl permissions setup codex
+harkctl permissions setup opencode
+harkctl permissions doctor
+harkctl permissions uninstall all
+```
+
+Claude Code and Codex use synchronous `PermissionRequest` hooks. After Codex setup, open `/hooks`
+and trust the Hark hook. OpenCode setup installs both connectors: a V1 plugin shim for current V1
+servers (`1.0.204` or newer) and a per-user macOS LaunchAgent for the shared V2 service.
+
+Only an explicit Hark approval grants a request, and it grants it once. Denial, timeout,
+authentication failure, network failure, malformed input, and no-device delivery all deny. Phone
+prompts contain only the agent name, permission/tool name, project directory basename, and resource
+count. Raw commands, patches, prompts, file contents, URLs, environment variables, transcript paths,
+and absolute paths are not sent to Hark.
+
+Setup merges existing Claude and Codex JSON atomically. Uninstall removes only Hark-owned hooks,
+the V1 shim, and the V2 LaunchAgent; it never removes shared Hark credentials or unrelated agent
+configuration. The OpenCode background connector currently requires macOS. Permission hooks use the
+user-owned harkctl credential file and intentionally do not inherit `HARK_TOKEN` or `HARK_API_URL`.
 
 ## Configuration
 

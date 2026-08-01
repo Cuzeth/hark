@@ -6,6 +6,7 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   "@biomejs/biome": true
+  msgpackr-extract: false
 
 minimumReleaseAge: 0
 
