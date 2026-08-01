@@ -62,6 +62,8 @@ export type DocBlock =
 export interface DocStylePreview {
   name: string;
   description: string;
+  /** Maintainers remove this fallback after adding the native simulator capture. */
+  nativeScreenshot?: false;
 }
 
 export interface DocSubsection {
@@ -110,7 +112,7 @@ export const DOC_CONTENT: DocSection[] = [
             kind: "steps",
             items: [
               "Sign in at [hark.ryan.ceo](https://hark.ryan.ceo).",
-              "Register your iPhone with the Hark app.",
+              "Register your iPhone with [Hark for iPhone](https://apps.apple.com/us/app/hark-developer-notifications/id6794121509).",
               "Create a service in the dashboard and give it a title, avatar, and tap URL.",
               "Copy the secret webhook URL it returns.",
             ],
@@ -833,9 +835,14 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
             kind: "p",
             text: "Use repeatable `--scope` flags to narrow access, `--client-name` to label the connection, and `--expires-in` (default `90d`) to bound its lifetime. For CI or self-hosted setups, `HARK_TOKEN` and `HARK_API_URL` environment variables override the config file.",
           },
+        ],
+      },
+      {
+        id: "cli-permissions",
+        blocks: [
           {
             kind: "p",
-            text: "Route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to Hark with one setup command. Only an explicit phone approval grants a request, and it grants it once. Other outcomes deny it.",
+            text: "Route permission requests from Claude Code, Codex, OpenCode V1, and OpenCode V2 to Hark with one setup command. Only an explicit phone approval grants a request, and it grants it once. Denial, timeout, malformed input, authentication failure, network failure, and no-device delivery deny.",
           },
           {
             kind: "code",
@@ -845,7 +852,15 @@ harkctl permissions doctor`,
           },
           {
             kind: "p",
-            text: "Use `setup claude`, `setup codex`, or `setup opencode` for one integration. After Codex setup, review and trust the hook through `/hooks`. OpenCode setup installs both a V1 plugin connector and the V2 background connector on macOS. `harkctl permissions uninstall all` removes only Hark-owned hooks and services.",
+            text: "The default harkctl login includes the required `notifications:send`, `interactions:create`, and `interactions:read` scopes. A narrowed login must retain all three; setup and `doctor` report missing scopes before hooks are installed.",
+          },
+          {
+            kind: "p",
+            text: "Use `permissions setup claude`, `permissions setup codex`, or `permissions setup opencode` for one integration. After Codex setup, review and trust the hook through `/hooks`. OpenCode setup installs both a V1 plugin connector and the V2 background connector on macOS. `harkctl permissions uninstall all` removes only Hark-owned hooks and services.",
+          },
+          {
+            kind: "p",
+            text: "Phone prompts contain only the agent name, permission or tool name, project directory basename, and resource count. Raw commands, patches, prompts, file contents, URLs, environment variables, transcript paths, and absolute paths are not sent to Hark.",
           },
         ],
       },
@@ -951,14 +966,14 @@ harkctl permissions doctor`,
           },
           {
             kind: "p",
-            text: "Add `--live-activity` to an approval or yes/no request to put its buttons on the Lock Screen and expanded Dynamic Island. `--style` selects `approval`, `shell`, `verdict`, or `signal`. `--primary-label` and `--secondary-label` customize visible verbs such as Send/Deny or Push/Cancel while the returned action remains canonical. Interactive Live Activities require iOS 17+, expire within eight hours, and don't support text replies, images, or URLs.",
+            text: "Add `--live-activity` to an approval or yes/no request to put its buttons on the Lock Screen and expanded Dynamic Island. `--style` selects `approval`, `shell`, `verdict`, or `signal`. `--primary-label` and `--secondary-label` customize visible verbs such as Send/Deny or Push/Cancel while the returned action remains canonical. Interactive Live Activity prompts are limited to 240 characters, action labels are 1 to 24 characters, requests require iOS 17+, expire within eight hours, and don't support text replies, images, or URLs.",
           },
           {
             kind: "code",
             language: "bash",
-            code: `harkctl notify ask "Send the prepared release email?" \
-  --approval --live-activity --style signal \
-  --primary-label Send --secondary-label Deny \
+            code: `harkctl notify ask "Send the prepared release email?" \\
+  --approval --live-activity --style signal \\
+  --primary-label Send --secondary-label Deny \\
   --wait --timeout 15m`,
           },
           {

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { LIVE_ACTIVITY_STYLES } from "@hark/contracts";
 import { describe, expect, it } from "vitest";
 import { DOC_CONTENT } from "./content";
 import { parseInline } from "./inline";
@@ -85,11 +86,16 @@ describe("docs content", () => {
         ),
       ),
     );
-    expect(styles).toHaveLength(9);
-    for (const style of styles) {
+    expect(styles).toEqual([...LIVE_ACTIVITY_STYLES]);
+    for (const style of DOC_CONTENT.flatMap((section) =>
+      section.subsections.flatMap((subsection) =>
+        subsection.blocks.flatMap((block) => (block.kind === "stylePreviews" ? block.styles : [])),
+      ),
+    )) {
+      if (style.nativeScreenshot === false) continue;
       expect(
-        existsSync(join(process.cwd(), "public", "live-activities", `${style}.webp`)),
-        style,
+        existsSync(join(process.cwd(), "public", "live-activities", `${style.name}.webp`)),
+        style.name,
       ).toBe(true);
     }
   });
@@ -139,6 +145,13 @@ describe("docsMarkdown", () => {
     }
   });
 
+  it("preserves multiline shell examples", () => {
+    expect(markdown).toContain(`harkctl notify ask "Send the prepared release email?" \\
+  --approval --live-activity --style signal \\
+  --primary-label Send --secondary-label Deny \\
+  --wait --timeout 15m`);
+  });
+
   it("flags Hark Pro sections", () => {
     expect(markdown).toContain("**Hark Pro**");
   });
@@ -150,6 +163,8 @@ describe("llmsTxt", () => {
     expect(text.startsWith("# Hark")).toBe(true);
     expect(text).toContain("https://hark.ryan.ceo/docs");
     expect(text).toContain("https://hark.ryan.ceo/docs.md");
+    expect(text).toContain("https://hark.ryan.ceo/agents.md");
+    expect(text).toContain("https://hark.ryan.ceo/docs#cli-permissions");
     expect(text).toContain("https://hark.ryan.ceo/pricing");
     expect(text).toContain("https://skills.sh/r44vc0rp/hark/hark");
     expect(text).toContain("https://www.npmjs.com/package/harkctl");

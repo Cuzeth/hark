@@ -4,6 +4,11 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WAIT_DURATION = "5m";
+export const REQUIRED_PERMISSION_SCOPES = [
+  "notifications:send",
+  "interactions:create",
+  "interactions:read",
+];
 const harkctlPath = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "bin", "harkctl.mjs");
 
 function safeText(value, fallback, maxLength = 48) {
@@ -71,10 +76,23 @@ function runHarkctl(args, input, captureOutput = false) {
   });
 }
 
-export async function checkHarkAuthentication() {
+export async function harkAuthenticationStatus() {
   const result = await runHarkctl(["auth", "status"], undefined, true);
-  if (result.code !== 0) return false;
-  return JSON.parse(result.output)?.authenticated === true;
+  if (result.code !== 0) {
+    return { authenticated: false, scopes: [], missingScopes: [...REQUIRED_PERMISSION_SCOPES] };
+  }
+  const body = JSON.parse(result.output);
+  const scopes = Array.isArray(body?.token?.scopes) ? body.token.scopes : [];
+  return {
+    authenticated: body?.authenticated === true,
+    scopes,
+    missingScopes: REQUIRED_PERMISSION_SCOPES.filter((scope) => !scopes.includes(scope)),
+  };
+}
+
+export async function checkHarkAuthentication() {
+  const status = await harkAuthenticationStatus();
+  return status.authenticated && status.missingScopes.length === 0;
 }
 
 export async function askHarkPermission({ title, body, idempotencyKey }) {

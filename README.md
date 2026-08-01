@@ -50,7 +50,7 @@ Live Activities, and create webhook services for external systems.
 ## Webhook Setup
 
 1. Sign in at [hark.ryan.ceo](https://hark.ryan.ceo).
-2. Register your iPhone with the Hark app.
+2. Register your iPhone with [Hark for iPhone](https://apps.apple.com/us/app/hark-developer-notifications/id6794121509).
 3. Create a service and copy its secret webhook URL.
 4. Send it a JSON request.
 
@@ -147,6 +147,9 @@ npm install --global harkctl
 harkctl auth login --client-name "Coding agent permissions"
 harkctl permissions setup all
 ```
+
+See the [coding-agent permission setup guide](https://hark.ryan.ceo/docs#cli-permissions) for
+Claude Code, Codex, OpenCode V1, and OpenCode V2 details.
 
 Only an explicit phone approval allows a request. Other outcomes deny it, and raw commands, patches,
 prompts, file contents, and absolute paths are not sent to Hark.

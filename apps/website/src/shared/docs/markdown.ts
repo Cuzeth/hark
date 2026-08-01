@@ -111,13 +111,16 @@ export function llmsTxt(): string {
 
 ## Docs
 
-- [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API.
+- [Documentation](${DOCS_URL}): ${DOCS_TITLE} — quickstart, Notification API, Activity API, CLI, and coding-agent permissions.
 - [Documentation as markdown](${DOCS_MARKDOWN_URL}): the same content as plain markdown.
+- [Agent documentation](https://hark.ryan.ceo/agents.md): agent-oriented alias of the complete Markdown docs.
+- [Coding-agent permission setup](https://hark.ryan.ceo/docs#cli-permissions): Claude Code, Codex, OpenCode V1, and OpenCode V2.
 
 ## Product
 
 - [Home](https://hark.ryan.ceo/): product overview and webhook example.
 - [Pricing](https://hark.ryan.ceo/pricing): current Free and Pro capabilities.
+- [Hark for iPhone](https://apps.apple.com/us/app/hark-developer-notifications/id6794121509): required iOS app.
 - [Source](https://github.com/R44VC0RP/hark): Hark website, iOS app, CLI, and agent skill.
 
 ## Agent tools
@@ -127,7 +130,8 @@ export function llmsTxt(): string {
 
 ## Notes
 
-- Every request is authenticated by the webhook token in the URL; treat it as a credential.
-- Device routing, interactive responses, and Live Activities require a paid Hark Pro plan.
+- Webhook API requests are authenticated by the token in the URL; harkctl uses a scoped agent token. Treat both as credentials.
+- Webhook device targeting, webhook interactive responses, and the webhook Activity API require Hark Pro.
+- Agent-token CLI asks and task Live Activities work on Free with the one-device limit; targeted or multi-device routing requires Pro.
 `;
 }

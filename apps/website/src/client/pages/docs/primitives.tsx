@@ -429,26 +429,32 @@ export function StylePreviews({ styles }: { styles: DocStylePreview[] }) {
     <div className="mt-5 grid gap-x-5 gap-y-7 sm:grid-cols-2">
       {styles.map((style) => (
         <figure key={style.name} className="m-0">
-          <div className="overflow-hidden rounded-2xl border border-line bg-black shadow-lg">
-            <img
-              alt={`${style.name} Live Activity on the Lock Screen and Dynamic Island`}
-              className="block h-auto w-full"
-              decoding="async"
-              height={867}
-              loading="lazy"
-              src={`/live-activities/${style.name}.webp`}
-              width={900}
-            />
-          </div>
+          {style.nativeScreenshot === false ? (
+            <LaPreviewCard name={style.name} />
+          ) : (
+            <div className="overflow-hidden rounded-2xl border border-line bg-black shadow-lg">
+              <img
+                alt={`${style.name} Live Activity on the Lock Screen and Dynamic Island`}
+                className="block h-auto w-full"
+                decoding="async"
+                height={867}
+                loading="lazy"
+                src={`/live-activities/${style.name}.webp`}
+                width={900}
+              />
+            </div>
+          )}
           <figcaption className="mt-2.5 text-xs leading-relaxed text-ink-subtle">
             <code className="font-mono text-ink-muted">{style.name}</code> — {style.description}
           </figcaption>
-          <details className="mt-2 text-[11px] text-ink-muted">
-            <summary className="cursor-pointer select-none">Layout illustration</summary>
-            <div className="mt-2">
-              <LaPreviewCard name={style.name} />
-            </div>
-          </details>
+          {style.nativeScreenshot === false ? null : (
+            <details className="mt-2 text-[11px] text-ink-muted">
+              <summary className="cursor-pointer select-none">Layout illustration</summary>
+              <div className="mt-2">
+                <LaPreviewCard name={style.name} />
+              </div>
+            </details>
+          )}
         </figure>
       ))}
     </div>
