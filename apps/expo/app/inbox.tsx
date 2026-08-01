@@ -27,6 +27,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DeleteContextMenu } from "../src/components/delete-context-menu";
 import { api } from "../src/lib/api";
 import { API_URL, useSession } from "../src/lib/auth";
 import { previewActive, previewActivity, previewPending } from "../src/lib/inbox-preview";
@@ -187,38 +188,25 @@ export default function InboxScreen() {
 
   const removeActivity = (item: InboxActivityDto) => {
     if (deletingId) return;
-    Alert.alert(
-      "Delete from history",
-      `Delete “${item.title}” from your activity history? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              if (simulatorPreview) {
-                setActivity((items) => items.filter((candidate) => candidate.id !== item.id));
-                setActivityTotal((total) => Math.max(0, total - 1));
-                return;
-              }
-              setDeletingId(item.id);
-              try {
-                await api.deleteActivity(item.id);
-                await refreshActivity();
-              } catch (error) {
-                Alert.alert(
-                  "Could not delete",
-                  error instanceof Error ? error.message : "Please try again.",
-                );
-              } finally {
-                setDeletingId(null);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      if (simulatorPreview) {
+        setActivity((items) => items.filter((candidate) => candidate.id !== item.id));
+        setActivityTotal((total) => Math.max(0, total - 1));
+        return;
+      }
+      setDeletingId(item.id);
+      try {
+        await api.deleteActivity(item.id);
+        await refreshActivity();
+      } catch (error) {
+        Alert.alert(
+          "Could not delete",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      } finally {
+        setDeletingId(null);
+      }
+    })();
   };
 
   const activityPageCount = Math.max(1, Math.ceil(activityTotal / ACTIVITY_PAGE_SIZE));
@@ -608,77 +596,79 @@ function ActivityRow({
   // Only truncated rows get the expand affordance; short rows have nothing to show.
   const expandable = titleOverflow.overflowing || detailOverflow.overflowing;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint={
-        expandable
-          ? "Expands the full message. Long press to delete from history."
-          : "Long press to delete from history."
-      }
-      onPress={expandable ? () => setExpanded((current) => !current) : undefined}
-      onLongPress={onDelete}
-      style={[
-        styles.recentRow,
-        first && styles.firstRow,
-        expanded && styles.recentRowExpanded,
-        deleting && styles.recentRowDeleting,
-      ]}
-    >
-      <SourceAvatar size={30} url={item.sourceImageUrl} />
-      <View style={styles.recentCopy}>
-        {/* Invisible unclamped copies, laid out at the same width, that report
+    <DeleteContextMenu onDelete={onDelete}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={
+          expandable
+            ? "Expands the full message. Touch and hold to delete from history."
+            : "Touch and hold to delete from history."
+        }
+        onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+        style={[
+          styles.recentRow,
+          first && styles.firstRow,
+          expanded && styles.recentRowExpanded,
+          deleting && styles.recentRowDeleting,
+        ]}
+      >
+        <SourceAvatar size={30} url={item.sourceImageUrl} />
+        <View style={styles.recentCopy}>
+          {/* Invisible unclamped copies, laid out at the same width, that report
             whether the clamped text below is actually truncated. */}
-        <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
-          <Text style={styles.recentTitle} onTextLayout={titleOverflow.onTextLayout}>
+          <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+            <Text style={styles.recentTitle} onTextLayout={titleOverflow.onTextLayout}>
+              {item.title}
+            </Text>
+            {hasDetail ? (
+              <Text style={styles.recentDetail} onTextLayout={detailOverflow.onTextLayout}>
+                {item.detail}
+              </Text>
+            ) : null}
+          </View>
+          <Text style={styles.recentTitle} numberOfLines={expanded ? undefined : 1}>
             {item.title}
           </Text>
           {hasDetail ? (
-            <Text style={styles.recentDetail} onTextLayout={detailOverflow.onTextLayout}>
+            <Text style={styles.recentDetail} numberOfLines={expanded ? undefined : 1}>
               {item.detail}
             </Text>
           ) : null}
-        </View>
-        <Text style={styles.recentTitle} numberOfLines={expanded ? undefined : 1}>
-          {item.title}
-        </Text>
-        {hasDetail ? (
-          <Text style={styles.recentDetail} numberOfLines={expanded ? undefined : 1}>
-            {item.detail}
+          <Text style={styles.recentMeta} numberOfLines={1}>
+            {item.sourceName} · {activityKindLabel(item.kind)} ·{" "}
+            {formatActivityTime(item.createdAt)}
           </Text>
-        ) : null}
-        <Text style={styles.recentMeta} numberOfLines={1}>
-          {item.sourceName} · {activityKindLabel(item.kind)} · {formatActivityTime(item.createdAt)}
-        </Text>
-        {expanded ? (
-          <Pressable
-            accessibilityRole="button"
-            disabled={deleting}
-            hitSlop={8}
-            onPress={onDelete}
-            style={({ pressed }) => [styles.deleteAction, pressed && styles.textButtonPressed]}
-          >
-            <SymbolView name="trash" size={12} tintColor={colors.danger} />
-            <Text style={styles.deleteActionText}>
-              {deleting ? "Deleting…" : "Delete from history"}
-            </Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {item.result ? (
-        <View style={styles.resultGroup}>
-          <SymbolView name="checkmark" size={11} tintColor={colors.accent} weight="semibold" />
-          <Text style={styles.resultText}>{item.result}</Text>
+          {expanded ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={deleting}
+              hitSlop={8}
+              onPress={onDelete}
+              style={({ pressed }) => [styles.deleteAction, pressed && styles.textButtonPressed]}
+            >
+              <SymbolView name="trash" size={12} tintColor={colors.danger} />
+              <Text style={styles.deleteActionText}>
+                {deleting ? "Deleting…" : "Delete from history"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
-      ) : null}
-      {expandable ? (
-        <SymbolView
-          name={expanded ? "chevron.up" : "chevron.down"}
-          size={11}
-          tintColor={colors.soft}
-          weight="semibold"
-        />
-      ) : null}
-    </Pressable>
+        {item.result ? (
+          <View style={styles.resultGroup}>
+            <SymbolView name="checkmark" size={11} tintColor={colors.accent} weight="semibold" />
+            <Text style={styles.resultText}>{item.result}</Text>
+          </View>
+        ) : null}
+        {expandable ? (
+          <SymbolView
+            name={expanded ? "chevron.up" : "chevron.down"}
+            size={11}
+            tintColor={colors.soft}
+            weight="semibold"
+          />
+        ) : null}
+      </Pressable>
+    </DeleteContextMenu>
   );
 }
 

@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { DeleteContextMenu } from "../src/components/delete-context-menu";
 import { api } from "../src/lib/api";
 import { authClient, useSession } from "../src/lib/auth";
 import {
@@ -328,33 +329,20 @@ function ActivityLog({
 
   const removeEvent = (activityEvent: EventDto) => {
     if (deletingId) return;
-    Alert.alert(
-      "Delete from history",
-      `Delete “${activityEvent.title}” from your activity history? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: () => {
-            void (async () => {
-              setDeletingId(activityEvent.id);
-              try {
-                await api.deleteActivity(`event:${activityEvent.id}`);
-                await onRefresh();
-              } catch (error) {
-                Alert.alert(
-                  "Could not delete",
-                  error instanceof Error ? error.message : "Please try again.",
-                );
-              } finally {
-                setDeletingId(null);
-              }
-            })();
-          },
-        },
-      ],
-    );
+    void (async () => {
+      setDeletingId(activityEvent.id);
+      try {
+        await api.deleteActivity(`event:${activityEvent.id}`);
+        await onRefresh();
+      } catch (error) {
+        Alert.alert(
+          "Could not delete",
+          error instanceof Error ? error.message : "Please try again.",
+        );
+      } finally {
+        setDeletingId(null);
+      }
+    })();
   };
 
   return (
@@ -397,86 +385,87 @@ function ActivityLogRow({
   // Only truncated rows get the expand affordance; short rows have nothing to show.
   const expandable = nameOverflow.overflowing || bodyOverflow.overflowing;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint={
-        expandable
-          ? "Expands the full message. Long press to delete from history."
-          : "Long press to delete from history."
-      }
-      onPress={expandable ? () => setExpanded((current) => !current) : undefined}
-      onLongPress={onDelete}
-      style={[styles.activityRow, deleting && styles.activityRowDeleting]}
-    >
-      <View style={styles.activityAvatarWrap}>
-        {activityEvent.imageUrl ? (
-          <Image source={{ uri: activityEvent.imageUrl }} style={styles.activityAvatar} />
-        ) : (
-          <View style={styles.activityAvatarFallback}>
-            <Text style={styles.activityAvatarFallbackText}>
-              {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
-            </Text>
+    <DeleteContextMenu onDelete={onDelete}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityHint={
+          expandable
+            ? "Expands the full message. Touch and hold to delete from history."
+            : "Touch and hold to delete from history."
+        }
+        onPress={expandable ? () => setExpanded((current) => !current) : undefined}
+        style={[styles.activityRow, deleting && styles.activityRowDeleting]}
+      >
+        <View style={styles.activityAvatarWrap}>
+          {activityEvent.imageUrl ? (
+            <Image source={{ uri: activityEvent.imageUrl }} style={styles.activityAvatar} />
+          ) : (
+            <View style={styles.activityAvatarFallback}>
+              <Text style={styles.activityAvatarFallbackText}>
+                {activityEvent.serviceTitle.slice(0, 1).toUpperCase()}
+              </Text>
+            </View>
+          )}
+          <View style={styles.activityStatusBadge}>
+            <View style={[styles.activityDot, activityDotStyle(activityEvent.status)]} />
           </View>
-        )}
-        <View style={styles.activityStatusBadge}>
-          <View style={[styles.activityDot, activityDotStyle(activityEvent.status)]} />
         </View>
-      </View>
-      <View style={styles.activityCopy}>
-        <View style={styles.activityTopLine}>
-          <View style={styles.activityNameWrap}>
-            {/* Invisible unclamped copy that reports whether the clamped name
+        <View style={styles.activityCopy}>
+          <View style={styles.activityTopLine}>
+            <View style={styles.activityNameWrap}>
+              {/* Invisible unclamped copy that reports whether the clamped name
                 below is actually truncated. */}
-            <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
-              <Text style={styles.activityName} onTextLayout={nameOverflow.onTextLayout}>
+              <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+                <Text style={styles.activityName} onTextLayout={nameOverflow.onTextLayout}>
+                  {name}
+                </Text>
+              </View>
+              <Text style={styles.activityName} numberOfLines={expanded ? undefined : 1}>
                 {name}
               </Text>
             </View>
-            <Text style={styles.activityName} numberOfLines={expanded ? undefined : 1}>
-              {name}
+            <Text style={styles.activityTime}>
+              {new Date(activityEvent.createdAt).toLocaleTimeString([], {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
             </Text>
           </View>
-          <Text style={styles.activityTime}>
-            {new Date(activityEvent.createdAt).toLocaleTimeString([], {
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </Text>
-        </View>
-        <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
-          <Text style={styles.activityBody} onTextLayout={bodyOverflow.onTextLayout}>
+          <View aria-hidden pointerEvents="none" style={styles.measureLayer}>
+            <Text style={styles.activityBody} onTextLayout={bodyOverflow.onTextLayout}>
+              {activityEvent.body}
+            </Text>
+          </View>
+          <Text style={styles.activityBody} numberOfLines={expanded ? undefined : 1}>
             {activityEvent.body}
           </Text>
+          <Text style={styles.activityStatus}>{activityStatus(activityEvent)}</Text>
+          {expanded ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={deleting}
+              hitSlop={8}
+              onPress={onDelete}
+              style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
+            >
+              <SymbolView name="trash" size={12} tintColor={colors.danger} />
+              <Text style={styles.deleteActionText}>
+                {deleting ? "Deleting…" : "Delete from history"}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
-        <Text style={styles.activityBody} numberOfLines={expanded ? undefined : 1}>
-          {activityEvent.body}
-        </Text>
-        <Text style={styles.activityStatus}>{activityStatus(activityEvent)}</Text>
-        {expanded ? (
-          <Pressable
-            accessibilityRole="button"
-            disabled={deleting}
-            hitSlop={8}
-            onPress={onDelete}
-            style={({ pressed }) => [styles.deleteAction, pressed && styles.deleteActionPressed]}
-          >
-            <SymbolView name="trash" size={12} tintColor={colors.danger} />
-            <Text style={styles.deleteActionText}>
-              {deleting ? "Deleting…" : "Delete from history"}
-            </Text>
-          </Pressable>
+        {expandable ? (
+          <SymbolView
+            name={expanded ? "chevron.up" : "chevron.down"}
+            size={11}
+            style={styles.activityChevron}
+            tintColor={colors.soft}
+            weight="semibold"
+          />
         ) : null}
-      </View>
-      {expandable ? (
-        <SymbolView
-          name={expanded ? "chevron.up" : "chevron.down"}
-          size={11}
-          style={styles.activityChevron}
-          tintColor={colors.soft}
-          weight="semibold"
-        />
-      ) : null}
-    </Pressable>
+      </Pressable>
+    </DeleteContextMenu>
   );
 }
 
