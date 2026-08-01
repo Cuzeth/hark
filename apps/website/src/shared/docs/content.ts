@@ -792,12 +792,12 @@ curl -X POST ${EXAMPLE_ENDPOINT}/events/evt_Cxns2IdbF4H0TJYq/cancel`,
         blocks: [
           {
             kind: "p",
-            text: "Run it straight from npm with `npx harkctl`, or install it globally with `npm install -g harkctl`. Signing in uses a browser device-authorization flow — no tokens on the command line, ever.",
+            text: "This instance's `harkctl` is not published to npm — install it globally from a checkout of this repo with `npm install -g ./packages/harkctl`. Signing in uses a browser device-authorization flow — no tokens on the command line, ever.",
           },
           {
             kind: "code",
             language: "bash",
-            code: "npx harkctl auth login",
+            code: "harkctl auth login",
           },
           {
             kind: "steps",
