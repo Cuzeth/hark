@@ -612,7 +612,9 @@ function ActivityRow({
           deleting && styles.recentRowDeleting,
         ]}
       >
-        <SourceAvatar size={30} url={item.sourceImageUrl} />
+        <View style={styles.recentAvatar}>
+          <SourceAvatar size={30} url={item.sourceImageUrl} />
+        </View>
         <View style={styles.recentCopy}>
           {/* Invisible unclamped copies, laid out at the same width, that report
             whether the clamped text below is actually truncated. */}
@@ -1046,6 +1048,7 @@ const styles = StyleSheet.create({
     opacity: 0.35,
   },
   recentRow: {
+    position: "relative",
     minHeight: 65,
     flexDirection: "row",
     alignItems: "center",
@@ -1053,9 +1056,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.line,
   },
+  recentAvatar: {
+    position: "absolute",
+    top: 17.5,
+    left: 0,
+  },
   recentCopy: {
     minWidth: 0,
     flex: 1,
+    marginLeft: 40,
   },
   recentTitle: {
     color: colors.ink,
