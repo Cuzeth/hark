@@ -11,12 +11,6 @@ data/
 .DS_Store
 /notifications-demo.mp4
 
-# Expo
-.expo/
-apps/expo/ios/
-apps/expo/android/
-expo-env.d.ts
-
 # Xcode
 **/xcuserdata/
 *.xcuserstate

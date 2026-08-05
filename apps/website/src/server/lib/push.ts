@@ -165,9 +165,8 @@ export function buildInteractionPushMessages(input: BuildInteractionPushInput): 
 }
 
 /**
- * The notification-service extension reads `userInfo["body"]` first and falls
- * back to the top-level keys, and expo-notifications surfaces `body` as the
- * on-device `content.data`. Both slots carry the same object.
+ * The app and its notification-service extension read `userInfo["body"]` first
+ * and fall back to the top-level keys. Both slots carry the same object.
  */
 export function buildAlertPayload(message: ApnsAlertMessage): Record<string, unknown> {
   const priority = message.priority ?? "normal";

@@ -48,9 +48,11 @@ git diff --stat main...upstream/main         # file-level scope
 ```
 
 Bucket every incoming commit using the README decision table: **drop** (marketing, pricing,
-auth/OAuth, billing, EAS/Expo-push, deploy workflows, upstream identity), **take** (webhook
-pipeline, interactions, Live Activities, app UI, harkctl, docs engine, analytics), or
-**hand-merge** (env/config files, `patches/`, versions). If the batch is large, touches
+auth/OAuth, billing, EAS/Expo-push, the `apps/expo` client tree and its patches, deploy
+workflows, upstream identity), **take** (webhook pipeline, interactions, server-side Live
+Activities, harkctl, docs engine, analytics), **port-by-hand** (their client behavior — goes
+into the SwiftUI app in `apps/ios`, never as their files), or **hand-merge** (env/config files,
+`patches/`, versions). If the batch is large, touches
 migrations or `patches/`, or contains anything you cannot bucket confidently, present the
 bucketing to the user before merging; for small routine batches, proceed.
 
@@ -63,9 +65,10 @@ git merge upstream/main
 
 Conflicts are the mechanism, not a problem. Resolve by category:
 
-- **Files this fork deleted** (landing/pricing/legal pages, OAuth modules, billing, `eas.json`,
-  deploy workflows…) reappearing as modify/delete conflicts: keep them deleted (`git rm`).
-  Salvage nothing from them unless a hunk is genuinely unrelated to the deleted feature.
+- **Files this fork deleted** (landing/pricing/legal pages, OAuth modules, billing, deploy
+  workflows, and upstream's entire `apps/expo` client tree with its `patches/`) reappearing as
+  modify/delete or add conflicts: keep them deleted (`git rm`). Client behavior worth having is
+  ported by hand into `apps/ios` instead — file a follow-up rather than blocking the sync.
 - **Keep-ours files** (`auth.ts`, admin seeding, `env.ts`, push transport in `push.ts`/`apns.ts`
   alert path, contracts device schemas, identity/config, README/compose/`.env.example`): take
   ours, then port any genuinely new, contract-compatible logic from theirs by hand.
@@ -73,12 +76,11 @@ Conflicts are the mechanism, not a problem. Resolve by category:
   `getBilling`/allowance/402/plan gates, device fan-out never sliced or capped, `device.token`
   is the raw APNs token, alert payloads built by `buildAlertPayload` (data duplicated under
   `body` and at top level), docs carry no Pro/pricing copy, no upstream identity strings.
-- **`patches/*`**: highest-risk area. This fork's expo-widgets patch carries a
-  `hark.abdeen.dev` respond URL inside one `+` line, and hunk line counts must not change. If
-  upstream regenerated a patch or bumped the patched package's version (patch filename changes),
-  take their patch, re-apply the fork's line(s) inside it, and update
-  `pnpm-workspace.yaml` `patchedDependencies` to match. After install, verify the patched
-  source in `node_modules` actually contains the fork's URL.
+- **`patches/*`**: this fork carries patches only for packages the server uses (currently
+  `@better-auth__core`). Upstream patches for client packages arrive with `apps/expo` and are
+  dropped with it. If upstream bumps a server-side patched package's version, re-apply the
+  fork's patch content against the new version and update `pnpm-workspace.yaml`
+  `patchedDependencies` to match; after install, verify the patched source in `node_modules`.
 - **`pnpm-lock.yaml`**: never hand-merge. Take either side to clear the conflict, then
   regenerate with `corepack pnpm install` and commit the result.
 - **Drizzle migrations**: keep every migration file from both sides; ours are `0018_*`/`0019_*`.
@@ -93,12 +95,12 @@ Finish the merge with a single merge commit.
 ### 3. Audit gate
 
 Run the tripwire greps from the README's Fork contract section and compare against its list of
-permitted exceptions (negative test fixtures and the legacy SecureStore cleanup constant). Then
-spot-check the invariants directly — these paths must not exist:
+permitted exceptions (negative test fixtures and the docs attribution banner). Then spot-check
+the invariants directly — these paths must not exist:
 `autumn.config.ts`, `apps/website/src/server/lib/billing.ts`,
 `apps/website/src/server/routes/billing.ts`, `apps/website/src/server/lib/apple.ts`,
-`apps/website/src/server/routes/apple-auth.ts`, `apps/expo/src/lib/apple-auth.ts`,
-`apps/expo/eas.json`, `.github/workflows/`.
+`apps/website/src/server/routes/apple-auth.ts`, `apps/expo/` (the entire tree),
+`patches/expo-widgets*`, `.github/workflows/`.
 
 ### 4. Verification gate
 
@@ -109,8 +111,12 @@ COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm install
 corepack pnpm -r typecheck
 corepack pnpm -r test
 corepack pnpm -r build
-cd apps/expo && npx --no-install expo export --platform ios --output-dir "$TMPDIR/hark-export"
 ```
+
+These gates do not cover the iOS app. If the sync changed anything the app consumes —
+`packages/contracts` DTO shapes, push payload structure, or API routes — the Swift mirror in
+`apps/ios/Shared/HarkModels.swift` must be updated to match, and only an Xcode build by the
+owner verifies it.
 
 Then a boot smoke test against a fresh database (the server resolves `./drizzle` from its
 working directory — run it from `apps/website`; the build step above produced
@@ -151,6 +157,7 @@ cherry-picked (exception path), close the reverse PR manually with a comment lin
 ### 6. Report
 
 Tell the user: which commits came in, what was dropped and why, which deltas were re-applied,
-verification evidence, and anything deferred or flagged. If upstream bumped the Expo SDK,
-React Native, or anything under `patches/`, explicitly ask the user to build once from Xcode —
-agents cannot verify native builds here.
+which client behaviors were flagged for a hand-port into `apps/ios`, verification evidence, and
+anything deferred. If the sync touched `packages/contracts`, push payloads, or anything under
+`patches/`, explicitly ask the user to build once from Xcode — agents cannot verify native
+builds here.

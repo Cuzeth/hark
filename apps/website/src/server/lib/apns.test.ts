@@ -134,7 +134,7 @@ describe("APNs provider authentication", () => {
 });
 
 describe("Live Activity APNs payloads", () => {
-  it("builds the expo-widgets start content state exactly", () => {
+  it("builds the widget start content state exactly", () => {
     const payload = buildLiveActivityPayload({
       event: "start",
       props,

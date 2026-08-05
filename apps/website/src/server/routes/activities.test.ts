@@ -245,7 +245,7 @@ describe("Live Activity agent routes", () => {
     expect((await agent(`/${body.activity.id}`, OTHER_SECRET)).status).toBe(404);
   });
 
-  it("starts with exact expo-widgets content and is idempotent", async () => {
+  it("starts with exact widget content state and is idempotent", async () => {
     const first = await start(
       {
         title: "Release",

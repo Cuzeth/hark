@@ -120,17 +120,18 @@ prompts, file contents, and absolute paths are not sent to Hark.
 
 ## iOS app
 
-The app in [`apps/expo`](./apps/expo) is not on the App Store — build and install it yourself under
-bundle id `dev.abdeen.hark`. Generate the native project with `npx expo prebuild -p ios`, then open
-`apps/expo/ios/Hark.xcworkspace` in Xcode and run it on your iPhone. No Expo or EAS account is
-needed.
+The app in [`apps/ios`](./apps/ios) is a native SwiftUI app (minimum iOS 18.6) and is not on the
+App Store — open `apps/ios/Hark.xcodeproj` in Xcode and run it on your iPhone under bundle id
+`dev.abdeen.hark`. Four targets: the `Hark` app, the `HarkWidgets` extension that renders Live
+Activities, the `HarkNotificationService` extension that rewrites pushes into communication
+notifications, and `HarkTests`.
 
-- Set `APPLE_TEAM_ID` to your own Apple Developer team.
-- Point `EXPO_PUBLIC_API_URL` at this instance, or at your machine's LAN IP in development so a
-  physical iPhone can reach the dev server.
+- Sign the app and both extensions with your own Apple Developer team.
+- The server URL is baked in through the `HARK_API_URL` build setting (default
+  `https://hark.abdeen.dev`); the `hark.apiURL` UserDefaults key overrides it for debugging.
 - The APNs key the server uses must belong to the same team, and `APNS_BUNDLE_ID` must match.
-- Keep `APNS_ENVIRONMENT` and `EXPO_PUBLIC_APNS_ENVIRONMENT` on `sandbox` for development builds and
-  `production` for release builds.
+- Debug builds register `sandbox` APNs tokens and Release builds `production` — keep the server's
+  `APNS_ENVIRONMENT` matched to the build you are testing.
 
 ## Fork contract — read before merging upstream
 
@@ -151,28 +152,28 @@ intact:
    unconditional: `deviceIds` routing, interactive responses, Live Activities, unlimited devices,
    no notification quotas, no 402 responses. Rate limits are single-tier env values
    (`SERVICE_RATE_LIMIT_PER_MINUTE`, `ACCOUNT_RATE_LIMIT_PER_MINUTE`).
-3. **Direct APNs only — no Expo cloud.** Alerts go server → Apple over HTTP/2 with this instance's
-   own `.p8` key (`sendAlertPush` in [apns.ts](apps/website/src/server/lib/apns.ts));
-   `expo-server-sdk`, `EXPO_ACCESS_TOKEN`, EAS (`eas.json`, `extra.eas`, `EAS_PROJECT_ID`), and
-   Expo push tokens are all removed. The device identity is the raw APNs device token
-   (`device.token`, unique — migration 0019); the app registers `getDevicePushTokenAsync()`
-   output. Alert payloads carry the data object twice: under `body` (what expo-notifications
-   surfaces as `content.data`) and at the top level (what
-   [NotificationService.swift](apps/expo/targets/notification-service/NotificationService.swift)
-   reads). Keep both slots identical.
+3. **Direct APNs only — no push relay.** Alerts go server → Apple over HTTP/2 with this instance's
+   own `.p8` key (`sendAlertPush` in [apns.ts](apps/website/src/server/lib/apns.ts)); upstream's
+   `expo-server-sdk`, `EXPO_ACCESS_TOKEN`, EAS config, and Expo push tokens must never merge in.
+   The device identity is the raw APNs device token (`device.token`, unique — migration 0019) that
+   the app registers from `didRegisterForRemoteNotifications`. Alert payloads carry the data
+   object twice: under `body` and at the top level; the app and
+   [NotificationService.swift](apps/ios/HarkNotificationService/NotificationService.swift) accept
+   either slot. Keep both slots identical.
 4. **This owner's identity.** Bundle id `dev.abdeen.hark` (widgets `dev.abdeen.hark.widgets`,
-   app group `group.dev.abdeen.hark`), public URL `hark.abdeen.dev`, team id only ever from
-   `APPLE_TEAM_ID` env. No marketing landing page (the root route is the sign-in form), no
+   notification service `dev.abdeen.hark.notification-service`), public URL `hark.abdeen.dev`,
+   team id set only in Xcode signing. No marketing landing page (the root route is the sign-in form), no
    pricing/legal pages, no SEO/sitemap (robots disallows all), neutral welcome pushes, no upstream
    deploy workflows under `.github/`, and no upstream identifiers anywhere (their bundle id, domain,
    Apple team `9G68SMNHEU`, EAS project id, TestFlight links, or personal avatars/handles).
 
 Areas intentionally unchanged from upstream, where their improvements should merge cleanly: the
-webhook pipeline and event/delivery tracking, interactions (approvals/replies), Live Activities
-(including the `patches/expo-widgets` Swift injection — mind that one `+` line carries this fork's
-respond URL, and patch line counts must not change), the iOS app UI, `harkctl` and the
-device-authorization flow, the docs engine, the local-only SQLite analytics (minus billing events),
-and the Docker/compose deployment.
+webhook pipeline and event/delivery tracking, interactions (approvals/replies), the server side of
+Live Activities, `harkctl` and the device-authorization flow, the docs engine, the local-only
+SQLite analytics (minus billing events), and the Docker/compose deployment. The iOS client is this
+fork's own native SwiftUI app in [`apps/ios`](./apps/ios); upstream's client tree (`apps/expo` and
+any client-package patches) is dropped wholesale on merge, and client-visible behavior changes
+from upstream are ported into the Swift app by hand.
 
 ### Merge procedure
 
@@ -182,19 +183,19 @@ execute. Decision rules while resolving conflicts:
 
 | Upstream change touches | Resolution |
 | --- | --- |
-| Auth, sign-in/up, account deletion, OAuth, billing, plans, quotas, pricing/legal/marketing pages, SEO, EAS/Expo push, deploy workflows | Keep ours / drop theirs entirely |
-| Webhook routes, interactions, Live Activities, widgets patch, app UI, harkctl, docs content, analytics | Take theirs, then re-apply this fork's deltas: no `getBilling`/allowance/402/plan gates, device fan-out never sliced, `device.token` is the APNs token, alert payloads built by `buildAlertPayload`, docs carry no Pro/pricing copy |
-| Env/config files (`env.ts`, `.env.example`, `compose.yaml`, `app.config.ts`) | Merge by hand against the contract above; never reintroduce removed vars |
+| Auth, sign-in/up, account deletion, OAuth, billing, plans, quotas, pricing/legal/marketing pages, SEO, EAS/Expo push, the `apps/expo` client tree and its patches, deploy workflows | Keep ours / drop theirs entirely |
+| Webhook routes, interactions, server-side Live Activities, harkctl, docs content, analytics | Take theirs, then re-apply this fork's deltas: no `getBilling`/allowance/402/plan gates, device fan-out never sliced, `device.token` is the APNs token, alert payloads built by `buildAlertPayload`, docs carry no Pro/pricing copy |
+| Their client behavior (notification handling, Live Activity layouts, inbox flows) | Port the behavior by hand into the SwiftUI app in `apps/ios`; never take their client files |
+| Env/config files (`env.ts`, `.env.example`, `compose.yaml`) | Merge by hand against the contract above; never reintroduce removed vars |
 
 After any merge, grep for these strings: `autumn`, `pro_monthly`, `Hark Pro`, `GOOGLE_CLIENT`,
 `APPLE_SIGN_IN`, `expo-server-sdk`, `ExponentPushToken`, `expoPushToken`, `EXPO_ACCESS_TOKEN`,
 `EAS_PROJECT_ID`, `deleteUser`, `ceo.ryan.hark`, `hark.ryan.ceo`, `R44VC0RP`, `9G68SMNHEU`,
 `twimg`. Outside this README and `pnpm-lock.yaml`, the only acceptable hits are negative test
 fixtures that assert the string is rejected or absent (currently in `devices.test.ts`,
-`docs.test.ts`, and the contracts tests), the delete-only `LEGACY_EXPO_TOKEN_KEY` SecureStore
-cleanup constant in the app, and the deliberate "this instance is a private fork" attribution
-banner in `Docs.tsx` that links to the original `R44VC0RP/hark` project. Anything else is
-upstream leakage — remove it. Then run the full
+`docs.test.ts`, and the contracts tests) and the deliberate "this instance is a private fork"
+attribution banner in `Docs.tsx` that links to the original `R44VC0RP/hark` project. Anything
+else is upstream leakage — remove it. Then run the full
 verification gate in [SYNCING.md](./SYNCING.md) before landing anything.
 
 ## License
