@@ -657,6 +657,7 @@
 				INFOPLIST_KEY_CFBundleURLTypes = "{CFBundleTypeRole=Editor;CFBundleURLSchemes=(hark);}";
 				INFOPLIST_KEY_HARK_API_URL = "$(HARK_API_URL)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hark connects to your private server on the local network.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
@@ -704,6 +705,7 @@
 				INFOPLIST_KEY_CFBundleURLTypes = "{CFBundleTypeRole=Editor;CFBundleURLSchemes=(hark);}";
 				INFOPLIST_KEY_HARK_API_URL = "$(HARK_API_URL)";
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Hark connects to your private server on the local network.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_NSSupportsLiveActivitiesFrequentUpdates = YES;
