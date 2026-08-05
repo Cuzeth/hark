@@ -154,6 +154,10 @@ final class AppModel: ObservableObject {
             feed = page.items
             feedTotal = page.total
             inboxError = nil
+            LiveActivityCoordinator.shared.reconcile(
+                activeServerIDs: Set(active.map(\.id)),
+                pendingInteractionIDs: Set(pending.map(\.id))
+            )
             try? await UNUserNotificationCenter.current().setBadgeCount(pending.count)
         } catch let error as APIError where error.status == 401 {
             await forceSignedOut()

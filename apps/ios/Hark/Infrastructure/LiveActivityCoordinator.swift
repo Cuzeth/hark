@@ -10,7 +10,12 @@ final class LiveActivityCoordinator {
     private var rootTasks: [Task<Void, Never>] = []
     private var tokenTasks: [String: Task<Void, Never>] = [:]
     private var uploaded: [String: String] = [:]
+    private var firstSeen: [String: Date] = [:]
     private var started = false
+
+    /// A server list can race a start push that already put the activity on screen,
+    /// so an activity is only reconciled once it has been around this long.
+    private let reconcileGrace: TimeInterval = 60
 
     init(api: APIClient, keychain: KeychainStore = KeychainStore()) {
         self.api = api
@@ -54,7 +59,49 @@ final class LiveActivityCoordinator {
         }
     }
 
+    /// Ends Live Activities the server no longer lists as active. An APNs end push can
+    /// be lost — the server sends it before the device has registered a per-activity
+    /// update token — which otherwise strands the card on the Lock Screen until it
+    /// goes stale hours later.
+    func reconcile(activeServerIDs: Set<String>, pendingInteractionIDs: Set<String>) {
+        let live = Activity<LiveActivityAttributes>.activities
+        let localIDs = Set(live.map(\.id))
+        for id in tokenTasks.keys.filter({ !localIDs.contains($0) }) {
+            tokenTasks.removeValue(forKey: id)?.cancel()
+        }
+        uploaded = uploaded.filter { localIDs.contains($0.key) }
+        firstSeen = firstSeen.filter { localIDs.contains($0.key) }
+
+        let now = Date()
+        for activity in live {
+            guard activity.activityState == .active || activity.activityState == .stale else { continue }
+            let props = activity.content.state.decodedProps
+            // A failed decode yields the placeholder, whose id matches nothing server-side.
+            guard props.activityId != LiveActivityProps.placeholder.activityId else { continue }
+            guard let seen = firstSeen[activity.id] else {
+                firstSeen[activity.id] = now
+                continue
+            }
+            guard now.timeIntervalSince(seen) >= reconcileGrace else { continue }
+            if activeServerIDs.contains(props.activityId) { continue }
+            // Interaction-backed activities are filtered out of the active list by the
+            // server, so they reconcile against the pending interactions instead.
+            if let interactionID = activity.attributes.harkInteractionId ?? props.interaction?.id,
+               pendingInteractionIDs.contains(interactionID) { continue }
+            endLocally(activity)
+        }
+    }
+
+    private func endLocally(_ activity: Activity<LiveActivityAttributes>) {
+        tokenTasks.removeValue(forKey: activity.id)?.cancel()
+        uploaded[activity.id] = nil
+        firstSeen[activity.id] = nil
+        let content = ActivityContent(state: activity.content.state, staleDate: nil)
+        Task { await activity.end(content, dismissalPolicy: .immediate) }
+    }
+
     private func observe(_ activity: Activity<LiveActivityAttributes>) {
+        if firstSeen[activity.id] == nil { firstSeen[activity.id] = Date() }
         guard tokenTasks[activity.id] == nil else { return }
         tokenTasks[activity.id] = Task { [weak self] in
             if let token = activity.pushToken { await self?.uploadUpdateToken(token, for: activity) }
