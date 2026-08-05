@@ -12,11 +12,8 @@ enum HarkConstants {
     static let replyAction = "HARK_REPLY"
     static let yesAction = "HARK_YES"
     static let noAction = "HARK_NO"
-
-    static let appGroup = "group.dev.abdeen.hark"
 }
 
-struct EmptyResponse: Decodable {}
 struct OkayResponse: Decodable { let ok: Bool }
 
 struct SessionEnvelope: Decodable {

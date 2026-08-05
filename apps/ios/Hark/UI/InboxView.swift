@@ -29,8 +29,8 @@ struct InboxView: View {
                             ProgressView().tint(HarkTheme.accent).frame(maxWidth: .infinity).padding(.vertical, 30)
                         } else if model.feed.isEmpty {
                             Text(model.inboxError == nil ? "No activity yet." : "Couldn’t load activity. Pull to refresh.")
-                                .font(.system(size: 14)).foregroundStyle(HarkTheme.muted)
-                                .padding(.vertical, 28)
+                                .font(.system(size: 13)).foregroundStyle(HarkTheme.soft)
+                                .padding(.vertical, 24)
                         }
                         ForEach(model.feed) { item in activityRow(item) }
                         if pageCount > 1 { pager(proxy: proxy) }
@@ -63,20 +63,20 @@ struct InboxView: View {
             }
             .accessibilityLabel("Settings")
         }
-        .frame(minHeight: 64)
+        .frame(minHeight: 60)
     }
 
     private var filterPicker: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 ForEach([
                     ("all", "All"), ("notification", "Notifications"),
                     ("live_activity", "Live Activities"), ("response", "Responses"),
                 ], id: \.0) { value, label in
                     Button(label) { Task { await model.setFeed(filter: value) } }
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(model.feedFilter == value ? HarkTheme.accent : HarkTheme.muted)
-                        .padding(.horizontal, 14).frame(height: 34)
+                        .padding(.horizontal, 13).frame(height: 34)
                         .background(model.feedFilter == value ? HarkTheme.accentSoft : Color.clear, in: Capsule())
                 }
             }
@@ -85,20 +85,21 @@ struct InboxView: View {
     }
 
     @ViewBuilder private func pendingRow(_ item: InboxInteractionDTO) -> some View {
+        let responding = respondingID == item.id
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(item.sourceName).font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                        Text(item.sourceName).font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
                         Spacer()
-                        Text(item.createdAt.harkRelativeDate).font(.caption).foregroundStyle(HarkTheme.soft)
+                        Text(item.createdAt.harkRelativeDate).font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
                     }
-                    Text(item.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                    Text(item.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
                     Text(item.prompt).font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(expiryLabel(item.expiresAt, relativeTo: context.date))
-                            .font(.caption)
+                            .font(.system(size: 11))
                             .foregroundStyle(HarkTheme.soft)
                     }
                 }
@@ -106,30 +107,31 @@ struct InboxView: View {
             if item.kind == "approval" || item.kind == "yes_no" {
                 let primary = item.kind == "approval" ? "approve" : "yes"
                 let secondary = item.kind == "approval" ? "deny" : "no"
+                let primaryLabel = actionLabel(item.primaryLabel, fallback: item.kind == "approval" ? "Approve" : "Yes")
                 HStack {
                     Button(actionLabel(item.secondaryLabel, fallback: item.kind == "approval" ? "Deny" : "No")) {
                         resolve(item, action: secondary)
                     }
                         .buttonStyle(HarkSecondaryButton())
-                    Button(actionLabel(item.primaryLabel, fallback: item.kind == "approval" ? "Approve" : "Yes")) {
+                    Button(responding ? "Sending…" : primaryLabel) {
                         resolve(item, action: primary)
                     }
                         .buttonStyle(HarkPrimaryButton())
                 }
-                .disabled(respondingID != nil)
+                .disabled(responding)
             } else if replyID == item.id {
                 TextEditor(text: $reply)
-                    .font(.system(size: 15))
-                    .frame(minHeight: 88)
+                    .font(.system(size: 14))
+                    .frame(minHeight: 82)
                     .padding(8)
                     .scrollContentBackground(.hidden)
                     .background(HarkTheme.surface, in: RoundedRectangle(cornerRadius: 12))
                     .overlay(RoundedRectangle(cornerRadius: 12).stroke(HarkTheme.line, lineWidth: 0.5))
                 HStack {
                     Button("Cancel") { replyID = nil; reply = "" }.buttonStyle(HarkSecondaryButton())
-                    Button("Send") { resolve(item, action: "reply", response: reply) }
+                    Button(responding ? "Sending…" : "Send") { resolve(item, action: "reply", response: reply) }
                         .buttonStyle(HarkPrimaryButton())
-                        .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || respondingID != nil)
+                        .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || responding)
                 }
             } else {
                 Button { replyID = item.id } label: {
@@ -139,7 +141,7 @@ struct InboxView: View {
                     }
                 }
                 .buttonStyle(HarkReplyButton())
-                .disabled(respondingID != nil)
+                .disabled(responding)
             }
         }
         .padding(.vertical, 18)
@@ -149,9 +151,9 @@ struct InboxView: View {
     private func activeRow(_ item: InboxLiveActivityDTO) -> some View {
         HStack(alignment: .top, spacing: 12) {
             HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(item.props.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                    Text(item.sourceName).font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
                     Spacer()
                     if let progress = item.props.progress {
                         Text("\(Int((progress * 100).rounded()))%")
@@ -159,34 +161,36 @@ struct InboxView: View {
                             .foregroundStyle(HarkTheme.accent)
                     }
                 }
-                Text(item.props.detail ?? item.props.status).font(.system(size: 14)).foregroundStyle(HarkTheme.muted)
+                Text(item.props.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                Text(item.props.detail ?? item.props.status)
+                    .font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineLimit(1)
                 if let progress = item.props.progress {
                     ProgressView(value: progress).tint(HarkTheme.accent)
                 }
             }
         }
-        .padding(.vertical, 18)
+        .padding(.vertical, 14)
         .overlay(alignment: .top) { Rectangle().fill(HarkTheme.line).frame(height: 0.5) }
     }
 
     private func activityRow(_ item: InboxActivityDTO) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 10) {
+            HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName, size: 30)
+            VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text("\(item.sourceName) · \(kindLabel(item.kind))")
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                        .font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
                         .lineLimit(1)
                     Spacer()
-                    Text(item.createdAt.harkRelativeDate).font(.caption).foregroundStyle(HarkTheme.soft)
+                    Text(item.createdAt.harkRelativeDate).font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
                 }
-                Text(item.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
-                if let detail = item.detail { Text(detail).font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineLimit(4) }
-                if let result = item.result { Text(result).font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.accent) }
+                Text(item.title).font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.ink)
+                if let detail = item.detail { Text(detail).font(.system(size: 12)).foregroundStyle(HarkTheme.muted).lineLimit(4) }
+                if let result = item.result { Text(result).font(.system(size: 11, weight: .medium)).foregroundStyle(HarkTheme.accent) }
             }
             if deletingID == item.id { ProgressView().controlSize(.small) }
         }
-        .padding(.vertical, 16)
+        .padding(.vertical, 10)
         .overlay(alignment: .top) { Rectangle().fill(HarkTheme.line).frame(height: 0.5) }
         .contextMenu {
             if let string = item.url, let url = URL(string: string) {
@@ -206,7 +210,7 @@ struct InboxView: View {
             Spacer()
             let start = model.feedPage * 20 + 1
             let end = min((model.feedPage + 1) * 20, model.feedTotal)
-            Text("\(start)–\(end) of \(model.feedTotal)").font(.footnote).foregroundStyle(HarkTheme.muted)
+            Text("\(start)–\(end) of \(model.feedTotal)").font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
             Spacer()
             Button { Task { await model.setFeed(page: model.feedPage + 1); proxy.scrollTo("activity", anchor: .top) } } label: {
                 Image(systemName: "chevron.right").frame(width: 40, height: 40)
@@ -217,6 +221,7 @@ struct InboxView: View {
     }
 
     private func resolve(_ item: InboxInteractionDTO, action: String, response: String? = nil) {
+        guard respondingID == nil else { return }
         respondingID = item.id
         Task {
             await model.respond(to: item, action: action, response: response)
@@ -264,7 +269,7 @@ private struct SectionHeading: View {
     var count: Int?
     var first = false
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 7) {
             Text(title.uppercased()).font(.system(size: 12, weight: .semibold)).tracking(0.55)
             if let count {
                 Text("\(count)").font(.system(size: 11, weight: .semibold)).foregroundStyle(HarkTheme.accent)
@@ -272,7 +277,7 @@ private struct SectionHeading: View {
             }
         }
         .foregroundStyle(HarkTheme.muted)
-        .padding(.top, first ? 28 : 34).padding(.bottom, 8)
+        .padding(.top, first ? 26 : 17).padding(.bottom, 6)
     }
 }
 

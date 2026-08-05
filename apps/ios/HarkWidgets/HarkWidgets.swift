@@ -19,13 +19,7 @@ struct HarkAgentActivityWidget: Widget {
             let presentation = HarkActivityPresentation(context: context)
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 7) {
-                        Image(systemName: presentation.interactionPending ? "sparkles" : presentation.symbol)
-                            .foregroundStyle(presentation.accent)
-                        Text(presentation.interactionPending ? presentation.status : presentation.title)
-                            .font(.headline).lineLimit(1)
-                    }
-                    .padding(.leading, 4)
+                    HarkExpandedLeading(p: presentation)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     if presentation.style == "steps" {
@@ -41,7 +35,7 @@ struct HarkAgentActivityWidget: Widget {
                     }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HarkExpandedBottom(context: context, presentation: presentation)
+                    HarkExpandedBottom(context: context, p: presentation)
                 }
             } compactLeading: {
                 Image(systemName: presentation.symbol).foregroundStyle(presentation.accent)
@@ -82,11 +76,22 @@ private struct HarkActivityPresentation {
 
     var interactionPending: Bool { props.interaction?.state == "pending" }
 
-    /// Interactive layouts show the prompt while a response is pending, then
-    /// fall back to the regular progress copy once it resolves.
+    var isInteractive: Bool { ["approval", "shell", "verdict", "signal"].contains(style) }
+
+    /// The approval banner and the Dynamic Island bottom swap the prompt out for
+    /// the regular progress copy once the response resolves.
     var promptText: String {
         guard let interaction = props.interaction else { return detail ?? status }
         return interaction.state == "pending" ? interaction.prompt : (detail ?? status)
+    }
+
+    /// shell/verdict/signal keep the prompt on screen for the life of the
+    /// interaction, resolved or not.
+    var persistentPromptText: String { props.interaction?.prompt ?? detail ?? status }
+
+    var a11ySummary: String {
+        guard let percentage = percentage else { return "\(title), \(status)" }
+        return "\(title), \(status), \(percentage)"
     }
 
     var background: Color {
@@ -146,29 +151,22 @@ private struct HarkLockScreenView: View {
         .foregroundStyle(HarkWidgetColor.primary)
         .padding(.horizontal, 16).padding(.vertical, 14)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel(p.a11ySummary)
     }
 
     private var ring: some View {
         HStack(spacing: 13) {
-            ZStack {
-                if let progress = p.props.progress {
-                    Circle().stroke(Color.white.opacity(0.12), lineWidth: 7)
-                    Circle().trim(from: 0, to: max(0.02, progress))
-                        .stroke(p.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round)).rotationEffect(.degrees(-90))
-                    if let percentage = p.percentage {
-                        Text(percentage).font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(p.accent)
-                    }
-                } else {
-                    Image(systemName: p.symbol).font(.system(size: 30)).foregroundStyle(p.accent)
-                }
-            }.frame(width: 58, height: 58)
+            HarkRingGauge(p: p)
             VStack(alignment: .leading, spacing: 2) {
                 Text(p.title).font(.headline).fontWeight(.semibold).lineLimit(1)
                 Text(p.status).font(.subheadline).fontWeight(.medium).foregroundStyle(p.accent).lineLimit(1)
                 if let detail = p.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1) }
             }
             Spacer()
-        }.padding(.horizontal, 16).padding(.vertical, 14).foregroundStyle(HarkWidgetColor.primary)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 14).foregroundStyle(HarkWidgetColor.primary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(p.a11ySummary)
     }
 
     private var hero: some View {
@@ -186,7 +184,10 @@ private struct HarkLockScreenView: View {
             .padding(.top, 13).padding(.horizontal, 16).padding(.bottom, 12)
             // The progress bar bleeds to the banner edges, unlike every other style.
             if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent) }
-        }.foregroundStyle(HarkWidgetColor.primary)
+        }
+        .foregroundStyle(HarkWidgetColor.primary)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(p.a11ySummary)
     }
 
     private var terminal: some View {
@@ -205,7 +206,10 @@ private struct HarkLockScreenView: View {
             if let progress = p.props.progress {
                 HStack { ProgressView(value: progress).tint(p.accent); Text(p.percentage ?? "").font(.system(size: 11, design: .monospaced)).foregroundStyle(p.accent) }
             }
-        }.foregroundStyle(HarkWidgetColor.primary).padding(.horizontal, 16).padding(.vertical, 13)
+        }
+        .foregroundStyle(HarkWidgetColor.primary).padding(.horizontal, 16).padding(.vertical, 13)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(p.a11ySummary)
     }
 
     private var steps: some View {
@@ -216,15 +220,12 @@ private struct HarkLockScreenView: View {
                 Spacer()
                 Text(p.status).font(.subheadline.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
             }
-            if let progress = p.props.progress {
-                HStack(spacing: 5) {
-                    ForEach(1...5, id: \.self) { index in
-                        Capsule().fill(progress + 0.0000001 >= Double(index) / 5 ? p.accent : Color.white.opacity(0.16)).frame(height: 5)
-                    }
-                }
-            }
+            if let progress = p.props.progress { HarkStepsPips(progress: progress, accent: p.accent) }
             if let detail = p.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2) }
-        }.foregroundStyle(HarkWidgetColor.primary).padding(.horizontal, 16).padding(.vertical, 14)
+        }
+        .foregroundStyle(HarkWidgetColor.primary).padding(.horizontal, 16).padding(.vertical, 14)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(p.a11ySummary)
     }
 
     private func interactive(theme: InteractiveTheme) -> some View {
@@ -241,13 +242,13 @@ private struct HarkLockScreenView: View {
             case .shell:
                 HStack(alignment: .top, spacing: 7) {
                     Text("$").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Color(hex: "#3FDD78"))
-                    Text(p.promptText).font(.system(size: 13, design: .monospaced)).foregroundStyle(Color(hex: "#D7E4DA")).lineLimit(2)
+                    Text(p.persistentPromptText).font(.system(size: 13, design: .monospaced)).foregroundStyle(Color(hex: "#D7E4DA")).lineLimit(2)
                     Spacer()
                 }
                 Text("# reply required to continue").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color(hex: "#4E5C52")).lineLimit(1)
             case .verdict:
                 Text("“Hark” requests approval").font(.footnote.weight(.semibold)).foregroundStyle(.white)
-                Text(p.promptText).font(.subheadline).foregroundStyle(Color(hex: "#EBEBF5")).lineLimit(2)
+                Text(p.persistentPromptText).font(.subheadline).foregroundStyle(Color(hex: "#EBEBF5")).lineLimit(2)
                 Divider()
             case .signal:
                 HStack(spacing: 7) {
@@ -255,7 +256,7 @@ private struct HarkLockScreenView: View {
                     Text("Guarded action").font(.caption.weight(.semibold)).kerning(0.6).foregroundStyle(Color(hex: "#7D8087"))
                     Spacer()
                 }
-                Text(p.promptText).font(.subheadline.weight(.medium)).foregroundStyle(Color(hex: "#F2F3F5")).lineLimit(2)
+                Text(p.persistentPromptText).font(.subheadline.weight(.medium)).foregroundStyle(Color(hex: "#F2F3F5")).lineLimit(2)
             }
             HarkInteractionButtons(context: context, presentation: p, theme: theme)
         }
@@ -265,20 +266,140 @@ private struct HarkLockScreenView: View {
     }
 }
 
+private struct HarkRingGauge: View {
+    let p: HarkActivityPresentation
+
+    var body: some View {
+        ZStack {
+            if let progress = p.props.progress {
+                Circle().stroke(Color.white.opacity(0.12), lineWidth: 7)
+                Circle().trim(from: 0, to: max(0.02, progress))
+                    .stroke(p.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round)).rotationEffect(.degrees(-90))
+                if let percentage = p.percentage {
+                    Text(percentage).font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(p.accent)
+                }
+            } else {
+                Image(systemName: p.symbol).font(.system(size: 30)).foregroundStyle(p.accent)
+            }
+        }
+        .frame(width: 58, height: 58)
+    }
+}
+
+private struct HarkStepsPips: View {
+    let progress: Double
+    let accent: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(1...5, id: \.self) { index in
+                // The epsilon keeps a reported 0.4 from falling short of the second pip.
+                Capsule().fill(progress + 0.0000001 >= Double(index) / 5 ? accent : Color.white.opacity(0.16)).frame(height: 5)
+            }
+        }
+    }
+}
+
+private struct HarkExpandedLeading: View {
+    let p: HarkActivityPresentation
+
+    @ViewBuilder var body: some View {
+        if p.isInteractive {
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles").foregroundStyle(p.accent)
+                Text(p.status).font(.headline).lineLimit(1)
+            }
+            .padding(.leading, 4)
+        } else if p.style == "hero" {
+            HStack(spacing: 7) {
+                Image(systemName: p.symbol).font(.system(size: 14)).foregroundStyle(p.accent)
+                Text(p.title.uppercased()).font(.footnote.weight(.semibold)).tracking(0.3)
+                    .foregroundStyle(HarkWidgetColor.secondary).lineLimit(1)
+            }
+            .padding(.leading, 4)
+        } else if p.style == "terminal" {
+            HStack(spacing: 7) {
+                Image(systemName: p.symbol).foregroundStyle(p.accent)
+                Text(p.title).font(.system(size: 13, weight: .semibold, design: .monospaced)).lineLimit(1)
+            }
+            .padding(.leading, 4)
+        } else {
+            HStack(spacing: 7) {
+                Image(systemName: p.symbol).foregroundStyle(p.accent)
+                Text(p.title).font(.headline).lineLimit(1)
+            }
+            .padding(.leading, 4)
+        }
+    }
+}
+
 private struct HarkExpandedBottom: View {
     let context: ActivityViewContext<LiveActivityAttributes>
-    let presentation: HarkActivityPresentation
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if presentation.props.interaction != nil {
-                Text(presentation.promptText).font(.subheadline).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
-                HarkInteractionButtons(context: context, presentation: presentation, theme: .approval)
-            } else {
-                Text(presentation.status).font(.subheadline.weight(.semibold)).foregroundStyle(presentation.accent)
-                if let detail = presentation.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2) }
-                if let progress = presentation.props.progress { ProgressView(value: progress).tint(presentation.accent) }
+    let p: HarkActivityPresentation
+
+    @ViewBuilder var body: some View {
+        if p.props.interaction != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(p.promptText).font(.subheadline).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
+                HarkInteractionButtons(context: context, presentation: p, theme: .approval)
             }
-        }.padding(.horizontal, 4).padding(.vertical, 2)
+            .padding(.horizontal, 4).padding(.vertical, 2)
+        } else {
+            progressBody
+                .padding(.horizontal, 4).padding(.vertical, 2)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(p.a11ySummary)
+        }
+    }
+
+    @ViewBuilder private var progressBody: some View {
+        switch p.style {
+        case "ring":
+            HStack(spacing: 14) {
+                HarkRingGauge(p: p)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(p.status).font(.subheadline.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
+                    if let detail = p.detail {
+                        Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+        case "hero":
+            VStack(alignment: .leading, spacing: 7) {
+                Text(p.status).font(.system(size: 20, weight: .bold)).foregroundStyle(HarkWidgetColor.primary).lineLimit(1)
+                if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent) }
+            }
+        case "terminal":
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Text("❯").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(p.accent)
+                    Text(p.status.lowercased()).font(.system(size: 13, design: .monospaced))
+                        .foregroundStyle(HarkWidgetColor.primary).lineLimit(1)
+                    Spacer()
+                }
+                if let detail = p.detail {
+                    Text("# \(detail)").font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(HarkWidgetColor.secondary).lineLimit(1)
+                }
+                if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent) }
+            }
+        case "steps":
+            VStack(alignment: .leading, spacing: 8) {
+                if let progress = p.props.progress { HarkStepsPips(progress: progress, accent: p.accent) }
+                if let detail = p.detail {
+                    Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
+                }
+            }
+        default:
+            VStack(alignment: .leading, spacing: 8) {
+                Text(p.status).font(.subheadline.weight(.semibold)).foregroundStyle(p.accent)
+                if let detail = p.detail {
+                    Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
+                }
+                if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent) }
+            }
+        }
     }
 }
 
@@ -306,7 +427,7 @@ private struct HarkInteractionButtons: View {
         let text = Text(label)
             .font(theme.buttonFont)
             .foregroundStyle(prominent ? theme.primaryText : theme.secondaryText)
-            .frame(maxWidth: .infinity, minHeight: 38)
+            .frame(maxWidth: .infinity, minHeight: theme.buttonHeight)
         let intent = HarkLiveActivityResponseIntent(
             activityID: context.activityID,
             action: action,
@@ -335,6 +456,9 @@ private enum InteractiveTheme {
 
     var cornerRadius: CGFloat {
         switch self { case .shell: 4; case .verdict: 10; default: 8 }
+    }
+    var buttonHeight: CGFloat {
+        switch self { case .shell: 44; case .verdict: 48; default: 46 }
     }
     var primaryTint: Color {
         switch self {

@@ -20,11 +20,11 @@ struct SettingsView: View {
                 }.frame(minHeight: 64)
 
                 section("Device")
-                settingsRow(icon: "bell.fill", label: "Notifications", value: permissionValue, opensSettings: model.notificationStatus == .denied)
+                settingsRow(icon: "bell.fill", label: "Notifications", value: permissionValue, opensSettings: !model.notificationsGranted)
                 settingsRow(icon: "bell.badge.fill", label: "Critical alerts", value: model.criticalAlertsAllowed ? "Allowed" : "Off", opensSettings: !model.criticalAlertsAllowed)
                 Text("Critical alerts sound even when this iPhone is muted or in a Focus. They are meant for genuine emergencies only and are not a substitute for contacting local emergency services.")
                     .font(.system(size: 12)).foregroundStyle(HarkTheme.muted).lineSpacing(3).padding(.vertical, 8)
-                settingsRow(icon: "iphone", label: "This iPhone", value: model.registeredDevice == nil ? "Not registered" : "Registered")
+                settingsRow(icon: "iphone", label: "This iPhone", value: model.deviceRegistered ? "Registered" : "Not registered")
                 settingsRow(icon: "waveform.path.ecg", label: "Live Activities", value: model.registeredDevice?.liveActivitiesCapable == true ? "Available" : "Not available")
 
                 section("Account")

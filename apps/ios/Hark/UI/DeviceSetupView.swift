@@ -21,11 +21,12 @@ struct DeviceSetupView: View {
                 .frame(minHeight: 64)
 
                 Text("Two steps and this iPhone starts receiving your webhooks.")
-                    .font(.system(size: 32, weight: .semibold))
-                    .tracking(-0.64)
+                    .font(.system(size: 26, weight: .semibold))
+                    .tracking(-0.52)
                     .foregroundStyle(HarkTheme.ink)
-                    .padding(.top, 52)
-                    .padding(.bottom, 38)
+                    .frame(maxWidth: 340, alignment: .leading)
+                    .padding(.top, 18)
+                    .padding(.bottom, 10)
 
                 SetupStep(
                     number: "1",
@@ -195,16 +196,19 @@ private struct SetupStep: View {
     let action: () async -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .top, spacing: 10) {
             ZStack {
                 Circle().fill(complete ? HarkTheme.accent : HarkTheme.accentSoft)
-                Image(systemName: complete ? "checkmark" : "\(number).circle.fill")
-                    .foregroundStyle(complete ? .white : HarkTheme.accent)
-                    .font(.system(size: complete ? 14 : 22, weight: .semibold))
+                if complete {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                } else {
+                    Text(number).font(.system(size: 13, weight: .semibold)).foregroundStyle(HarkTheme.accent)
+                }
             }
-            .frame(width: 38, height: 38)
+            .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(size: 17, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(HarkTheme.ink)
                 Text(detail).font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
                 if !complete {
                     Button(button) { Task { await action() } }
@@ -217,7 +221,7 @@ private struct SetupStep: View {
                 }
             }
         }
-        .padding(.vertical, 22)
+        .padding(.vertical, 14)
         .overlay(alignment: .top) { Rectangle().fill(HarkTheme.line).frame(height: 0.5) }
     }
 }
