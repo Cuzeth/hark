@@ -149,35 +149,44 @@ private struct HarkLockScreenView: View {
     }
 
     private var ring: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 13) {
             ZStack {
-                Circle().stroke(Color.white.opacity(0.12), lineWidth: 7)
-                Circle().trim(from: 0, to: max(0.02, p.props.progress ?? 0.1))
-                    .stroke(p.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round)).rotationEffect(.degrees(-90))
-                Image(systemName: p.symbol).foregroundStyle(p.accent)
+                if let progress = p.props.progress {
+                    Circle().stroke(Color.white.opacity(0.12), lineWidth: 7)
+                    Circle().trim(from: 0, to: max(0.02, progress))
+                        .stroke(p.accent, style: StrokeStyle(lineWidth: 7, lineCap: .round)).rotationEffect(.degrees(-90))
+                    if let percentage = p.percentage {
+                        Text(percentage).font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(p.accent)
+                    }
+                } else {
+                    Image(systemName: p.symbol).font(.system(size: 30)).foregroundStyle(p.accent)
+                }
             }.frame(width: 58, height: 58)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(p.title).font(.headline).fontWeight(.semibold).lineLimit(1)
-                Text(p.status).font(.subheadline).foregroundStyle(p.accent).lineLimit(1)
-                if let detail = p.detail { Text(detail).font(.caption).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1) }
+                Text(p.status).font(.subheadline).fontWeight(.medium).foregroundStyle(p.accent).lineLimit(1)
+                if let detail = p.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1) }
             }
             Spacer()
-            if let percentage = p.percentage { Text(percentage).font(.title3.bold()).monospacedDigit().foregroundStyle(p.accent) }
         }.padding(.horizontal, 16).padding(.vertical, 14).foregroundStyle(HarkWidgetColor.primary)
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Image(systemName: p.symbol).foregroundStyle(p.accent)
-                Text(p.title.uppercased()).font(.footnote.weight(.semibold)).tracking(0.3).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1)
-                Spacer()
-                if let percentage = p.percentage { Text(percentage).font(.footnote.bold()).monospacedDigit().foregroundStyle(p.accent) }
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Image(systemName: p.symbol).font(.system(size: 15)).foregroundStyle(p.accent)
+                    Text(p.title.uppercased()).font(.footnote.weight(.semibold)).tracking(0.3).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1)
+                    Spacer()
+                    if let percentage = p.percentage { Text(percentage).font(.system(size: 13, weight: .semibold)).monospacedDigit().foregroundStyle(p.accent) }
+                }
+                Text(p.status).font(.system(size: 22, weight: .bold)).lineLimit(1)
+                if let detail = p.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1) }
             }
-            Text(p.status).font(.system(size: 22, weight: .bold)).lineLimit(1)
-            if let detail = p.detail { Text(detail).font(.footnote).foregroundStyle(HarkWidgetColor.secondary).lineLimit(1) }
-            if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent).padding(.top, 6) }
-        }.foregroundStyle(HarkWidgetColor.primary).padding(.horizontal, 16).padding(.vertical, 13)
+            .padding(.top, 13).padding(.horizontal, 16).padding(.bottom, 12)
+            // The progress bar bleeds to the banner edges, unlike every other style.
+            if let progress = p.props.progress { ProgressView(value: progress).tint(p.accent) }
+        }.foregroundStyle(HarkWidgetColor.primary)
     }
 
     private var terminal: some View {
