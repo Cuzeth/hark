@@ -16,3 +16,7 @@ data/
 apps/expo/ios/
 apps/expo/android/
 expo-env.d.ts
+
+# Xcode
+**/xcuserdata/
+*.xcuserstate
