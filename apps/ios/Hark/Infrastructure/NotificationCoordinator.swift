@@ -3,8 +3,6 @@ import UserNotifications
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUserNotificationCenterDelegate {
-    private var liveActivityCoordinator: AnyObject?
-
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
@@ -12,11 +10,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, @preconcurrency UNUser
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         Self.registerCategories(center)
-        if #available(iOS 17.2, *) {
-            let coordinator = LiveActivityCoordinator.shared
-            liveActivityCoordinator = coordinator
-            coordinator.start()
-        }
+        LiveActivityCoordinator.shared.start()
         return true
     }
 

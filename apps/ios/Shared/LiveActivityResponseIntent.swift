@@ -17,7 +17,6 @@ private final class NoRedirectSessionDelegate: NSObject, URLSessionTaskDelegate,
 /// Sends an approval directly from the Lock Screen or Dynamic Island without
 /// opening the app. The short-lived credential arrives in the start push's
 /// immutable Activity attributes, so the intent does not depend on login state.
-@available(iOS 17.0, *)
 struct HarkLiveActivityResponseIntent: LiveActivityIntent {
     static var title: LocalizedStringResource = "Respond to Hark"
     static var description = IntentDescription("Respond to an agent request from a Live Activity.")

@@ -10,8 +10,9 @@ struct HarkWidgets: WidgetBundle {
 struct HarkAgentActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: LiveActivityAttributes.self) { context in
-            HarkLockScreenView(context: context)
-                .activityBackgroundTint(Color(hex: "#0B1512"))
+            let presentation = HarkActivityPresentation(context: context)
+            HarkLockScreenView(context: context, p: presentation)
+                .activityBackgroundTint(presentation.background)
                 .activitySystemActionForegroundColor(.white)
                 .widgetURL(URL(string: "hark://inbox"))
         } dynamicIsland: { context in
@@ -19,17 +20,25 @@ struct HarkAgentActivityWidget: Widget {
             return DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
                     HStack(spacing: 7) {
-                        Image(systemName: presentation.symbol)
+                        Image(systemName: presentation.interactionPending ? "sparkles" : presentation.symbol)
                             .foregroundStyle(presentation.accent)
-                        Text(presentation.title).font(.headline).lineLimit(1)
+                        Text(presentation.interactionPending ? presentation.status : presentation.title)
+                            .font(.headline).lineLimit(1)
                     }
                     .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    Text(presentation.percentage ?? presentation.status)
-                        .font(.system(.subheadline, design: presentation.style == "terminal" ? .monospaced : .default, weight: .semibold))
-                        .monospacedDigit().foregroundStyle(presentation.accent).lineLimit(1)
-                        .padding(.trailing, 4)
+                    if presentation.style == "steps" {
+                        Text(presentation.status)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(presentation.accent).lineLimit(1)
+                            .padding(.trailing, 4)
+                    } else if let percentage = presentation.percentage {
+                        Text(percentage)
+                            .font(.system(.subheadline, design: presentation.style == "terminal" ? .monospaced : .default, weight: .semibold))
+                            .monospacedDigit().foregroundStyle(presentation.accent)
+                            .padding(.trailing, 4)
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HarkExpandedBottom(context: context, presentation: presentation)
@@ -37,9 +46,9 @@ struct HarkAgentActivityWidget: Widget {
             } compactLeading: {
                 Image(systemName: presentation.symbol).foregroundStyle(presentation.accent)
             } compactTrailing: {
-                Text(presentation.percentage ?? presentation.status)
+                Text(presentation.percentage ?? (presentation.style == "terminal" ? "❯_" : presentation.status))
                     .font(.system(size: 12, weight: .semibold, design: presentation.style == "terminal" ? .monospaced : .default))
-                    .foregroundStyle(presentation.accent).lineLimit(1)
+                    .monospacedDigit().foregroundStyle(presentation.accent).lineLimit(1)
             } minimal: {
                 Image(systemName: presentation.symbol).foregroundStyle(presentation.accent)
                     .accessibilityLabel("\(presentation.title), \(presentation.status)")
@@ -71,6 +80,24 @@ private struct HarkActivityPresentation {
         percentage = props.progress.map { "\(Int(($0 * 100).rounded()))%" }
     }
 
+    var interactionPending: Bool { props.interaction?.state == "pending" }
+
+    /// Interactive layouts show the prompt while a response is pending, then
+    /// fall back to the regular progress copy once it resolves.
+    var promptText: String {
+        guard let interaction = props.interaction else { return detail ?? status }
+        return interaction.state == "pending" ? interaction.prompt : (detail ?? status)
+    }
+
+    var background: Color {
+        switch style {
+        case "shell": Color(hex: "#0A0C0A")
+        case "signal": Color(hex: "#141518")
+        case "verdict": Color(hex: "#1C1C1E")
+        default: Color(hex: "#0B1512")
+        }
+    }
+
     private static func symbolName(_ symbol: String) -> String {
         switch symbol {
         case "code": "chevron.left.forwardslash.chevron.right"
@@ -84,7 +111,7 @@ private struct HarkActivityPresentation {
 
 private struct HarkLockScreenView: View {
     let context: ActivityViewContext<LiveActivityAttributes>
-    private var p: HarkActivityPresentation { HarkActivityPresentation(context: context) }
+    let p: HarkActivityPresentation
 
     @ViewBuilder var body: some View {
         switch p.style {
@@ -193,24 +220,39 @@ private struct HarkLockScreenView: View {
 
     private func interactive(theme: InteractiveTheme) -> some View {
         VStack(alignment: theme == .verdict ? .center : .leading, spacing: 9) {
-            if theme == .verdict {
-                Text("“Hark” requests approval").font(.footnote.weight(.semibold))
-            } else {
-                HStack {
-                    Image(systemName: theme.icon).foregroundStyle(theme.accentOverride ?? p.accent)
-                    Text(theme == .shell ? "REQUEST" : p.status).font(theme == .shell ? .system(size: 12, weight: .semibold, design: .monospaced) : .headline).lineLimit(1)
+            switch theme {
+            case .approval:
+                HStack(spacing: 8) {
+                    Image(systemName: p.interactionPending ? "sparkles" : p.symbol).foregroundStyle(p.accent)
+                    Text(p.status).font(.headline).lineLimit(1)
                     Spacer()
-                    Text(p.title).font(.caption.weight(.semibold)).foregroundStyle(theme.accentOverride ?? p.accent).lineLimit(1)
+                    Text(p.title).font(.caption.weight(.semibold)).foregroundStyle(p.accent).lineLimit(1)
                 }
+                Text(p.promptText).font(.subheadline).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
+            case .shell:
+                HStack(alignment: .top, spacing: 7) {
+                    Text("$").font(.system(size: 13, weight: .semibold, design: .monospaced)).foregroundStyle(Color(hex: "#3FDD78"))
+                    Text(p.promptText).font(.system(size: 13, design: .monospaced)).foregroundStyle(Color(hex: "#D7E4DA")).lineLimit(2)
+                    Spacer()
+                }
+                Text("# reply required to continue").font(.system(size: 11, design: .monospaced)).foregroundStyle(Color(hex: "#4E5C52")).lineLimit(1)
+            case .verdict:
+                Text("“Hark” requests approval").font(.footnote.weight(.semibold)).foregroundStyle(.white)
+                Text(p.promptText).font(.subheadline).foregroundStyle(Color(hex: "#EBEBF5")).lineLimit(2)
+                Divider()
+            case .signal:
+                HStack(spacing: 7) {
+                    Image(systemName: "shield.lefthalf.filled").font(.system(size: 13)).foregroundStyle(Color(hex: "#7D8087"))
+                    Text("Guarded action").font(.caption.weight(.semibold)).kerning(0.6).foregroundStyle(Color(hex: "#7D8087"))
+                    Spacer()
+                }
+                Text(p.promptText).font(.subheadline.weight(.medium)).foregroundStyle(Color(hex: "#F2F3F5")).lineLimit(2)
             }
-            Text(p.props.interaction?.prompt ?? p.detail ?? p.status)
-                .font(theme == .shell ? .system(size: 13, design: .monospaced) : .subheadline)
-                .foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
             HarkInteractionButtons(context: context, presentation: p, theme: theme)
         }
         .foregroundStyle(HarkWidgetColor.primary)
-        .padding(.horizontal, 16).padding(.vertical, 13)
-        .background(theme.background)
+        .padding(.horizontal, theme == .shell ? 14 : 16)
+        .padding(.vertical, theme == .approval ? 14 : 13)
     }
 }
 
@@ -219,8 +261,8 @@ private struct HarkExpandedBottom: View {
     let presentation: HarkActivityPresentation
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let interaction = presentation.props.interaction {
-                Text(interaction.prompt).font(.subheadline).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
+            if presentation.props.interaction != nil {
+                Text(presentation.promptText).font(.subheadline).foregroundStyle(HarkWidgetColor.secondary).lineLimit(2)
                 HarkInteractionButtons(context: context, presentation: presentation, theme: .approval)
             } else {
                 Text(presentation.status).font(.subheadline.weight(.semibold)).foregroundStyle(presentation.accent)
@@ -237,8 +279,7 @@ private struct HarkInteractionButtons: View {
     let theme: InteractiveTheme
 
     @ViewBuilder var body: some View {
-        if #available(iOS 17.0, *),
-           let interaction = presentation.props.interaction,
+        if let interaction = presentation.props.interaction,
            interaction.state == "pending",
            let interactionID = context.attributes.harkInteractionId,
            let credential = context.attributes.harkInteractionCredential,
@@ -246,32 +287,18 @@ private struct HarkInteractionButtons: View {
            let deliveryID = context.attributes.deliveryId,
            let registrationURL = context.attributes.tokenRegistrationURL {
             HStack(spacing: 9) {
-                responseButton(interaction.secondaryLabel, action: interaction.secondaryAction, prominent: false, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)
-                responseButton(interaction.primaryLabel, action: interaction.primaryAction, prominent: true, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)
+                responseButton(theme.buttonLabel(interaction.primaryLabel, primary: true), action: interaction.primaryAction, prominent: true, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)
+                responseButton(theme.buttonLabel(interaction.secondaryLabel, primary: false), action: interaction.secondaryAction, prominent: false, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)
             }
         }
     }
 
-    @available(iOS 17.0, *)
     @ViewBuilder private func responseButton(_ label: String, action: String, prominent: Bool, interactionID: String, credential: String, deviceID: String, deliveryID: String, registrationURL: String) -> some View {
-        if prominent {
-            Button(intent: responseIntent(action: action, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)) {
-                Text(label).font(.system(size: 13, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(theme.accentOverride ?? presentation.accent)
-        } else {
-            Button(intent: responseIntent(action: action, interactionID: interactionID, credential: credential, deviceID: deviceID, deliveryID: deliveryID, registrationURL: registrationURL)) {
-                Text(label).font(.system(size: 13, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.bordered)
-            .tint(Color.gray)
-        }
-    }
-
-    @available(iOS 17.0, *)
-    private func responseIntent(action: String, interactionID: String, credential: String, deviceID: String, deliveryID: String, registrationURL: String) -> HarkLiveActivityResponseIntent {
-        HarkLiveActivityResponseIntent(
+        let text = Text(label)
+            .font(theme.buttonFont)
+            .foregroundStyle(prominent ? theme.primaryText : theme.secondaryText)
+            .frame(maxWidth: .infinity, minHeight: 38)
+        let intent = HarkLiveActivityResponseIntent(
             activityID: context.activityID,
             action: action,
             interactionID: interactionID,
@@ -280,19 +307,67 @@ private struct HarkInteractionButtons: View {
             deliveryID: deliveryID,
             registrationURL: registrationURL
         )
+        if prominent {
+            Button(intent: intent) { text }
+                .buttonStyle(.borderedProminent)
+                .buttonBorderShape(.roundedRectangle(radius: theme.cornerRadius))
+                .tint(theme.primaryTint)
+        } else {
+            Button(intent: intent) { text }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.roundedRectangle(radius: theme.cornerRadius))
+                .tint(theme.secondaryTint)
+        }
     }
 }
 
 private enum InteractiveTheme {
     case approval, shell, verdict, signal
-    var icon: String {
-        switch self { case .shell: "terminal.fill"; case .signal: "antenna.radiowaves.left.and.right"; default: "sparkles" }
+
+    var cornerRadius: CGFloat {
+        switch self { case .shell: 4; case .verdict: 10; default: 8 }
     }
-    var background: Color {
-        switch self { case .verdict: Color(hex: "#1C1C1E"); case .shell: Color.black; case .signal: Color(hex: "#08111C"); default: Color(hex: "#0B1512") }
+    var primaryTint: Color {
+        switch self {
+        case .approval: .white
+        case .shell: Color(hex: "#173D26")
+        case .verdict: Color(hex: "#0A84FF")
+        case .signal: Color(hex: "#248A3D")
+        }
     }
-    var accentOverride: Color? {
-        switch self { case .verdict: .blue; case .signal: .cyan; default: nil }
+    var primaryText: Color {
+        switch self {
+        case .approval: .black
+        case .shell: Color(hex: "#3FDD78")
+        case .verdict: .white
+        case .signal: Color(hex: "#EAFBEF")
+        }
+    }
+    var secondaryTint: Color {
+        switch self {
+        case .approval: Color(hex: "#98989D")
+        case .shell: Color(hex: "#4E5C52")
+        case .verdict: Color(hex: "#8E8E93")
+        case .signal: Color(hex: "#FF453A")
+        }
+    }
+    var secondaryText: Color {
+        switch self {
+        case .shell: Color(hex: "#8E9C92")
+        case .signal: Color(hex: "#FF6961")
+        default: Color(hex: "#EBEBF0")
+        }
+    }
+    var buttonFont: Font {
+        switch self {
+        case .shell: .system(size: 12, weight: .bold, design: .monospaced)
+        case .verdict: .system(size: 14, weight: .semibold)
+        default: .system(size: 13, weight: .semibold)
+        }
+    }
+    func buttonLabel(_ raw: String, primary: Bool) -> String {
+        guard self == .shell else { return raw }
+        return primary ? "\(raw.lowercased()) ⏎" : raw.lowercased()
     }
 }
 

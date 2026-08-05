@@ -75,10 +75,9 @@ struct InboxView: View {
                 ], id: \.0) { value, label in
                     Button(label) { Task { await model.setFeed(filter: value) } }
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(model.feedFilter == value ? Color.white : HarkTheme.muted)
+                        .foregroundStyle(model.feedFilter == value ? HarkTheme.accent : HarkTheme.muted)
                         .padding(.horizontal, 14).frame(height: 34)
-                        .background(model.feedFilter == value ? HarkTheme.ink : HarkTheme.surface, in: Capsule())
-                        .overlay(Capsule().stroke(HarkTheme.line, lineWidth: model.feedFilter == value ? 0 : 0.5))
+                        .background(model.feedFilter == value ? HarkTheme.accentSoft : Color.clear, in: Capsule())
                 }
             }
             .padding(.vertical, 8)
@@ -104,25 +103,7 @@ struct InboxView: View {
                     }
                 }
             }
-            if item.kind == "reply" {
-                if replyID == item.id {
-                    TextEditor(text: $reply)
-                        .font(.system(size: 15))
-                        .frame(minHeight: 88)
-                        .padding(8)
-                        .scrollContentBackground(.hidden)
-                        .background(HarkTheme.surface, in: RoundedRectangle(cornerRadius: 12))
-                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(HarkTheme.line, lineWidth: 0.5))
-                    HStack {
-                        Button("Cancel") { replyID = nil; reply = "" }.buttonStyle(HarkSecondaryButton())
-                        Button("Send") { resolve(item, action: "reply", response: reply) }
-                            .buttonStyle(HarkPrimaryButton())
-                            .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || respondingID != nil)
-                    }
-                } else {
-                    Button("Reply") { replyID = item.id }.buttonStyle(HarkPrimaryButton())
-                }
-            } else {
+            if item.kind == "approval" || item.kind == "yes_no" {
                 let primary = item.kind == "approval" ? "approve" : "yes"
                 let secondary = item.kind == "approval" ? "deny" : "no"
                 HStack {
@@ -135,6 +116,29 @@ struct InboxView: View {
                     }
                         .buttonStyle(HarkPrimaryButton())
                 }
+                .disabled(respondingID != nil)
+            } else if replyID == item.id {
+                TextEditor(text: $reply)
+                    .font(.system(size: 15))
+                    .frame(minHeight: 88)
+                    .padding(8)
+                    .scrollContentBackground(.hidden)
+                    .background(HarkTheme.surface, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(HarkTheme.line, lineWidth: 0.5))
+                HStack {
+                    Button("Cancel") { replyID = nil; reply = "" }.buttonStyle(HarkSecondaryButton())
+                    Button("Send") { resolve(item, action: "reply", response: reply) }
+                        .buttonStyle(HarkPrimaryButton())
+                        .disabled(reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || respondingID != nil)
+                }
+            } else {
+                Button { replyID = item.id } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "arrow.turn.down.left").font(.system(size: 13))
+                        Text("Reply")
+                    }
+                }
+                .buttonStyle(HarkReplyButton())
                 .disabled(respondingID != nil)
             }
         }
@@ -170,7 +174,9 @@ struct InboxView: View {
             HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(item.sourceName).font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                    Text("\(item.sourceName) · \(kindLabel(item.kind))")
+                        .font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                        .lineLimit(1)
                     Spacer()
                     Text(item.createdAt.harkRelativeDate).font(.caption).foregroundStyle(HarkTheme.soft)
                 }
@@ -225,6 +231,14 @@ struct InboxView: View {
         return label
     }
 
+    private func kindLabel(_ kind: String) -> String {
+        switch kind {
+        case "live_activity": "Live Activity"
+        case "response": "Response"
+        default: "Notification"
+        }
+    }
+
     private func expiryLabel(_ value: String, relativeTo now: Date) -> String {
         guard let expiry = Date.harkParse(value) else { return "Expiry unavailable" }
         guard expiry > now else { return "Expired" }
@@ -273,6 +287,14 @@ private struct HarkPrimaryButton: ButtonStyle {
 private struct HarkSecondaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.font(.system(size: 14, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+            .frame(maxWidth: .infinity, minHeight: 42).background(HarkTheme.surface, in: Capsule())
+            .overlay(Capsule().stroke(HarkTheme.line, lineWidth: 0.5)).opacity(configuration.isPressed ? 0.65 : 1)
+    }
+}
+
+private struct HarkReplyButton: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(.system(size: 14, weight: .medium)).foregroundStyle(HarkTheme.accent)
             .frame(maxWidth: .infinity, minHeight: 42).background(HarkTheme.surface, in: Capsule())
             .overlay(Capsule().stroke(HarkTheme.line, lineWidth: 0.5)).opacity(configuration.isPressed ? 0.65 : 1)
     }

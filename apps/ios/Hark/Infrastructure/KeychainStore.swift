@@ -3,6 +3,7 @@ import Security
 
 enum KeychainKey: String {
     case sessionCookie = "hark.auth.cookie"
+    case cachedUser = "hark.auth.user"
     case apnsToken = "hark.device.apnsToken"
     case deviceID = "hark.device.serverId"
     case interactionQueue = "hark.interaction.responseQueue.v1"

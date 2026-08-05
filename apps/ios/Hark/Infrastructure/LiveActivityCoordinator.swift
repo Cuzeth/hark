@@ -1,7 +1,6 @@
 import ActivityKit
 import Foundation
 
-@available(iOS 17.2, *)
 @MainActor
 final class LiveActivityCoordinator {
     static let shared = LiveActivityCoordinator(api: APIClient())
