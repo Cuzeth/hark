@@ -13,11 +13,11 @@ struct SignInView: View {
             Spacer()
             VStack(alignment: .leading, spacing: 20) {
                 Text("Sign in")
-                    .font(.system(size: 40, weight: .semibold))
-                    .tracking(-0.8)
+                    .font(.system(size: 34, weight: .semibold))
+                    .tracking(-0.68)
                     .foregroundStyle(HarkTheme.ink)
                 Text("A private instance. Use the account credentials for this server.")
-                    .font(.system(size: 16))
+                    .font(.system(size: 15))
                     .foregroundStyle(HarkTheme.muted)
                     .lineSpacing(5)
                     .frame(maxWidth: 330, alignment: .leading)
@@ -41,7 +41,7 @@ struct SignInView: View {
                 Button { Task { await submit() } } label: {
                     Group {
                         if model.signingIn { ProgressView().tint(.white) }
-                        else { Text("Sign in").fontWeight(.medium) }
+                        else { Text("Sign in").font(.system(size: 14, weight: .medium)) }
                     }
                     .frame(maxWidth: .infinity, minHeight: 52)
                 }
@@ -50,7 +50,7 @@ struct SignInView: View {
                 .background(HarkTheme.accent, in: Capsule())
                 .disabled(model.signingIn)
                 if let error = model.authError {
-                    Text(error).font(.footnote).foregroundStyle(HarkTheme.danger).frame(maxWidth: .infinity, alignment: .leading)
+                    Text(error).font(.system(size: 12)).foregroundStyle(HarkTheme.danger).frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
             .padding(.bottom, 16)
@@ -68,7 +68,7 @@ struct SignInView: View {
 private extension View {
     func harkInput() -> some View {
         self
-            .font(.system(size: 16))
+            .font(.system(size: 15))
             .padding(.horizontal, 20)
             .frame(minHeight: 52)
             .background(HarkTheme.surface, in: Capsule())

@@ -16,7 +16,7 @@ struct HarkBrand: View {
     var body: some View {
         HStack(spacing: 9) {
             Circle().fill(HarkTheme.accent).frame(width: 10, height: 10)
-            Text("Hark").font(.system(size: 18, weight: .semibold)).tracking(-0.36)
+            Text("Hark").font(.system(size: 16, weight: .semibold)).tracking(-0.32)
         }
         .foregroundStyle(HarkTheme.ink)
         .accessibilityElement(children: .combine)

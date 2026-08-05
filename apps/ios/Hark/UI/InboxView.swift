@@ -29,7 +29,7 @@ struct InboxView: View {
                             ProgressView().tint(HarkTheme.accent).frame(maxWidth: .infinity).padding(.vertical, 30)
                         } else if model.feed.isEmpty {
                             Text(model.inboxError == nil ? "No activity yet." : "Couldn’t load activity. Pull to refresh.")
-                                .font(.system(size: 13)).foregroundStyle(HarkTheme.soft)
+                                .font(.system(size: 12)).foregroundStyle(HarkTheme.soft)
                                 .padding(.vertical, 24)
                         }
                         ForEach(model.feed) { item in activityRow(item) }
@@ -57,7 +57,7 @@ struct InboxView: View {
             Spacer()
             NavigationLink(value: SettingsDestination.settings) {
                 Image(systemName: "gearshape.fill")
-                    .font(.system(size: 17))
+                    .font(.system(size: 16))
                     .foregroundStyle(HarkTheme.muted)
                     .frame(width: 44, height: 44)
             }
@@ -74,7 +74,7 @@ struct InboxView: View {
                     ("live_activity", "Live Activities"), ("response", "Responses"),
                 ], id: \.0) { value, label in
                     Button(label) { Task { await model.setFeed(filter: value) } }
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(model.feedFilter == value ? HarkTheme.accent : HarkTheme.muted)
                         .padding(.horizontal, 13).frame(height: 34)
                         .background(model.feedFilter == value ? HarkTheme.accentSoft : Color.clear, in: Capsule())
@@ -91,15 +91,15 @@ struct InboxView: View {
                 HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(item.sourceName).font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                        Text(item.sourceName).font(.system(size: 11, weight: .medium)).foregroundStyle(HarkTheme.muted)
                         Spacer()
-                        Text(item.createdAt.harkRelativeDate).font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
+                        Text(item.createdAt.harkRelativeDate).font(.system(size: 10)).foregroundStyle(HarkTheme.soft)
                     }
-                    Text(item.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
-                    Text(item.prompt).font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
+                    Text(item.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                    Text(item.prompt).font(.system(size: 13)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(expiryLabel(item.expiresAt, relativeTo: context.date))
-                            .font(.system(size: 11))
+                            .font(.system(size: 10))
                             .foregroundStyle(HarkTheme.soft)
                     }
                 }
@@ -121,7 +121,7 @@ struct InboxView: View {
                 .disabled(responding)
             } else if replyID == item.id {
                 TextEditor(text: $reply)
-                    .font(.system(size: 14))
+                    .font(.system(size: 13))
                     .frame(minHeight: 82)
                     .padding(8)
                     .scrollContentBackground(.hidden)
@@ -136,7 +136,7 @@ struct InboxView: View {
             } else {
                 Button { replyID = item.id } label: {
                     HStack(spacing: 7) {
-                        Image(systemName: "arrow.turn.down.left").font(.system(size: 13))
+                        Image(systemName: "arrow.turn.down.left").font(.system(size: 12))
                         Text("Reply")
                     }
                 }
@@ -153,17 +153,17 @@ struct InboxView: View {
             HarkAvatar(urlString: item.sourceImageUrl, name: item.sourceName)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(item.sourceName).font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
+                    Text(item.sourceName).font(.system(size: 11, weight: .medium)).foregroundStyle(HarkTheme.muted)
                     Spacer()
                     if let progress = item.props.progress {
                         Text("\(Int((progress * 100).rounded()))%")
-                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 11, weight: .semibold, design: .monospaced))
                             .foregroundStyle(HarkTheme.accent)
                     }
                 }
-                Text(item.props.title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                Text(item.props.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(HarkTheme.ink)
                 Text(item.props.detail ?? item.props.status)
-                    .font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineLimit(1)
+                    .font(.system(size: 13)).foregroundStyle(HarkTheme.muted).lineLimit(1)
                 if let progress = item.props.progress {
                     ProgressView(value: progress).tint(HarkTheme.accent)
                 }
@@ -179,14 +179,14 @@ struct InboxView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack {
                     Text("\(item.sourceName) · \(kindLabel(item.kind))")
-                        .font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
+                        .font(.system(size: 10)).foregroundStyle(HarkTheme.soft)
                         .lineLimit(1)
                     Spacer()
-                    Text(item.createdAt.harkRelativeDate).font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
+                    Text(item.createdAt.harkRelativeDate).font(.system(size: 10)).foregroundStyle(HarkTheme.soft)
                 }
-                Text(item.title).font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.ink)
-                if let detail = item.detail { Text(detail).font(.system(size: 12)).foregroundStyle(HarkTheme.muted).lineLimit(4) }
-                if let result = item.result { Text(result).font(.system(size: 11, weight: .medium)).foregroundStyle(HarkTheme.accent) }
+                Text(item.title).font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.ink)
+                if let detail = item.detail { Text(detail).font(.system(size: 11)).foregroundStyle(HarkTheme.muted).lineLimit(4) }
+                if let result = item.result { Text(result).font(.system(size: 10, weight: .medium)).foregroundStyle(HarkTheme.accent) }
             }
             if deletingID == item.id { ProgressView().controlSize(.small) }
         }
@@ -210,7 +210,7 @@ struct InboxView: View {
             Spacer()
             let start = model.feedPage * 20 + 1
             let end = min((model.feedPage + 1) * 20, model.feedTotal)
-            Text("\(start)–\(end) of \(model.feedTotal)").font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.muted)
+            Text("\(start)–\(end) of \(model.feedTotal)").font(.system(size: 11, weight: .medium)).foregroundStyle(HarkTheme.muted)
             Spacer()
             Button { Task { await model.setFeed(page: model.feedPage + 1); proxy.scrollTo("activity", anchor: .top) } } label: {
                 Image(systemName: "chevron.right").frame(width: 40, height: 40)
@@ -270,9 +270,9 @@ private struct SectionHeading: View {
     var first = false
     var body: some View {
         HStack(spacing: 7) {
-            Text(title.uppercased()).font(.system(size: 12, weight: .semibold)).tracking(0.55)
+            Text(title.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.55)
             if let count {
-                Text("\(count)").font(.system(size: 11, weight: .semibold)).foregroundStyle(HarkTheme.accent)
+                Text("\(count)").font(.system(size: 10, weight: .semibold)).foregroundStyle(HarkTheme.accent)
                     .padding(.horizontal, 7).frame(height: 20).background(HarkTheme.accentSoft, in: Capsule())
             }
         }
@@ -283,7 +283,7 @@ private struct SectionHeading: View {
 
 private struct HarkPrimaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
+        configuration.label.font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: 42).background(HarkTheme.accent, in: Capsule())
             .opacity(configuration.isPressed ? 0.76 : 1)
     }
@@ -291,7 +291,7 @@ private struct HarkPrimaryButton: ButtonStyle {
 
 private struct HarkSecondaryButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 14, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+        configuration.label.font(.system(size: 13, weight: .semibold)).foregroundStyle(HarkTheme.ink)
             .frame(maxWidth: .infinity, minHeight: 42).background(HarkTheme.surface, in: Capsule())
             .overlay(Capsule().stroke(HarkTheme.line, lineWidth: 0.5)).opacity(configuration.isPressed ? 0.65 : 1)
     }
@@ -299,7 +299,7 @@ private struct HarkSecondaryButton: ButtonStyle {
 
 private struct HarkReplyButton: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.font(.system(size: 14, weight: .medium)).foregroundStyle(HarkTheme.accent)
+        configuration.label.font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.accent)
             .frame(maxWidth: .infinity, minHeight: 42).background(HarkTheme.surface, in: Capsule())
             .overlay(Capsule().stroke(HarkTheme.line, lineWidth: 0.5)).opacity(configuration.isPressed ? 0.65 : 1)
     }

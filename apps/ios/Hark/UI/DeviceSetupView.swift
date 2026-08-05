@@ -15,14 +15,14 @@ struct DeviceSetupView: View {
                     HarkBrand()
                     Spacer()
                     Button("Sign out", role: .destructive) { confirmSignOut = true }
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(HarkTheme.muted)
                 }
                 .frame(minHeight: 64)
 
                 Text("Two steps and this iPhone starts receiving your webhooks.")
-                    .font(.system(size: 26, weight: .semibold))
-                    .tracking(-0.52)
+                    .font(.system(size: 23, weight: .semibold))
+                    .tracking(-0.46)
                     .foregroundStyle(HarkTheme.ink)
                     .frame(maxWidth: 340, alignment: .leading)
                     .padding(.top, 18)
@@ -54,7 +54,7 @@ struct DeviceSetupView: View {
                 ) { model.registerForPush() }
 
                 if let error = model.registrationError {
-                    Text(error).font(.footnote).foregroundStyle(HarkTheme.danger).padding(.top, 18)
+                    Text(error).font(.system(size: 12)).foregroundStyle(HarkTheme.danger).padding(.top, 18)
                 }
 
                 eventsSection
@@ -81,10 +81,10 @@ struct DeviceSetupView: View {
     private var eventsSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Recent activity").font(.system(size: 18, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                Text("Recent activity").font(.system(size: 16, weight: .semibold)).foregroundStyle(HarkTheme.ink)
                 Spacer()
                 Button("Refresh") { Task { await model.refreshEvents() } }
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(HarkTheme.muted)
             }
             .frame(minHeight: 40)
@@ -102,7 +102,7 @@ struct DeviceSetupView: View {
 
     private func emptyLine(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 13)).foregroundStyle(HarkTheme.soft)
+            .font(.system(size: 12)).foregroundStyle(HarkTheme.soft)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 20)
             .overlay(alignment: .top) { Rectangle().fill(HarkTheme.line).frame(height: 0.5) }
@@ -143,13 +143,13 @@ private struct EventRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text("\(event.serviceTitle) · \(event.title)")
-                        .font(.system(size: 13, weight: .medium)).foregroundStyle(HarkTheme.ink)
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(HarkTheme.ink)
                         .lineLimit(1)
                     Spacer()
-                    Text(eventTime).font(.system(size: 11)).foregroundStyle(HarkTheme.soft)
+                    Text(eventTime).font(.system(size: 10)).foregroundStyle(HarkTheme.soft)
                 }
-                Text(event.body).font(.system(size: 12)).foregroundStyle(HarkTheme.muted).lineLimit(2)
-                Text(statusText).font(.system(size: 10)).foregroundStyle(HarkTheme.soft)
+                Text(event.body).font(.system(size: 11)).foregroundStyle(HarkTheme.muted).lineLimit(2)
+                Text(statusText).font(.system(size: 9)).foregroundStyle(HarkTheme.soft)
             }
         }
         .padding(.vertical, 10)
@@ -201,18 +201,18 @@ private struct SetupStep: View {
                 Circle().fill(complete ? HarkTheme.accent : HarkTheme.accentSoft)
                 if complete {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(.white)
+                        .font(.system(size: 9, weight: .semibold)).foregroundStyle(.white)
                 } else {
-                    Text(number).font(.system(size: 13, weight: .semibold)).foregroundStyle(HarkTheme.accent)
+                    Text(number).font(.system(size: 12, weight: .semibold)).foregroundStyle(HarkTheme.accent)
                 }
             }
             .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 8) {
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(HarkTheme.ink)
-                Text(detail).font(.system(size: 14)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
+                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(HarkTheme.ink)
+                Text(detail).font(.system(size: 13)).foregroundStyle(HarkTheme.muted).lineSpacing(3)
                 if !complete {
                     Button(button) { Task { await action() } }
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 18).frame(minHeight: 42)
                         .background(HarkTheme.accent, in: Capsule())
