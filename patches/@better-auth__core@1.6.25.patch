@@ -1,7 +1,0 @@
-diff --git a/dist/social-providers/google.mjs b/dist/social-providers/google.mjs
-index 35d1101bba93871933b7eb9b31bb8839ec90eb65..a6d67c7313f0a0fdde4b3720b7bec3ca65007e49 100644
---- a/dist/social-providers/google.mjs
-+++ b/dist/social-providers/google.mjs
-@@ -71 +71 @@
--				additionalParams: { include_granted_scopes: "true" }
-+				additionalParams: { include_granted_scopes: "false" }

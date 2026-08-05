@@ -76,11 +76,12 @@ Conflicts are the mechanism, not a problem. Resolve by category:
   `getBilling`/allowance/402/plan gates, device fan-out never sliced or capped, `device.token`
   is the raw APNs token, alert payloads built by `buildAlertPayload` (data duplicated under
   `body` and at top level), docs carry no Pro/pricing copy, no upstream identity strings.
-- **`patches/*`**: this fork carries patches only for packages the server uses (currently
-  `@better-auth__core`). Upstream patches for client packages arrive with `apps/expo` and are
-  dropped with it. If upstream bumps a server-side patched package's version, re-apply the
-  fork's patch content against the new version and update `pnpm-workspace.yaml`
-  `patchedDependencies` to match; after install, verify the patched source in `node_modules`.
+- **`patches/*`**: this fork carries no dependency patches — there is no `patches/` directory
+  and no `patchedDependencies` in `pnpm-workspace.yaml`. Upstream patches for client packages
+  arrive with `apps/expo` and are dropped with it; upstream patches for OAuth/social-provider
+  code patch features this fork deleted and are dropped too. Only adopt an upstream patch if it
+  fixes a package the server actually uses, and then also restore the `COPY patches ./patches`
+  line in the Dockerfile — the image build only copies what exists.
 - **`pnpm-lock.yaml`**: never hand-merge. Take either side to clear the conflict, then
   regenerate with `corepack pnpm install` and commit the result.
 - **Drizzle migrations**: keep every migration file from both sides; ours are `0018_*`/`0019_*`.

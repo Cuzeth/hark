@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 make g+
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /repo
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY patches ./patches
 COPY apps/website/package.json apps/website/
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/website-runtime/package.json packages/website-runtime/
