@@ -38,4 +38,27 @@ final class HarkCoreTests: XCTestCase {
         XCTAssertNotNil(Date.harkParse("2026-08-05T14:00:00.123Z"))
         XCTAssertNotNil(Date.harkParse("2026-08-05T14:00:00Z"))
     }
+
+    func testTapDestinationMirrorsSharedContractSchema() {
+        for blocked in [
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "file:///etc/passwd",
+            "blob:https://example.com/id",
+            "about:blank",
+        ] {
+            XCTAssertNil(TapDestination.url(from: blocked), blocked)
+        }
+        XCTAssertNil(TapDestination.url(from: nil))
+        XCTAssertNil(TapDestination.url(from: "no-scheme/path"))
+        XCTAssertNil(TapDestination.url(from: "https://example.com/\(String(repeating: "a", count: 2048))"))
+        for allowed in [
+            "http://example.com",
+            "https://example.com",
+            "hark://inbox/evt_1",
+            "shortcuts://run-shortcut?name=Deploy%20Finished&input=text&text=production",
+        ] {
+            XCTAssertNotNil(TapDestination.url(from: allowed), allowed)
+        }
+    }
 }

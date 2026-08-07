@@ -29,7 +29,6 @@ import {
   user as userTable,
 } from "../db/schema";
 import { env } from "../env";
-import { failureBucket, track } from "../lib/analytics";
 import { newId } from "../lib/id";
 import { deliverInteractionCallbacks } from "../lib/interaction-callbacks";
 import { verifyLiveActivityInteractionCredential } from "../lib/live-activity-interaction";
@@ -194,7 +193,6 @@ export const agentRoute = new Hono<AgentEnv>()
       .update(apiToken)
       .set({ revokedAt: new Date() })
       .where(and(eq(apiToken.id, c.get("apiToken").id), isNull(apiToken.revokedAt)));
-    track({ name: "api_token_revoked", userId: c.get("apiToken").userId, outcome: "agent" });
     return c.json({ ok: true });
   })
   .get("/devices", requireScopes("devices:read"), async (c) => {
@@ -388,11 +386,6 @@ export const agentRoute = new Hono<AgentEnv>()
     }
 
     if (selectedDevices.length === 0) {
-      track({
-        name: "agent_notification_created",
-        userId: token.userId,
-        outcome: "no_devices",
-      });
       return c.json(
         {
           notification: toNotificationDto(outcome.row),
@@ -428,27 +421,6 @@ export const agentRoute = new Hono<AgentEnv>()
         .update(device)
         .set({ active: false })
         .where(inArray(device.token, result.staleTokens));
-      track({
-        name: "device_deactivated_stale",
-        userId: token.userId,
-        outcome: "agent_notification",
-        value: result.staleTokens.length,
-      });
-    }
-    track({
-      name: "agent_notification_created",
-      userId: token.userId,
-      outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
-      value: result.accepted,
-      metadata: { targets: messages.length },
-    });
-    if (result.accepted > 0) {
-      track({
-        name: "notification_sent",
-        userId: token.userId,
-        outcome: "agent_notification",
-        value: result.accepted,
-      });
     }
     await db
       .update(agentNotification)
@@ -685,12 +657,6 @@ export const agentRoute = new Hono<AgentEnv>()
       throw error;
     }
     if (selectedDevices.length === 0) {
-      track({
-        name: "interaction_created",
-        userId: token.userId,
-        outcome: "no_devices",
-        metadata: { kind: parsed.data.kind },
-      });
       return c.json(
         {
           interaction: toDto(row),
@@ -712,21 +678,6 @@ export const agentRoute = new Hono<AgentEnv>()
         .where(eq(interaction.id, row.id))
         .returning();
       row = updated ?? row;
-      track({
-        name: "interaction_created",
-        userId: token.userId,
-        outcome: liveResult.accepted > 0 ? "accepted" : failureBucket(liveResult.errors[0]),
-        value: liveResult.accepted,
-        metadata: { kind: parsed.data.kind, presentation: "live_activity" },
-      });
-      if (liveResult.accepted > 0) {
-        track({
-          name: "notification_sent",
-          userId: token.userId,
-          outcome: "interaction_live_activity",
-          value: liveResult.accepted,
-        });
-      }
       return c.json(
         {
           interaction: toDto(row),
@@ -756,12 +707,6 @@ export const agentRoute = new Hono<AgentEnv>()
         .update(device)
         .set({ active: false })
         .where(inArray(device.token, result.staleTokens));
-      track({
-        name: "device_deactivated_stale",
-        userId: token.userId,
-        outcome: "interaction",
-        value: result.staleTokens.length,
-      });
     }
     const [updated] = await db
       .update(interaction)
@@ -769,21 +714,6 @@ export const agentRoute = new Hono<AgentEnv>()
       .where(eq(interaction.id, row.id))
       .returning();
     row = updated ?? row;
-    track({
-      name: "interaction_created",
-      userId: token.userId,
-      outcome: result.accepted > 0 ? "accepted" : failureBucket(result.errors[0]),
-      value: result.accepted,
-      metadata: { kind: parsed.data.kind, targets: messages.length },
-    });
-    if (result.accepted > 0) {
-      track({
-        name: "notification_sent",
-        userId: token.userId,
-        outcome: "interaction",
-        value: result.accepted,
-      });
-    }
     return c.json(
       {
         interaction: toDto(row),
@@ -947,13 +877,6 @@ export const interactionResponseRoute = new Hono<AuthedEnv>()
       )
       .returning();
     if (row) {
-      track({
-        name: "interaction_responded",
-        userId: user.id,
-        deviceId: registeredDevice.id,
-        outcome: parsed.data.action,
-        metadata: { kind: current.kind },
-      });
       void deliverInteractionCallbacks();
       void resolveInteractionLiveActivity(row);
       return c.json({ interaction: toDto(row) });
@@ -1137,13 +1060,6 @@ export const liveActivityInteractionResponseRoute = new Hono().post("/:id/respon
       409,
     );
   }
-  track({
-    name: "interaction_responded",
-    userId: row.userId,
-    deviceId: registeredDevice.id,
-    outcome: parsed.data.action,
-    metadata: { kind: row.kind, presentation: "live_activity" },
-  });
   void deliverInteractionCallbacks();
   void resolveInteractionLiveActivity(row);
   return c.json({ ok: true, status: row.status });

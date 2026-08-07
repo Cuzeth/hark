@@ -29,7 +29,6 @@ import {
   user as userTable,
 } from "../db/schema";
 import { env } from "../env";
-import { type AnalyticsEventName, failureBucket, track } from "../lib/analytics";
 import {
   isInvalidApnsTokenReason,
   type LiveActivityApnsEvent,
@@ -786,52 +785,6 @@ export async function liveKeyedActivity(
   return ["starting", "active", "partial"].includes(fresh.status) ? fresh : undefined;
 }
 
-/** Records the outcome of one Live Activity operation without touching task content. */
-export function trackActivityOutcome(
-  name: Extract<
-    AnalyticsEventName,
-    "live_activity_started" | "live_activity_updated" | "live_activity_ended"
-  >,
-  userId: string,
-  targets: number,
-  result: { accepted: number; failed: number; errors: string[] },
-  serviceId?: string,
-): void {
-  const outcome =
-    result.accepted > 0
-      ? result.failed > 0
-        ? "partial"
-        : "accepted"
-      : targets === 0
-        ? "no_devices"
-        : failureBucket(result.errors[0]);
-  track({
-    name,
-    userId,
-    serviceId,
-    outcome,
-    value: result.accepted,
-    metadata: { failed: result.failed, targets },
-  });
-  if (result.accepted > 0) {
-    track({
-      name: "notification_sent",
-      userId,
-      serviceId,
-      outcome: "live_activity",
-      value: result.accepted,
-    });
-    return;
-  }
-  track({
-    name: "live_activity_failed",
-    userId,
-    serviceId,
-    outcome,
-    metadata: { event: name.replace("live_activity_", ""), targets },
-  });
-}
-
 async function operationReplay(
   tokenId: string,
   key: string | undefined,
@@ -1128,7 +1081,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    trackActivityOutcome("live_activity_started", token.userId, deliveries.length, result);
     return c.json<LiveActivityMutationResponse>(
       {
         activity: toLiveActivityDto(row),
@@ -1285,7 +1237,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     const result = await dispatchLiveActivity(row, deliveries, operationId, "update", {
       requesterTokenId: token.id,
     });
-    trackActivityOutcome("live_activity_updated", token.userId, deliveries.length, result);
     const retryable = deliveries.some((delivery) =>
       ["pending", "accepted", "active"].includes(delivery.status),
     );
@@ -1441,7 +1392,6 @@ export const activitiesAgentRoute = new Hono<AgentEnv>()
     const result = await dispatchLiveActivity(row, deliveries, operationId, "end", {
       requesterTokenId: token.id,
     });
-    trackActivityOutcome("live_activity_ended", token.userId, deliveries.length, result);
     const [updated] = await db
       .update(liveActivity)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })

@@ -14,6 +14,21 @@ enum HarkConstants {
     static let noAction = "HARK_NO"
 }
 
+/// Mirrors `tapDestinationUrlSchema` in `@hark/contracts`: any well-formed URL up to
+/// 2,048 characters may open on tap, except executable or local-content schemes.
+enum TapDestination {
+    private static let blockedSchemes: Set<String> = ["about", "blob", "data", "file", "javascript"]
+
+    static func url(from value: String?) -> URL? {
+        guard let value, value.count <= 2048,
+              let url = URL(string: value),
+              let scheme = url.scheme?.lowercased(),
+              !blockedSchemes.contains(scheme)
+        else { return nil }
+        return url
+    }
+}
+
 struct OkayResponse: Decodable { let ok: Bool }
 
 struct SessionEnvelope: Decodable {

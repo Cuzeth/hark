@@ -32,7 +32,6 @@ import {
   liveKeyedActivity,
   replaceBlockingDeliveries,
   toLiveActivityDto,
-  trackActivityOutcome,
 } from "./activities";
 
 type ServiceRow = typeof serviceTable.$inferSelect;
@@ -449,13 +448,6 @@ export const activityHooksRoute = new Hono()
       .update(liveActivityOperation)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })
       .where(eq(liveActivityOperation.id, operationId));
-    trackActivityOutcome(
-      "live_activity_started",
-      service.userId,
-      created.deliveries.length,
-      result,
-      service.id,
-    );
     return c.json(
       response(row ?? created.row, result, {
         ...(parsed.data.replace ? { replaced } : {}),
@@ -615,13 +607,6 @@ export const activityHooksRoute = new Hono()
     const result = await dispatchLiveActivity(row, deliveries, operationId, "update", {
       requesterServiceId: service.id,
     });
-    trackActivityOutcome(
-      "live_activity_updated",
-      service.userId,
-      deliveries.length,
-      result,
-      service.id,
-    );
     const retryable = deliveries.some((delivery) =>
       ["pending", "accepted", "active"].includes(delivery.status),
     );
@@ -781,13 +766,6 @@ export const activityHooksRoute = new Hono()
     const result = await dispatchLiveActivity(row, deliveries, operationId, "end", {
       requesterServiceId: service.id,
     });
-    trackActivityOutcome(
-      "live_activity_ended",
-      service.userId,
-      deliveries.length,
-      result,
-      service.id,
-    );
     const [updated] = await db
       .update(liveActivity)
       .set({ acceptedCount: result.accepted, failedCount: result.failed })

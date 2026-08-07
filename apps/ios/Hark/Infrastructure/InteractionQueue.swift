@@ -40,10 +40,8 @@ final class InteractionQueue {
     func handle(_ response: UNNotificationResponse) async {
         let data = Self.pushData(response.notification.request.content.userInfo)
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
-            if let value = data["url"] as? String,
-               let url = URL(string: value),
-               ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-                await UIApplication.shared.open(url)
+            if let destination = TapDestination.url(from: data["url"] as? String) {
+                await UIApplication.shared.open(destination)
             }
             return
         }

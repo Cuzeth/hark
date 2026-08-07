@@ -49,8 +49,9 @@ git diff --stat main...upstream/main         # file-level scope
 
 Bucket every incoming commit using the README decision table: **drop** (marketing, pricing,
 auth/OAuth, billing, EAS/Expo-push, the `apps/expo` client tree and its patches, deploy
-workflows, upstream identity), **take** (webhook pipeline, interactions, server-side Live
-Activities, harkctl, docs engine, analytics), **port-by-hand** (their client behavior — goes
+workflows, upstream identity, and analytics of any kind — server events, tables, reporting
+scripts, client telemetry), **take** (webhook pipeline, interactions, server-side Live
+Activities, harkctl, docs engine), **port-by-hand** (their client behavior — goes
 into the SwiftUI app in `apps/ios`, never as their files), or **hand-merge** (env/config files,
 `patches/`, versions). If the batch is large, touches
 migrations or `patches/`, or contains anything you cannot bucket confidently, present the

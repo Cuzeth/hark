@@ -8,14 +8,11 @@ import { db, sqlite } from "./db";
 import { runMigrations } from "./db/migrate";
 import { user as userTable } from "./db/schema";
 import { assertRuntimeEnv, env } from "./env";
-import { pruneAnalytics } from "./lib/analytics";
 import { startInteractionCallbackWorker } from "./lib/interaction-callbacks";
 
 assertRuntimeEnv();
 runMigrations();
 await seedAdminAccount();
-// Bounds the analytics log at startup; long-running processes prune opportunistically.
-pruneAnalytics();
 startInteractionCallbackWorker();
 
 /**

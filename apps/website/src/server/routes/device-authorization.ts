@@ -9,7 +9,6 @@ import { Hono } from "hono";
 import { db } from "../db";
 import { apiToken, deviceAuthorizationRequest } from "../db/schema";
 import { env } from "../env";
-import { track } from "../lib/analytics";
 import { newId } from "../lib/id";
 import {
   apiTokenPrefix,
@@ -296,12 +295,6 @@ export const deviceAuthorizationRoute = new Hono<AuthedEnv>()
     });
 
     if (result.kind === "token") {
-      track({
-        name: "api_token_created",
-        userId: result.token.userId,
-        outcome: "cli",
-        metadata: { scopeCount: (result.token.scopes as string[]).length },
-      });
       return c.json({ accessToken: result.secret, token: tokenDto(result.token) });
     }
     if (result.kind === "pending") {
@@ -355,11 +348,6 @@ export const deviceAuthorizationRoute = new Hono<AuthedEnv>()
       .returning()
       .get();
     if (!row) return c.json({ error: "Authorization request is no longer pending" }, 409);
-    track({
-      name: "cli_authorization_approved",
-      userId: c.get("user").id,
-      metadata: { scopeCount: (row.requestedScopes as string[]).length },
-    });
     return c.json({ request: requestDto(row) });
   })
   .post("/requests/:code/deny", async (c) => {

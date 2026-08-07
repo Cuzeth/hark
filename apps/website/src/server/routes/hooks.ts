@@ -13,7 +13,6 @@ import {
   user as userTable,
 } from "../db/schema";
 import { env } from "../env";
-import { failureBucket, track } from "../lib/analytics";
 import { newId } from "../lib/id";
 import {
   buildInteractionPushMessages,
@@ -124,12 +123,6 @@ export const hooksRoute = new Hono()
       }
     }
 
-    track({
-      name: "webhook_received",
-      userId: svc.userId,
-      serviceId: svc.id,
-    });
-
     let targetedDevices: (typeof device.$inferSelect)[] | undefined;
     if (parsed.data.deviceIds) {
       const selected = await db
@@ -171,12 +164,6 @@ export const hooksRoute = new Hono()
 
     if ((serviceUsage?.value ?? 0) >= env.SERVICE_RATE_LIMIT_PER_MINUTE) {
       c.header("Retry-After", "60");
-      track({
-        name: "webhook_rate_limited",
-        userId: svc.userId,
-        serviceId: svc.id,
-        outcome: "service",
-      });
       return c.json<WebhookResponse>(
         { ok: false, error: "Service rate limit exceeded", retryAfterSeconds: 60 },
         429,
@@ -189,12 +176,6 @@ export const hooksRoute = new Hono()
       env.ACCOUNT_RATE_LIMIT_PER_MINUTE
     ) {
       c.header("Retry-After", "60");
-      track({
-        name: "webhook_rate_limited",
-        userId: svc.userId,
-        serviceId: svc.id,
-        outcome: "account",
-      });
       return c.json<WebhookResponse>(
         { ok: false, error: "Account rate limit exceeded", retryAfterSeconds: 60 },
         429,
@@ -300,12 +281,6 @@ export const hooksRoute = new Hono()
 
     if (devices.length === 0) {
       await db.update(event).set({ status: "no_devices" }).where(eq(event.id, eventId));
-      track({
-        name: "webhook_delivered",
-        userId: svc.userId,
-        serviceId: svc.id,
-        outcome: "no_devices",
-      });
       return c.json<WebhookResponse>({
         ok: true,
         eventId,
@@ -349,12 +324,6 @@ export const hooksRoute = new Hono()
         .update(device)
         .set({ active: false })
         .where(inArray(device.token, result.staleTokens));
-      track({
-        name: "device_deactivated_stale",
-        userId: svc.userId,
-        outcome: "webhook",
-        value: result.staleTokens.length,
-      });
     }
 
     const status =
@@ -373,33 +342,10 @@ export const hooksRoute = new Hono()
     }
 
     if (result.accepted === 0) {
-      track({
-        name: "webhook_failed",
-        userId: svc.userId,
-        serviceId: svc.id,
-        outcome: failureBucket(result.errors[0]),
-        metadata: { targets: messages.length },
-      });
       // Provider errors can embed the recipient push token, so they stay in the
       // owner-only event log rather than the webhook caller's response.
       return c.json<WebhookResponse>({ ok: false, error: "Push delivery failed" }, 502);
     }
-
-    track({
-      name: "webhook_delivered",
-      userId: svc.userId,
-      serviceId: svc.id,
-      outcome: status,
-      value: result.accepted,
-      metadata: { targets: messages.length },
-    });
-    track({
-      name: "notification_sent",
-      userId: svc.userId,
-      serviceId: svc.id,
-      outcome: "webhook",
-      value: result.accepted,
-    });
 
     return c.json<WebhookResponse>({
       ok: true,

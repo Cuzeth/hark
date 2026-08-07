@@ -60,11 +60,21 @@ Only `body` is required.
 | `body` | Notification text. |
 | `title` | Optional sender-name override. |
 | `imageUrl` | Optional public HTTPS avatar URL. |
-| `url` | Optional destination opened when tapped. |
+| `url` | Optional web URL, app deep link, or Shortcuts URL opened when tapped. |
 | `deviceIds` | Optional. Route to specific devices instead of every registered one. |
 
 Successful requests return `{ "ok": true, "eventId": "evt_...", "delivered": 1 }`. Use an
 `Idempotency-Key` header when retrying requests to prevent duplicate notifications.
+
+Tap destinations support HTTPS universal links, custom app schemes such as
+`your-app://incidents/INC-42`, and Apple Shortcuts:
+
+```text
+shortcuts://run-shortcut?name=Deployment%20Follow-up&input=text&text=production%20deployed
+```
+
+Names and input must be URL-encoded. iOS opens the destination only after the recipient taps the
+notification; delivery alone does not launch an app or run a shortcut.
 
 ## Live Activities
 
@@ -138,7 +148,7 @@ notifications, and `HarkTests`.
 This section is for whoever maintains this fork, human or AI agent. Upstream is
 [R44VC0RP/hark](https://github.com/R44VC0RP/hark) (the `upstream` git remote). Upstream is a
 multi-tenant SaaS with OAuth sign-in, a paid Pro plan, and Expo-hosted push; this fork is a private
-single-user instance. Four invariants define the fork — any upstream merge must leave all four
+single-user instance. Five invariants define the fork — any upstream merge must leave all five
 intact:
 
 1. **One account, username + password.** Auth is better-auth's `username()` plugin
@@ -166,11 +176,18 @@ intact:
    pricing/legal pages, no SEO/sitemap (robots disallows all), neutral welcome pushes, no upstream
    deploy workflows under `.github/`, and no upstream identifiers anywhere (their bundle id, domain,
    Apple team `9G68SMNHEU`, EAS project id, TestFlight links, or personal avatars/handles).
+5. **No analytics.** The entire analytics subsystem is deleted: the `analytics_event` /
+   `analytics_daily` / `analytics_user_day` tables (dropped by migration 0021), `lib/analytics.ts`
+   and every `track()` / `trackUserActive()` call, `scripts/analytics.mjs`, and any client-side
+   event tracking (page views, screen views, install/session ids). Upstream analytics features —
+   server events, reporting commands, or telemetry emitted by their clients — are dropped on
+   merge, never adapted. The `event` table is not analytics: it is the delivery log that powers
+   the inbox and event history, and it stays.
 
 Areas intentionally unchanged from upstream, where their improvements should merge cleanly: the
 webhook pipeline and event/delivery tracking, interactions (approvals/replies), the server side of
-Live Activities, `harkctl` and the device-authorization flow, the docs engine, the local-only
-SQLite analytics (minus billing events), and the Docker/compose deployment. The iOS client is this
+Live Activities, `harkctl` and the device-authorization flow, the docs engine, and the
+Docker/compose deployment. The iOS client is this
 fork's own native SwiftUI app in [`apps/ios`](./apps/ios); upstream's client tree (`apps/expo` and
 any client-package patches) is dropped wholesale on merge, and client-visible behavior changes
 from upstream are ported into the Swift app by hand.
@@ -183,19 +200,21 @@ execute. Decision rules while resolving conflicts:
 
 | Upstream change touches | Resolution |
 | --- | --- |
-| Auth, sign-in/up, account deletion, OAuth, billing, plans, quotas, pricing/legal/marketing pages, SEO, EAS/Expo push, the `apps/expo` client tree and its patches, deploy workflows | Keep ours / drop theirs entirely |
-| Webhook routes, interactions, server-side Live Activities, harkctl, docs content, analytics | Take theirs, then re-apply this fork's deltas: no `getBilling`/allowance/402/plan gates, device fan-out never sliced, `device.token` is the APNs token, alert payloads built by `buildAlertPayload`, docs carry no Pro/pricing copy |
+| Auth, sign-in/up, account deletion, OAuth, billing, plans, quotas, pricing/legal/marketing pages, SEO, EAS/Expo push, the `apps/expo` client tree and its patches, deploy workflows, analytics (tables, `track()` calls, reporting scripts, client telemetry) | Keep ours / drop theirs entirely |
+| Webhook routes, interactions, server-side Live Activities, harkctl, docs content | Take theirs, then re-apply this fork's deltas: no `getBilling`/allowance/402/plan gates, no analytics writes, device fan-out never sliced, `device.token` is the APNs token, alert payloads built by `buildAlertPayload`, docs carry no Pro/pricing copy |
 | Their client behavior (notification handling, Live Activity layouts, inbox flows) | Port the behavior by hand into the SwiftUI app in `apps/ios`; never take their client files |
 | Env/config files (`env.ts`, `.env.example`, `compose.yaml`) | Merge by hand against the contract above; never reintroduce removed vars |
 
 After any merge, grep for these strings: `autumn`, `pro_monthly`, `Hark Pro`, `GOOGLE_CLIENT`,
 `APPLE_SIGN_IN`, `expo-server-sdk`, `ExponentPushToken`, `expoPushToken`, `EXPO_ACCESS_TOKEN`,
 `EAS_PROJECT_ID`, `deleteUser`, `ceo.ryan.hark`, `hark.ryan.ceo`, `R44VC0RP`, `9G68SMNHEU`,
-`twimg`. Outside this README and `pnpm-lock.yaml`, the only acceptable hits are negative test
-fixtures that assert the string is rejected or absent (currently in `devices.test.ts`,
-`docs.test.ts`, and the contracts tests) and the deliberate "this instance is a private fork"
-attribution banner in `Docs.tsx` that links to the original `R44VC0RP/hark` project. Anything
-else is upstream leakage — remove it. Then run the full
+`twimg`, `analytics`. Outside this README, [SYNCING.md](./SYNCING.md), and `pnpm-lock.yaml`, the
+only acceptable hits are negative test fixtures that assert the string is rejected or absent
+(currently in `devices.test.ts`, `docs.test.ts`, and the contracts tests), the deliberate "this
+instance is a private fork" attribution banner in `Docs.tsx` that links to the original
+`R44VC0RP/hark` project, and — for `analytics` only — the immutable migration history under
+`apps/website/drizzle/` (0009 created the tables, 0021 drops them, and the snapshots in between
+record them). Anything else is upstream leakage — remove it. Then run the full
 verification gate in [SYNCING.md](./SYNCING.md) before landing anything.
 
 ## License
