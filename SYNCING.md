@@ -2,7 +2,7 @@
 
 Instructions for an AI agent asked to "sync upstream", "pull in upstream changes", or audit a
 reverse PR. Read the **Fork contract** section of [README.md](./README.md) first — it defines the
-four invariants, the conflict decision table, and the tripwire greps. That section is the
+five invariants, the conflict decision table, and the tripwire greps. That section is the
 authority on *what* survives a sync; this file is the procedure for *how* to run one.
 
 Context you need: this repo (`origin` = Cuzeth/hark) is a permanent behavioral fork of
@@ -10,6 +10,16 @@ Context you need: this repo (`origin` = Cuzeth/hark) is a permanent behavioral f
 this fork is a private single-user instance. The two will never converge — every sync is a
 selective merge, and the selectivity happens at **conflict-resolution time**, not by skipping
 commits.
+
+**Sync state:** current through upstream `78e01ef` ("Update Expo SDK 57 patch dependencies"),
+hand-applied 2026-08-07 in fork commit `c389869`. Hand-applied syncs record no merge ancestry,
+so `git log main..upstream/main` will keep listing already-synced commits — survey the next sync
+from `78e01ef` onward (`git log 78e01ef..upstream/main`) and update this line when it lands.
+
+**No analytics — ever.** This fork carries zero analytics (README invariant 5; the tables were
+dropped in migration 0021). Every upstream analytics change — server events, schema, endpoints,
+reporting scripts, client telemetry — is bucketed **drop**, never adapted. The `event` table is
+the delivery log powering the inbox and event history, not analytics; it stays.
 
 ## Hard constraints
 
